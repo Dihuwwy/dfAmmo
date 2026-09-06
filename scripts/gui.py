@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import ctypes
+import ctypes.wintypes
 import subprocess
 import time
 from dataclasses import replace
 from pathlib import Path
+
+import win32api
+import win32con
+import win32gui
 
 from PySide6.QtCore import QPoint, QRect, QTimer, Qt
 from PySide6.QtWidgets import (
@@ -53,6 +59,19 @@ class MainWindow(QWidget):
         self.navigation_timer = QTimer(self)
         self.navigation_timer.setInterval(self.config.navigation_poll_interval_ms)
         self.navigation_timer.timeout.connect(self.advance_game_navigation)
+
+        self.hotkey_registered = False
+        try:
+            self.hotkey_registered = bool(
+                win32gui.RegisterHotKey(int(self.winId()), 1001, 0, win32con.VK_F12)
+            )
+        except Exception:
+            self.hotkey_registered = False
+
+        self.hotkey_timer = QTimer(self)
+        self.hotkey_timer.setInterval(80)
+        self.hotkey_timer.timeout.connect(self._check_hotkey)
+        self.hotkey_timer.start()
 
         self.setWindowTitle(self.config.window_title)
         self.setObjectName("mainWindow")
@@ -124,12 +143,17 @@ class MainWindow(QWidget):
         button_row = QHBoxLayout()
         self.capture_button = QPushButton("采集元素模板")
         self.start_card_mail_button = QPushButton("开始卡邮件")
+        self.stop_button = QPushButton("强行停止 (F12)")
+        self.stop_button.setObjectName("stopButton")
+        self.stop_button.setEnabled(False)
+        self.stop_button.clicked.connect(self.emergency_stop)
         self.rebind_button = QPushButton("重新绑定")
         self.rebind_button.setObjectName("secondaryButton")
         self.capture_button.clicked.connect(self.start_template_capture)
         self.start_card_mail_button.clicked.connect(self.start_card_mail)
         self.rebind_button.clicked.connect(self.reset_binding)
         button_row.addWidget(self.start_card_mail_button)
+        button_row.addWidget(self.stop_button)
         button_row.addWidget(self.capture_button)
         button_row.addStretch(1)
         button_row.addWidget(self.rebind_button)
@@ -214,11 +238,60 @@ class MainWindow(QWidget):
         self.navigation_timer.stop()
         self.workflow.cancel_game_navigation()
         self.start_card_mail_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
         self.bound_window = None
         self.feature_panel.hide()
         self.bind_panel.show()
         self.subtitle.setText("先绑定 WeGame 主窗口，绑定成功后再显示可用功能。")
         self.write_log("已解除窗口绑定，请重新选择 WeGame 窗口。")
+
+    def emergency_stop(self) -> None:
+        was_running = self.navigation_timer.isActive() or self.game_process_timer.isActive()
+        self.game_process_timer.stop()
+        self.navigation_timer.stop()
+        self.workflow.cancel_game_navigation()
+        self.start_card_mail_button.setEnabled(True)
+        self.stop_button.setEnabled(False)
+
+        # Re-activate and bring this Assistant window to top
+        self.showNormal()
+        self.activateWindow()
+        self.raise_()
+        try:
+            win32gui.SetForegroundWindow(int(self.winId()))
+        except Exception:
+            pass
+
+        if was_running:
+            self.write_log("🛑【强行停止】已通过 F12 快捷键强行停止当前所有自动化！")
+        else:
+            self.write_log("🛑【强行停止】当前无正在运行的自动化任务。")
+
+    def _check_hotkey(self) -> None:
+        try:
+            if win32api.GetAsyncKeyState(win32con.VK_F12) & 0x8000:
+                if self.navigation_timer.isActive() or self.game_process_timer.isActive():
+                    self.emergency_stop()
+        except Exception:
+            pass
+
+    def nativeEvent(self, event_type, message):
+        try:
+            msg = ctypes.wintypes.MSG.from_address(int(message))
+            if msg.message == win32con.WM_HOTKEY and msg.wParam == 1001:
+                self.emergency_stop()
+                return True, 0
+        except Exception:
+            pass
+        return super().nativeEvent(event_type, message)
+
+    def closeEvent(self, event) -> None:
+        if getattr(self, "hotkey_registered", False):
+            try:
+                win32gui.UnregisterHotKey(int(self.winId()), 1001)
+            except Exception:
+                pass
+        super().closeEvent(event)
 
     def _save_game_dir(self) -> None:
         game_install_dir = self.game_dir_input.text().strip()
@@ -347,6 +420,7 @@ class MainWindow(QWidget):
 
         self.show()
         self.start_card_mail_button.setEnabled(False)
+        self.stop_button.setEnabled(True)
         self.game_process_deadline = time.monotonic() + self.config.game_process_timeout_seconds
         self.write_log(
             "已点击启动元素："
@@ -374,6 +448,7 @@ class MainWindow(QWidget):
         if time.monotonic() >= self.game_process_deadline:
             self.game_process_timer.stop()
             self.start_card_mail_button.setEnabled(True)
+            self.stop_button.setEnabled(False)
             self.write_log(
                 f"等待游戏进程超时（{self.config.game_process_timeout_seconds} 秒）。"
             )
@@ -394,6 +469,7 @@ class MainWindow(QWidget):
         if event.status in (NavigationStatus.COMPLETE, NavigationStatus.FAILED):
             self.navigation_timer.stop()
             self.start_card_mail_button.setEnabled(True)
+            self.stop_button.setEnabled(False)
             if event.status == NavigationStatus.COMPLETE:
                 process_exited, process_message = self.workflow.kill_game_process()
                 self.write_log(process_message)

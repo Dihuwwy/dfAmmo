@@ -58,6 +58,22 @@ QPushButton#secondaryButton {
 QPushButton#secondaryButton:hover {
     background: #e3e9f1;
 }
+QPushButton#stopButton {
+    background: #e53935;
+    border: 0;
+    color: white;
+    font-weight: 700;
+}
+QPushButton#stopButton:hover {
+    background: #d32f2f;
+}
+QPushButton#stopButton:pressed {
+    background: #b71c1c;
+}
+QPushButton#stopButton:disabled {
+    background: #f2a4a4;
+    color: #fbe9e7;
+}
 QPlainTextEdit#logOutput {
     background: #141a23;
     border: 1px solid #293344;

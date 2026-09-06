@@ -146,19 +146,6 @@ class GameNavigator:
             return self._complete()
 
         step = NAVIGATION_STEPS[self.step_index]
-        try:
-            self.bound_window = self.window_binder.activate(self.bound_window)
-        except Exception as exc:
-            # Transitional window might have closed; attempt to rebind to active game window
-            rebound = self.window_binder.bind_by_process_id(self.process_id)
-            if rebound is not None and rebound.handle != self.bound_window.handle:
-                try:
-                    self.bound_window = self.window_binder.activate(rebound)
-                except Exception as inner_exc:
-                    return self._fail(f"激活游戏窗口失败：{inner_exc}")
-            else:
-                return self._fail(f"激活游戏窗口失败：{exc}")
-
         position = None
         if step.template_name:
             template_path = self.template_dir / step.template_name
@@ -184,6 +171,22 @@ class GameNavigator:
                     )
                 return None
             position = result.position
+
+        # Only activate window when ready to perform an action (click or keypress),
+        # so polling doesn't repeatedly steal foreground focus from user
+        try:
+            self.bound_window = self.window_binder.activate(self.bound_window)
+            time.sleep(0.15)
+        except Exception as exc:
+            rebound = self.window_binder.bind_by_process_id(self.process_id)
+            if rebound is not None and rebound.handle != self.bound_window.handle:
+                try:
+                    self.bound_window = self.window_binder.activate(rebound)
+                    time.sleep(0.15)
+                except Exception as inner_exc:
+                    return self._fail(f"激活游戏窗口失败：{inner_exc}")
+            else:
+                return self._fail(f"激活游戏窗口失败：{exc}")
 
         if step.action == "click" and position is not None:
             self.clicker.click(position, self.bound_window.handle)

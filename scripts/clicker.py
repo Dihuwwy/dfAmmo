@@ -106,8 +106,11 @@ class Clicker:
         x, y = self._humanized_point(position)
         with physical_coordinates():
             self._move_to_point(x, y)
-            time.sleep(random.uniform(0.08, 0.18))
-            self._click_with_user32(x, y)
+            time.sleep(random.uniform(0.08, 0.15))
+            try:
+                self._click_with_send_input(x, y)
+            except Exception:
+                self._click_with_user32(x, y)
         return True
 
     def _humanized_point(self, position: ElementPosition) -> tuple[int, int]:
@@ -134,7 +137,7 @@ class Clicker:
             x,
             y,
         )
-        time.sleep(random.uniform(0.045, 0.095))
+        time.sleep(random.uniform(0.09, 0.16))
         self._send_inputs((self._mouse_input(0, 0, MOUSEEVENTF_LEFTUP),), x, y)
 
     def _click_with_user32(self, x: int, y: int) -> None:
@@ -144,7 +147,7 @@ class Clicker:
 
         time.sleep(0.08)
         user32.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-        time.sleep(random.uniform(0.045, 0.095))
+        time.sleep(random.uniform(0.09, 0.16))
         user32.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
     def _click_with_pywinauto(self, x: int, y: int) -> None:
