@@ -7,6 +7,7 @@ import time
 from typing import Literal
 
 import win32con
+import win32gui
 
 from scripts.clicker import Clicker
 from scripts.element_locator import ElementLocator
@@ -112,7 +113,19 @@ class GameNavigator:
             return None
 
         now = time.monotonic()
-        if self.bound_window is None:
+        need_rebind = False
+        if self.bound_window is None or not win32gui.IsWindow(self.bound_window.handle):
+            need_rebind = True
+        elif not self.bound_window.title.strip():
+            candidate = self.window_binder.bind_by_process_id(self.process_id)
+            if candidate and candidate.handle != self.bound_window.handle and candidate.title.strip():
+                self.bound_window = candidate
+                return NavigationEvent(
+                    NavigationStatus.RUNNING,
+                    f"已切换至游戏主窗口：{self.bound_window.title} | handle={self.bound_window.handle}",
+                )
+
+        if need_rebind:
             self.bound_window = self.window_binder.bind_by_process_id(self.process_id)
             if self.bound_window is None:
                 if now >= self.deadline:
@@ -136,7 +149,15 @@ class GameNavigator:
         try:
             self.bound_window = self.window_binder.activate(self.bound_window)
         except Exception as exc:
-            return self._fail(f"激活游戏窗口失败：{exc}")
+            # Transitional window might have closed; attempt to rebind to active game window
+            rebound = self.window_binder.bind_by_process_id(self.process_id)
+            if rebound is not None and rebound.handle != self.bound_window.handle:
+                try:
+                    self.bound_window = self.window_binder.activate(rebound)
+                except Exception as inner_exc:
+                    return self._fail(f"激活游戏窗口失败：{inner_exc}")
+            else:
+                return self._fail(f"激活游戏窗口失败：{exc}")
 
         position = None
         if step.template_name:
