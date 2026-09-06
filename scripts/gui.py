@@ -60,6 +60,7 @@ class MainWindow(QWidget):
         self.navigation_timer.setInterval(self.config.navigation_poll_interval_ms)
         self.navigation_timer.timeout.connect(self.advance_game_navigation)
 
+        self._last_hotkey_time = 0.0
         self.hotkey_registered = False
         try:
             self.hotkey_registered = bool(
@@ -69,15 +70,15 @@ class MainWindow(QWidget):
             self.hotkey_registered = False
 
         self.hotkey_timer = QTimer(self)
-        self.hotkey_timer.setInterval(80)
+        self.hotkey_timer.setInterval(60)
         self.hotkey_timer.timeout.connect(self._check_hotkey)
         self.hotkey_timer.start()
 
         self.setWindowTitle(self.config.window_title)
         self.setObjectName("mainWindow")
-        self.resize(760, 600)
+        self.resize(800, 600)
         self._build_ui()
-        self.write_log("请先绑定 WeGame 主窗口。")
+        self.write_log("请先绑定 WeGame 主窗口（如游戏已在运行，可直接点击“开始卡邮件”）。")
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -141,19 +142,35 @@ class MainWindow(QWidget):
         dir_row.addWidget(self.game_dir_button)
 
         button_row = QHBoxLayout()
-        self.capture_button = QPushButton("采集元素模板")
         self.start_card_mail_button = QPushButton("开始卡邮件")
-        self.stop_button = QPushButton("强行停止 (F12)")
+        self.start_card_mail_button.clicked.connect(self.start_card_mail)
+
+        self.pause_resume_button = QPushButton("暂停 (F12)")
+        self.pause_resume_button.setObjectName("pauseButton")
+        self.pause_resume_button.setEnabled(False)
+        self.pause_resume_button.clicked.connect(self.toggle_pause_resume)
+
+        self.stop_button = QPushButton("停止 (Shift+F12)")
         self.stop_button.setObjectName("stopButton")
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.emergency_stop)
+
+        self.resync_button = QPushButton("界面重同步")
+        self.resync_button.setObjectName("secondaryButton")
+        self.resync_button.setEnabled(False)
+        self.resync_button.clicked.connect(self.manual_resync)
+
+        self.capture_button = QPushButton("采集元素模板")
+        self.capture_button.clicked.connect(self.start_template_capture)
+
         self.rebind_button = QPushButton("重新绑定")
         self.rebind_button.setObjectName("secondaryButton")
-        self.capture_button.clicked.connect(self.start_template_capture)
-        self.start_card_mail_button.clicked.connect(self.start_card_mail)
         self.rebind_button.clicked.connect(self.reset_binding)
+
         button_row.addWidget(self.start_card_mail_button)
+        button_row.addWidget(self.pause_resume_button)
         button_row.addWidget(self.stop_button)
+        button_row.addWidget(self.resync_button)
         button_row.addWidget(self.capture_button)
         button_row.addStretch(1)
         button_row.addWidget(self.rebind_button)
@@ -238,20 +255,71 @@ class MainWindow(QWidget):
         self.navigation_timer.stop()
         self.workflow.cancel_game_navigation()
         self.start_card_mail_button.setEnabled(True)
+        self.pause_resume_button.setEnabled(False)
+        self._set_pause_button_state(is_paused=False)
         self.stop_button.setEnabled(False)
+        self.resync_button.setEnabled(False)
         self.bound_window = None
         self.feature_panel.hide()
         self.bind_panel.show()
         self.subtitle.setText("先绑定 WeGame 主窗口，绑定成功后再显示可用功能。")
         self.write_log("已解除窗口绑定，请重新选择 WeGame 窗口。")
 
+    def _set_pause_button_state(self, is_paused: bool) -> None:
+        if is_paused:
+            self.pause_resume_button.setText("▶ 继续 (F12)")
+            self.pause_resume_button.setObjectName("resumeButton")
+        else:
+            self.pause_resume_button.setText("⏸ 暂停 (F12)")
+            self.pause_resume_button.setObjectName("pauseButton")
+        self.pause_resume_button.setStyle(self.pause_resume_button.style())
+
+    def toggle_pause_resume(self) -> None:
+        is_nav_running = self.navigation_timer.isActive()
+        is_proc_running = self.game_process_timer.isActive()
+        is_paused = self.workflow.is_navigation_paused
+
+        if not (is_nav_running or is_proc_running or is_paused):
+            self.write_log("ℹ️ 当前没有正在运行的自动化任务。")
+            return
+
+        if is_paused:
+            event = self.workflow.resume_game_navigation()
+            self._set_pause_button_state(is_paused=False)
+            if not self.navigation_timer.isActive():
+                self.navigation_timer.start()
+            self.write_log(event.message)
+            self.advance_game_navigation()
+        else:
+            event = self.workflow.pause_game_navigation()
+            self._set_pause_button_state(is_paused=True)
+            self.write_log(event.message)
+
+    def manual_resync(self) -> None:
+        if not (self.navigation_timer.isActive() or self.workflow.is_navigation_paused):
+            self.write_log("当前不在游戏导航流程中，无法重同步。")
+            return
+
+        event = self.workflow.resync_game_navigation()
+        if event is not None:
+            self.write_log(event.message)
+        else:
+            self.write_log("未匹配到任何已知流程步骤画面，请确认游戏窗口是否在前台或画面是否正常。")
+
     def emergency_stop(self) -> None:
-        was_running = self.navigation_timer.isActive() or self.game_process_timer.isActive()
+        was_running = (
+            self.navigation_timer.isActive()
+            or self.game_process_timer.isActive()
+            or self.workflow.is_navigation_paused
+        )
         self.game_process_timer.stop()
         self.navigation_timer.stop()
         self.workflow.cancel_game_navigation()
         self.start_card_mail_button.setEnabled(True)
+        self.pause_resume_button.setEnabled(False)
+        self._set_pause_button_state(is_paused=False)
         self.stop_button.setEnabled(False)
+        self.resync_button.setEnabled(False)
 
         # Re-activate and bring this Assistant window to top
         self.showNormal()
@@ -263,15 +331,21 @@ class MainWindow(QWidget):
             pass
 
         if was_running:
-            self.write_log("🛑【强行停止】已通过 F12 快捷键强行停止当前所有自动化！")
+            self.write_log("🛑【任务停止】已通过快捷键/按钮停止当前自动化任务！")
         else:
-            self.write_log("🛑【强行停止】当前无正在运行的自动化任务。")
+            self.write_log("🛑【任务停止】当前无正在运行的自动化任务。")
 
     def _check_hotkey(self) -> None:
+        now = time.monotonic()
         try:
             if win32api.GetAsyncKeyState(win32con.VK_F12) & 0x8000:
-                if self.navigation_timer.isActive() or self.game_process_timer.isActive():
-                    self.emergency_stop()
+                if now - self._last_hotkey_time >= 0.35:
+                    self._last_hotkey_time = now
+                    shift_down = bool(win32api.GetAsyncKeyState(win32con.VK_SHIFT) & 0x8000)
+                    if shift_down:
+                        self.emergency_stop()
+                    else:
+                        self.toggle_pause_resume()
         except Exception:
             pass
 
@@ -279,7 +353,10 @@ class MainWindow(QWidget):
         try:
             msg = ctypes.wintypes.MSG.from_address(int(message))
             if msg.message == win32con.WM_HOTKEY and msg.wParam == 1001:
-                self.emergency_stop()
+                now = time.monotonic()
+                if now - self._last_hotkey_time >= 0.35:
+                    self._last_hotkey_time = now
+                    self.toggle_pause_resume()
                 return True, 0
         except Exception:
             pass
@@ -398,6 +475,25 @@ class MainWindow(QWidget):
         return QRect(QPoint(left, top), QPoint(right, bottom)).normalized()
 
     def start_card_mail(self) -> None:
+        # Check if Delta Force is already running; if so, directly take over navigation
+        game_process = self.workflow.find_game_process()
+        if game_process is not None:
+            self.write_log(
+                "检测到三角洲行动游戏已在运行中："
+                f"{game_process.name} | pid={game_process.process_id}，直接接管导航！"
+            )
+            self.start_card_mail_button.setEnabled(False)
+            self.pause_resume_button.setEnabled(True)
+            self._set_pause_button_state(is_paused=False)
+            self.stop_button.setEnabled(True)
+            self.resync_button.setEnabled(True)
+
+            event = self.workflow.start_game_navigation(game_process)
+            self.write_log(event.message)
+            self.navigation_timer.start()
+            self.advance_game_navigation()
+            return
+
         if self.bound_window is None:
             self.write_log("请先绑定 WeGame 窗口。")
             return
@@ -420,7 +516,10 @@ class MainWindow(QWidget):
 
         self.show()
         self.start_card_mail_button.setEnabled(False)
+        self.pause_resume_button.setEnabled(True)
+        self._set_pause_button_state(is_paused=False)
         self.stop_button.setEnabled(True)
+        self.resync_button.setEnabled(True)
         self.game_process_deadline = time.monotonic() + self.config.game_process_timeout_seconds
         self.write_log(
             "已点击启动元素："
@@ -448,7 +547,10 @@ class MainWindow(QWidget):
         if time.monotonic() >= self.game_process_deadline:
             self.game_process_timer.stop()
             self.start_card_mail_button.setEnabled(True)
+            self.pause_resume_button.setEnabled(False)
+            self._set_pause_button_state(is_paused=False)
             self.stop_button.setEnabled(False)
+            self.resync_button.setEnabled(False)
             self.write_log(
                 f"等待游戏进程超时（{self.config.game_process_timeout_seconds} 秒）。"
             )
@@ -459,6 +561,10 @@ class MainWindow(QWidget):
         except Exception as exc:
             self.navigation_timer.stop()
             self.start_card_mail_button.setEnabled(True)
+            self.pause_resume_button.setEnabled(False)
+            self._set_pause_button_state(is_paused=False)
+            self.stop_button.setEnabled(False)
+            self.resync_button.setEnabled(False)
             self.write_log(f"自动导航失败：{exc}")
             return
 
@@ -466,10 +572,17 @@ class MainWindow(QWidget):
             return
 
         self.write_log(event.message)
+        if event.status == NavigationStatus.PAUSED:
+            self._set_pause_button_state(is_paused=True)
+            return
+
         if event.status in (NavigationStatus.COMPLETE, NavigationStatus.FAILED):
             self.navigation_timer.stop()
             self.start_card_mail_button.setEnabled(True)
+            self.pause_resume_button.setEnabled(False)
+            self._set_pause_button_state(is_paused=False)
             self.stop_button.setEnabled(False)
+            self.resync_button.setEnabled(False)
             if event.status == NavigationStatus.COMPLETE:
                 process_exited, process_message = self.workflow.kill_game_process()
                 self.write_log(process_message)

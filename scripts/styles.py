@@ -74,6 +74,38 @@ QPushButton#stopButton:disabled {
     background: #f2a4a4;
     color: #fbe9e7;
 }
+QPushButton#pauseButton {
+    background: #d97706;
+    border: 0;
+    color: white;
+    font-weight: 600;
+}
+QPushButton#pauseButton:hover {
+    background: #b45309;
+}
+QPushButton#pauseButton:pressed {
+    background: #92400e;
+}
+QPushButton#pauseButton:disabled {
+    background: #e5c596;
+    color: #fffbeb;
+}
+QPushButton#resumeButton {
+    background: #10b981;
+    border: 0;
+    color: white;
+    font-weight: 700;
+}
+QPushButton#resumeButton:hover {
+    background: #059669;
+}
+QPushButton#resumeButton:pressed {
+    background: #047857;
+}
+QPushButton#resumeButton:disabled {
+    background: #a7f3d0;
+    color: #ecfdf5;
+}
 QPlainTextEdit#logOutput {
     background: #141a23;
     border: 1px solid #293344;

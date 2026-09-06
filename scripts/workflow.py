@@ -107,6 +107,19 @@ class Workflow:
     def cancel_game_navigation(self) -> None:
         self.game_navigator.cancel()
 
+    def pause_game_navigation(self) -> NavigationEvent:
+        return self.game_navigator.pause()
+
+    def resume_game_navigation(self) -> NavigationEvent:
+        return self.game_navigator.resume()
+
+    def resync_game_navigation(self) -> NavigationEvent | None:
+        return self.game_navigator.resync_state()
+
+    @property
+    def is_navigation_paused(self) -> bool:
+        return self.game_navigator.is_paused
+
     def kill_game_process(self) -> tuple[bool, str]:
         if self._game_process is None:
             return False, "没有已记录的三角洲行动游戏进程。"

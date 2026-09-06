@@ -17,6 +17,7 @@ from scripts.window_binding import BoundWindow, WindowBinder
 
 class NavigationStatus(str, Enum):
     RUNNING = "running"
+    PAUSED = "paused"
     COMPLETE = "complete"
     FAILED = "failed"
 
@@ -91,6 +92,8 @@ class GameNavigator:
         self.deadline = 0.0
         self.next_action_at = 0.0
         self.finished = True
+        self.is_paused = False
+        self._last_resync_check = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
 
@@ -101,15 +104,131 @@ class GameNavigator:
         self.deadline = time.monotonic() + self.window_timeout_seconds
         self.next_action_at = 0.0
         self.finished = False
+        self.is_paused = False
+        self._last_resync_check = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
         return NavigationEvent(NavigationStatus.RUNNING, "正在等待三角洲行动主窗口...")
 
     def cancel(self) -> None:
         self.finished = True
+        self.is_paused = False
+
+    def pause(self) -> NavigationEvent:
+        self.is_paused = True
+        step_name = (
+            NAVIGATION_STEPS[self.step_index].name
+            if self.step_index < len(NAVIGATION_STEPS)
+            else "当前步骤"
+        )
+        return NavigationEvent(
+            NavigationStatus.PAUSED,
+            f"⏸️【已暂停】自动化已暂停（当前处于：{step_name}）。"
+            "请在游戏中处理弹窗/违禁物品，处理完毕后按 F12 或点击“继续”恢复运行。",
+        )
+
+    def resume(self) -> NavigationEvent:
+        self.is_paused = False
+        self.deadline = time.monotonic() + self.step_timeout_seconds
+        self.next_action_at = 0.0
+        resync_event = self.resync_state()
+        if resync_event is not None:
+            return resync_event
+
+        step_name = (
+            NAVIGATION_STEPS[self.step_index].name
+            if self.step_index < len(NAVIGATION_STEPS)
+            else "未知步骤"
+        )
+        return NavigationEvent(
+            NavigationStatus.RUNNING,
+            f"▶️【已继续】自动化已恢复运行，正在推进步骤：【{step_name}】。",
+        )
+
+    def resync_state(self) -> NavigationEvent | None:
+        """Scan current game window across candidate steps and align step_index to actual UI."""
+        if self.process_id is None or self.finished:
+            return None
+
+        if self.bound_window is None or not win32gui.IsWindow(self.bound_window.handle):
+            self.bound_window = self.window_binder.bind_by_process_id(self.process_id)
+            if self.bound_window is None:
+                return None
+
+        try:
+            source = self.locator.grab_window_bgr(self.bound_window)
+        except Exception:
+            return None
+
+        # 1. Check for forbidden items / popup alert template if exists
+        for forbidden_name in ("df_forbidden.png", "df_popup_forbidden.png"):
+            forb_path = self.template_dir / forbidden_name
+            if forb_path.exists():
+                res = self.locator.match_in_source(
+                    source, forb_path, self.bound_window, self.threshold
+                )
+                if res.matched:
+                    self.is_paused = True
+                    return NavigationEvent(
+                        NavigationStatus.PAUSED,
+                        "⚠️【检测到违禁物品弹窗】游戏提示禁止进入！已自动为您暂停。"
+                        "请在游戏中移出保险箱中的四级弹/违禁物品，处理完毕后按 F12 继续！",
+                    )
+
+        # 2. Candidate step indices to inspect, ordered from downstream to upstream
+        candidate_indices = [9, 8, 7, 6, 5, 4, 3, 2, 0]
+        for idx in candidate_indices:
+            if idx >= len(NAVIGATION_STEPS):
+                continue
+            cand_step = NAVIGATION_STEPS[idx]
+            if not cand_step.template_name:
+                continue
+
+            tmpl_path = self.template_dir / cand_step.template_name
+            if not tmpl_path.exists():
+                alt_name = (
+                    "df_mode_init.png"
+                    if cand_step.template_name == "df_mode_choose.png"
+                    else (
+                        "df_mode_choose.png"
+                        if cand_step.template_name == "df_mode_init.png"
+                        else ""
+                    )
+                )
+                if alt_name and (self.template_dir / alt_name).exists():
+                    tmpl_path = self.template_dir / alt_name
+                else:
+                    continue
+
+            match_res = self.locator.match_in_source(
+                source, tmpl_path, self.bound_window, self.threshold
+            )
+            if match_res.matched:
+                old_index = self.step_index
+                self.step_index = idx
+                self.deadline = time.monotonic() + self.step_timeout_seconds
+                self.next_action_at = 0.0
+                self.last_confidence = match_res.position.confidence
+                self.best_confidence = match_res.position.confidence
+
+                if cand_step.action == "detect":
+                    return self._complete()
+
+                if old_index != idx:
+                    return NavigationEvent(
+                        NavigationStatus.RUNNING,
+                        f"🔄 智能对齐：识别到游戏画面处于【{cand_step.name}】"
+                        f"（相似度={match_res.position.confidence:.3f}），已同步执行进度！",
+                    )
+                return NavigationEvent(
+                    NavigationStatus.RUNNING,
+                    f"🎯 当前画面对齐【{cand_step.name}】（相似度={match_res.position.confidence:.3f}），继续执行...",
+                )
+
+        return None
 
     def tick(self) -> NavigationEvent | None:
-        if self.finished or self.process_id is None:
+        if self.finished or self.process_id is None or self.is_paused:
             return None
 
         now = time.monotonic()
@@ -150,7 +269,15 @@ class GameNavigator:
         if step.template_name:
             template_path = self.template_dir / step.template_name
             if not template_path.exists():
-                alt_name = "df_mode_init.png" if step.template_name == "df_mode_choose.png" else ("df_mode_choose.png" if step.template_name == "df_mode_init.png" else "")
+                alt_name = (
+                    "df_mode_init.png"
+                    if step.template_name == "df_mode_choose.png"
+                    else (
+                        "df_mode_choose.png"
+                        if step.template_name == "df_mode_init.png"
+                        else ""
+                    )
+                )
                 if alt_name and (self.template_dir / alt_name).exists():
                     template_path = self.template_dir / alt_name
                 else:
@@ -164,6 +291,18 @@ class GameNavigator:
             self.last_confidence = result.position.confidence
             self.best_confidence = max(self.best_confidence, self.last_confidence)
             if not result.matched:
+                # If stuck on match preparation / departure steps for > 4s, try smart resync
+                step_elapsed = now - (self.deadline - self.step_timeout_seconds)
+                if (
+                    self.step_index >= 5
+                    and step_elapsed >= 4.0
+                    and (now - self._last_resync_check >= 3.0)
+                ):
+                    self._last_resync_check = now
+                    resync_event = self.resync_state()
+                    if resync_event is not None:
+                        return resync_event
+
                 if now >= self.deadline:
                     return self._fail(
                         f"步骤“{step.name}”匹配超时，"
@@ -209,6 +348,7 @@ class GameNavigator:
 
     def _complete(self) -> NavigationEvent:
         self.finished = True
+        self.is_paused = False
         return NavigationEvent(
             NavigationStatus.COMPLETE,
             "已识别到选人界面，自动导航已停止。"
@@ -217,4 +357,5 @@ class GameNavigator:
 
     def _fail(self, message: str) -> NavigationEvent:
         self.finished = True
+        self.is_paused = False
         return NavigationEvent(NavigationStatus.FAILED, message)
