@@ -1,0 +1,30 @@
+{
+  "app_name": "dfAmmo",
+  "window_title": "dfAmmo Assistant",
+  "start_button_templates": [
+    "wegame_start_button.png",
+    "wegame_start_deltaforce.png",
+    "start_button.png"
+  ],
+  "template_match_threshold": 0.78,
+  "game_process_names": [
+    "DeltaForceClient-Win64-Shipping.exe",
+    "DeltaForceClient.exe"
+  ],
+  "game_process_poll_interval_ms": 1000,
+  "game_process_timeout_seconds": 120,
+  "navigation_poll_interval_ms": 700,
+  "navigation_step_timeout_seconds": 60,
+  "game_window_timeout_seconds": 90,
+  "game_install_dir": "D:/Program Files/Steam/steamapps/common/Delta Force/Game",
+  "pak_file_names": [
+    "pak-0-2-pakchunk90-WindowsClient.pak",
+    "pak-0-2-pakchunk90optional-WindowsClient.pak"
+  ],
+  "operation_mode": "semi_auto",
+  "wegame_more_template": "wegame_more.png",
+  "wegame_assets_manage_template": "wegame_assets_manage.png",
+  "wegame_delete_map_template": "wegame_delete_map.png",
+  "wegame_ready_timeout_seconds": 60,
+  "delete_map_timeout_seconds": 30
+}
