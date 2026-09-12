@@ -80,10 +80,31 @@ class MainWindow(QWidget):
 
         self.setWindowTitle(self.config.window_title)
         self.setObjectName("mainWindow")
-        self.resize(1180, 640)
-        self.setMinimumSize(1020, 530)
+        self.setMinimumSize(1020, 560)
         self._build_ui()
+        self._init_window_geometry()
         self.write_log("请先绑定 WeGame 主窗口（如游戏已在运行，可直接点击“开始卡邮件”）。")
+
+    def _init_window_geometry(self) -> None:
+        """Calculate optimal initial window geometry and center on screen."""
+        ideal_width = 1180
+        ideal_height = 830
+
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            max_w = max(1000, avail.width() - 60)
+            max_h = max(550, avail.height() - 70)
+
+            target_w = min(ideal_width, max_w)
+            target_h = min(ideal_height, max_h)
+            self.resize(target_w, target_h)
+
+            geo = self.geometry()
+            geo.moveCenter(avail.center())
+            self.setGeometry(geo)
+        else:
+            self.resize(ideal_width, ideal_height)
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
