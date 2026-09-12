@@ -198,6 +198,90 @@ class MainWindow(QWidget):
         feature_layout.addLayout(button_row)
         self.feature_panel.hide()
 
+        # ── Debug panel ──────────────────────────────────────────────────────
+        self.debug_panel = QFrame()
+        self.debug_panel.setObjectName("debugPanel")
+        debug_outer = QVBoxLayout(self.debug_panel)
+        debug_outer.setContentsMargins(20, 12, 20, 12)
+        debug_outer.setSpacing(8)
+
+        debug_header = QHBoxLayout()
+        debug_title = QLabel("🛠 调试：直接跳转到某步骤")
+        debug_title.setObjectName("sectionTitle")
+        self.debug_toggle_button = QPushButton("展开")
+        self.debug_toggle_button.setObjectName("secondaryButton")
+        self.debug_toggle_button.setFixedWidth(72)
+        self.debug_toggle_button.clicked.connect(self._toggle_debug_panel)
+        debug_header.addWidget(debug_title)
+        debug_header.addStretch(1)
+        debug_header.addWidget(self.debug_toggle_button)
+        debug_outer.addLayout(debug_header)
+
+        self.debug_body = QWidget()
+        debug_body_layout = QVBoxLayout(self.debug_body)
+        debug_body_layout.setContentsMargins(0, 4, 0, 0)
+        debug_body_layout.setSpacing(6)
+        self.debug_body.hide()
+
+        # Row 1: game navigation jump buttons
+        nav_row = QHBoxLayout()
+        nav_hint = QLabel("游戏导航：")
+        nav_hint.setFixedWidth(80)
+        self.dbg_nav_start_btn = QPushButton("接管游戏导航")
+        self.dbg_nav_start_btn.setObjectName("secondaryButton")
+        self.dbg_nav_start_btn.clicked.connect(self._dbg_takeover_navigation)
+        nav_row.addWidget(nav_hint)
+        nav_row.addWidget(self.dbg_nav_start_btn)
+        nav_row.addStretch(1)
+        debug_body_layout.addLayout(nav_row)
+
+        # Row 2: WeGame post-process steps
+        post_row = QHBoxLayout()
+        post_hint = QLabel("WeGame 后处理：")
+        post_hint.setFixedWidth(80)
+        self.dbg_wait_wegame_btn = QPushButton("等待启动按钮")
+        self.dbg_wait_wegame_btn.setObjectName("secondaryButton")
+        self.dbg_wait_wegame_btn.clicked.connect(self._dbg_wait_wegame)
+        self.dbg_more_btn = QPushButton("点击 ...")
+        self.dbg_more_btn.setObjectName("secondaryButton")
+        self.dbg_more_btn.clicked.connect(self._dbg_click_more)
+        self.dbg_assets_btn = QPushButton("资源包管理")
+        self.dbg_assets_btn.setObjectName("secondaryButton")
+        self.dbg_assets_btn.clicked.connect(self._dbg_assets_manage)
+        self.dbg_delete_btn = QPushButton("删除长弓溪谷")
+        self.dbg_delete_btn.setObjectName("secondaryButton")
+        self.dbg_delete_btn.clicked.connect(self._dbg_delete_changgong)
+        self.dbg_restart_btn = QPushButton("重新启动游戏")
+        self.dbg_restart_btn.setObjectName("secondaryButton")
+        self.dbg_restart_btn.clicked.connect(self._dbg_restart_game)
+        post_row.addWidget(post_hint)
+        post_row.addWidget(self.dbg_wait_wegame_btn)
+        post_row.addWidget(self.dbg_more_btn)
+        post_row.addWidget(self.dbg_assets_btn)
+        post_row.addWidget(self.dbg_delete_btn)
+        post_row.addWidget(self.dbg_restart_btn)
+        post_row.addStretch(1)
+        debug_body_layout.addLayout(post_row)
+
+        # Row 3: pak file ops
+        pak_row = QHBoxLayout()
+        pak_hint = QLabel("Pak 文件：")
+        pak_hint.setFixedWidth(80)
+        self.dbg_rename_pak_btn = QPushButton("重命名 pak")
+        self.dbg_rename_pak_btn.setObjectName("secondaryButton")
+        self.dbg_rename_pak_btn.clicked.connect(self._dbg_rename_pak)
+        self.dbg_open_paks_btn = QPushButton("打开 Paks 目录")
+        self.dbg_open_paks_btn.setObjectName("secondaryButton")
+        self.dbg_open_paks_btn.clicked.connect(self._dbg_open_paks)
+        pak_row.addWidget(pak_hint)
+        pak_row.addWidget(self.dbg_rename_pak_btn)
+        pak_row.addWidget(self.dbg_open_paks_btn)
+        pak_row.addStretch(1)
+        debug_body_layout.addLayout(pak_row)
+
+        debug_outer.addWidget(self.debug_body)
+        self.debug_panel.hide()  # only shown after window binding
+
         self.log_panel = QFrame()
         self.log_panel.setObjectName("logPanel")
         log_layout = QVBoxLayout(self.log_panel)
@@ -226,7 +310,8 @@ class MainWindow(QWidget):
         root.addWidget(title)
         root.addWidget(self.subtitle)
         root.addWidget(self.bind_panel, stretch=1)
-        root.addWidget(self.feature_panel, stretch=1)
+        root.addWidget(self.feature_panel)
+        root.addWidget(self.debug_panel)
         root.addWidget(self.log_panel)
 
         self.setStyleSheet(MAIN_WINDOW_STYLE)
@@ -252,6 +337,7 @@ class MainWindow(QWidget):
         )
         self.bind_panel.hide()
         self.feature_panel.show()
+        self.debug_panel.show()
         self.subtitle.setText("WeGame 窗口已绑定，可以开始执行任务。")
         self.write_log(
             "窗口绑定成功："
@@ -271,6 +357,7 @@ class MainWindow(QWidget):
         self.resync_button.setEnabled(False)
         self.bound_window = None
         self.feature_panel.hide()
+        self.debug_panel.hide()
         self.bind_panel.show()
         self.subtitle.setText("先绑定 WeGame 主窗口，绑定成功后再显示可用功能。")
         self.write_log("已解除窗口绑定，请重新选择 WeGame 窗口。")
@@ -737,3 +824,148 @@ class MainWindow(QWidget):
             )
         except Exception as exc:
             self.write_log(f"WeGame 删包或重开失败：{exc}")
+
+    # ── Debug panel helpers ─────────────────────────────────────────────────
+
+    def _toggle_debug_panel(self) -> None:
+        if self.debug_body.isVisible():
+            self.debug_body.hide()
+            self.debug_toggle_button.setText("展开")
+        else:
+            self.debug_body.show()
+            self.debug_toggle_button.setText("收起")
+        self.adjustSize()
+
+    def _dbg_require_bound(self) -> bool:
+        """Return True if WeGame window is bound; log an error otherwise."""
+        if self.bound_window is None:
+            self.write_log("⚠️ 调试：需要先绑定 WeGame 窗口才能使用此功能。")
+            return False
+        return True
+
+    def _dbg_takeover_navigation(self) -> None:
+        """Resume game navigation from the current step (skips WeGame launch)."""
+        if not self._dbg_require_bound():
+            return
+        game_process = self.workflow.find_game_process()
+        if game_process is None:
+            self.write_log("调试：未检测到游戏进程，请先启动三角洲行动再使用此功能。")
+            return
+        self.write_log(
+            f"调试：检测到游戏进程 {game_process.name} | pid={game_process.process_id}，接管导航..."
+        )
+        event = self.workflow.start_game_navigation(game_process)
+        self.write_log(event.message)
+        self.navigation_timer.start()
+        self.start_card_mail_button.setEnabled(False)
+        self.pause_resume_button.setEnabled(True)
+        self._set_pause_button_state(is_paused=False)
+        self.stop_button.setEnabled(True)
+        self.resync_button.setEnabled(True)
+        self.advance_game_navigation()
+
+
+    def _dbg_wait_wegame(self) -> None:
+        if not self._dbg_require_bound():
+            return
+        self.write_log("调试：等待 WeGame 启动按钮出现...")
+        try:
+            self.workflow.wait_for_wegame_ready(
+                self.bound_window,
+                self.config.start_button_templates,
+                self.config.template_match_threshold,
+                timeout=getattr(self.config, "wegame_ready_timeout_seconds", 60),
+            )
+            self.write_log("调试：WeGame 启动按钮已出现 ✓")
+        except Exception as exc:
+            self.write_log(f"调试：等待 WeGame 启动按钮失败：{exc}")
+
+    def _dbg_click_more(self) -> None:
+        if not self._dbg_require_bound():
+            return
+        self.write_log("调试：点击 WeGame 更多按钮（...）...")
+        try:
+            pos = self.workflow.click_wegame_more(
+                self.bound_window,
+                getattr(self.config, "wegame_more_template", "wegame_more.png"),
+                self.config.template_match_threshold,
+            )
+            self.write_log(f"调试：已点击更多按钮 (x={pos.x}, y={pos.y}) ✓")
+        except Exception as exc:
+            self.write_log(f"调试：点击更多按钮失败：{exc}")
+
+    def _dbg_assets_manage(self) -> None:
+        if not self._dbg_require_bound():
+            return
+        self.write_log("调试：点击游戏资源包管理...")
+        try:
+            pos = self.workflow.click_assets_manage(
+                self.bound_window,
+                getattr(self.config, "wegame_assets_manage_template", "wegame_assets_manage.png"),
+                self.config.template_match_threshold,
+            )
+            self.write_log(f"调试：已打开资源包管理 (x={pos.x}, y={pos.y}) ✓")
+        except Exception as exc:
+            self.write_log(f"调试：打开资源包管理失败：{exc}")
+
+    def _dbg_delete_changgong(self) -> None:
+        if not self._dbg_require_bound():
+            return
+        self.write_log("调试：在资源管理窗口中查找并删除长弓溪谷（会自动向下滚动）...")
+        try:
+            pos = self.workflow.delete_changgong_map(
+                getattr(self.config, "wegame_delete_map_template", "wegame_delete_map.png"),
+                self.config.template_match_threshold,
+                timeout=getattr(self.config, "delete_map_timeout_seconds", 30),
+            )
+            self.write_log(f"调试：已点击删除长弓溪谷 (x={pos.x}, y={pos.y}) ✓")
+        except Exception as exc:
+            self.write_log(f"调试：删除长弓溪谷失败：{exc}")
+
+    def _dbg_restart_game(self) -> None:
+        if not self._dbg_require_bound():
+            return
+        self.write_log("调试：点击 WeGame 启动按钮重新启动游戏...")
+        try:
+            position, template_path = self.workflow.click_start_button(
+                self.bound_window,
+                self.config.start_button_templates,
+                self.config.template_match_threshold,
+            )
+            self.write_log(
+                f"调试：已点击启动按钮 {template_path.name} (x={position.x}, y={position.y}) ✓"
+            )
+        except Exception as exc:
+            self.write_log(f"调试：重新启动游戏失败：{exc}")
+
+    def _dbg_rename_pak(self) -> None:
+        if not self.config.game_install_dir:
+            self.write_log("调试：未配置游戏安装目录，请先填写安装目录。")
+            return
+        self.write_log("调试：重命名 pak 文件...")
+        try:
+            results = self.workflow.rename_pak_files(
+                self.config.game_install_dir,
+                self.config.pak_file_names,
+            )
+            for msg in results:
+                self.write_log(f"调试：{msg}")
+        except OSError as exc:
+            self.write_log(f"调试：重命名 pak 文件失败：{exc}")
+
+    def _dbg_open_paks(self) -> None:
+        if not self.config.game_install_dir:
+            self.write_log("调试：未配置游戏安装目录，请先填写安装目录。")
+            return
+        paks_path = (
+            Path(self.config.game_install_dir)
+            / "DeltaForce"
+            / "PackContent"
+            / "Paks"
+        )
+        try:
+            subprocess.Popen(["explorer", str(paks_path)])
+            self.write_log(f"调试：已打开 Paks 目录：{paks_path}")
+        except OSError as exc:
+            self.write_log(f"调试：打开 Paks 目录失败：{exc}")
+

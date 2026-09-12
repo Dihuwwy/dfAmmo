@@ -277,14 +277,22 @@ class Workflow:
         template_name: str = "wegame_delete_map.png",
         threshold: float = 0.78,
         timeout: float = 30.0,
+        scroll_step: int = 3,
+        scroll_interval: float = 0.8,
     ) -> ElementPosition:
-        """Find the resource management window and click delete for changgong map."""
+        """Find the resource management window and click delete for changgong map.
+
+        If the delete button is not visible immediately the method scrolls the
+        window downward by *scroll_step* wheel-clicks every *scroll_interval*
+        seconds until the button appears or *timeout* is reached.
+        """
         template_path = TEMPLATE_DIR / template_name
         if not template_path.exists():
             raise FileNotFoundError(f"缺少删除长弓溪谷资源包模板：{template_name}")
 
         deadline = time.monotonic() + timeout
         best_confidence = 0.0
+        last_scroll_at = 0.0
 
         while time.monotonic() < deadline:
             QApplication.processEvents()
@@ -293,10 +301,38 @@ class Workflow:
             if result.matched:
                 self.clicker.click(result.position)
                 return result.position
-            time.sleep(0.6)
+
+            # Scroll the resource-manager window downward every scroll_interval seconds
+            now = time.monotonic()
+            if now - last_scroll_at >= scroll_interval:
+                last_scroll_at = now
+                self._scroll_active_window_down(scroll_step)
+
+            time.sleep(0.3)
 
         raise RuntimeError(
             f"未在资源包管理窗口中找到删除长弓溪谷按钮（{template_name}），"
             f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
         )
+
+    def _scroll_active_window_down(self, clicks: int = 3) -> None:
+        """Send WM_MOUSEWHEEL scroll-down messages to the foreground window."""
+        import win32api as _win32api
+        import win32con as _win32con
+        import win32gui as _win32gui
+
+        try:
+            hwnd = _win32gui.GetForegroundWindow()
+            if not hwnd:
+                return
+            rect = _win32gui.GetWindowRect(hwnd)
+            cx = (rect[0] + rect[2]) // 2
+            cy = (rect[1] + rect[3]) // 2
+            lparam = _win32api.MAKELONG(cx, cy)
+            # WHEEL_DELTA = 120; negative = downward scroll
+            wheel_delta = -120 * clicks
+            wparam = _win32api.MAKELONG(0, wheel_delta & 0xFFFF)
+            _win32gui.PostMessage(hwnd, _win32con.WM_MOUSEWHEEL, wparam, lparam)
+        except Exception:
+            pass
 

@@ -125,4 +125,12 @@ QRadioButton::indicator {
     width: 18px;
     height: 18px;
 }
+QFrame#debugPanel {
+    background: #1a2235;
+    border: 1px solid #2a3a55;
+    border-radius: 8px;
+}
+QFrame#debugPanel QLabel#sectionTitle {
+    color: #7eb3f5;
+}
 """
