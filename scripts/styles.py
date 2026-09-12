@@ -126,11 +126,152 @@ QRadioButton::indicator {
     height: 18px;
 }
 QFrame#debugPanel {
-    background: #1a2235;
-    border: 1px solid #2a3a55;
-    border-radius: 8px;
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+}
+QFrame#debugPanel QLabel {
+    color: #e2e8f0;
 }
 QFrame#debugPanel QLabel#sectionTitle {
-    color: #7eb3f5;
+    color: #38bdf8;
+    font-size: 15px;
+    font-weight: 700;
+}
+QLabel#workflowStatusBadge {
+    background: #1e293b;
+    color: #94a3b8;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 3px 12px;
+    font-size: 12px;
+    font-weight: 600;
+}
+QLabel#workflowStatusBadge[state="running"] {
+    background: #1e3a8a;
+    color: #93c5fd;
+    border: 1px solid #3b82f6;
+}
+QLabel#workflowStatusBadge[state="success"] {
+    background: #064e3b;
+    color: #6ee7b7;
+    border: 1px solid #10b981;
+}
+QLabel#workflowStatusBadge[state="failed"] {
+    background: #7f1d1d;
+    color: #fca5a5;
+    border: 1px solid #ef4444;
+}
+
+/* Debug Section Cards */
+QFrame.debugSectionCard {
+    background: #131d2e;
+    border: 1px solid #1e2d42;
+    border-radius: 8px;
+    padding: 2px;
+}
+QLabel.debugSectionTitle {
+    color: #7dd3fc;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+/* Step Action Buttons */
+QPushButton.stepBtn {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    color: #cbd5e1;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+    min-height: 32px;
+}
+QPushButton.stepBtn:hover {
+    background: #28384f;
+    border-color: #60a5fa;
+    color: #ffffff;
+}
+QPushButton.stepBtn:pressed {
+    background: #162030;
+}
+QPushButton.stepBtn[stepState="idle"] {
+    background: #1e293b;
+    border: 1px solid #334155;
+    color: #cbd5e1;
+}
+QPushButton.stepBtn[stepState="running"] {
+    background: #2563eb;
+    border: 2px solid #93c5fd;
+    color: #ffffff;
+    font-weight: 700;
+}
+QPushButton.stepBtn[stepState="success"] {
+    background: #065f46;
+    border: 1px solid #34d399;
+    color: #ecfdf5;
+    font-weight: 600;
+}
+QPushButton.stepBtn[stepState="failed"] {
+    background: #991b1b;
+    border: 1px solid #f87171;
+    color: #fef2f2;
+    font-weight: 600;
+}
+
+QPushButton.stepAuxBtn {
+    background: transparent;
+    border: 1px dashed #334155;
+    border-radius: 6px;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 12px;
+    min-height: 32px;
+}
+QPushButton.stepAuxBtn:hover {
+    border-color: #38bdf8;
+    color: #e2e8f0;
+    background: #1e293b;
+}
+
+QPushButton#debugToggleBtn,
+QPushButton#resetStatusBtn {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 5px;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 4px 10px;
+    min-height: 26px;
+}
+QPushButton#debugToggleBtn:hover,
+QPushButton#resetStatusBtn:hover {
+    background: #273549;
+    color: #e2e8f0;
+    border-color: #475569;
+}
+
+/* Sub-step pills for game navigation */
+QLabel.subStepPill {
+    background: #0b1120;
+    color: #64748b;
+    border: 1px solid #1e293b;
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 500;
+}
+QLabel.subStepPill[pillState="active"] {
+    background: #1d4ed8;
+    color: #ffffff;
+    border: 1px solid #60a5fa;
+    font-weight: 700;
+}
+QLabel.subStepPill[pillState="done"] {
+    background: #064e3b;
+    color: #6ee7b7;
+    border: 1px solid #059669;
 }
 """

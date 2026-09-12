@@ -12,6 +12,7 @@ import win32con
 import win32gui
 
 from PySide6.QtCore import QPoint, QRect, QTimer, Qt
+from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -199,88 +200,231 @@ class MainWindow(QWidget):
         self.feature_panel.hide()
 
         # ── Debug panel ──────────────────────────────────────────────────────
+        # ── Debug & Execution Tracker Panel ──────────────────────────────────
         self.debug_panel = QFrame()
         self.debug_panel.setObjectName("debugPanel")
         debug_outer = QVBoxLayout(self.debug_panel)
-        debug_outer.setContentsMargins(20, 12, 20, 12)
-        debug_outer.setSpacing(8)
+        debug_outer.setContentsMargins(18, 14, 18, 14)
+        debug_outer.setSpacing(10)
 
+        # Header: Title, Global Status Badge, Reset Button, Toggle Button
         debug_header = QHBoxLayout()
-        debug_title = QLabel("🛠 调试：直接跳转到某步骤")
+        debug_title = QLabel("🛠 工作流实时跟踪 & 单步调试")
         debug_title.setObjectName("sectionTitle")
-        self.debug_toggle_button = QPushButton("展开")
-        self.debug_toggle_button.setObjectName("secondaryButton")
-        self.debug_toggle_button.setFixedWidth(72)
+
+        self.workflow_status_badge = QLabel("● 待命就绪")
+        self.workflow_status_badge.setObjectName("workflowStatusBadge")
+        self.workflow_status_badge.setProperty("state", "idle")
+
+        self.reset_status_btn = QPushButton("重置状态")
+        self.reset_status_btn.setObjectName("resetStatusBtn")
+        self.reset_status_btn.setToolTip("清空所有步骤高亮状态，恢复为待命")
+        self.reset_status_btn.clicked.connect(self.reset_all_step_states)
+
+        self.debug_toggle_button = QPushButton("收起")
+        self.debug_toggle_button.setObjectName("debugToggleBtn")
+        self.debug_toggle_button.setFixedWidth(64)
         self.debug_toggle_button.clicked.connect(self._toggle_debug_panel)
+
         debug_header.addWidget(debug_title)
+        debug_header.addSpacing(10)
+        debug_header.addWidget(self.workflow_status_badge)
         debug_header.addStretch(1)
+        debug_header.addWidget(self.reset_status_btn)
         debug_header.addWidget(self.debug_toggle_button)
         debug_outer.addLayout(debug_header)
 
         self.debug_body = QWidget()
         debug_body_layout = QVBoxLayout(self.debug_body)
         debug_body_layout.setContentsMargins(0, 4, 0, 0)
-        debug_body_layout.setSpacing(6)
-        self.debug_body.hide()
+        debug_body_layout.setSpacing(8)
 
-        # Row 1: game navigation jump buttons
-        nav_row = QHBoxLayout()
-        nav_hint = QLabel("游戏导航：")
-        nav_hint.setFixedWidth(80)
-        self.dbg_nav_start_btn = QPushButton("接管游戏导航")
-        self.dbg_nav_start_btn.setObjectName("secondaryButton")
+        # ── Section 1: In-game Navigation ────────────────────────────────────
+        sec1_card = QFrame()
+        sec1_card.setProperty("class", "debugSectionCard")
+        sec1_layout = QVBoxLayout(sec1_card)
+        sec1_layout.setContentsMargins(12, 8, 12, 10)
+        sec1_layout.setSpacing(6)
+
+        sec1_title = QLabel("阶段 1 · 游戏内自动化导航 (In-Game Automation)")
+        sec1_title.setProperty("class", "debugSectionTitle")
+
+        sec1_main_row = QHBoxLayout()
+        self.dbg_nav_start_btn = QPushButton("▶ 1. 接管游戏导航")
+        self.dbg_nav_start_btn.setProperty("class", "stepBtn")
+        self.dbg_nav_start_btn.setProperty("stepState", "idle")
+        self.dbg_nav_start_btn.setToolTip("检测游戏窗口并自动推进 10 个菜单与模式步骤")
         self.dbg_nav_start_btn.clicked.connect(self._dbg_takeover_navigation)
-        nav_row.addWidget(nav_hint)
-        nav_row.addWidget(self.dbg_nav_start_btn)
-        nav_row.addStretch(1)
-        debug_body_layout.addLayout(nav_row)
 
-        # Row 2: WeGame post-process steps
-        post_row = QHBoxLayout()
-        post_hint = QLabel("WeGame 后处理：")
-        post_hint.setFixedWidth(80)
-        self.dbg_wait_wegame_btn = QPushButton("等待启动按钮")
-        self.dbg_wait_wegame_btn.setObjectName("secondaryButton")
-        self.dbg_wait_wegame_btn.clicked.connect(self._dbg_wait_wegame)
-        self.dbg_more_btn = QPushButton("点击 ...")
-        self.dbg_more_btn.setObjectName("secondaryButton")
-        self.dbg_more_btn.clicked.connect(self._dbg_click_more)
-        self.dbg_assets_btn = QPushButton("资源包管理")
-        self.dbg_assets_btn.setObjectName("secondaryButton")
-        self.dbg_assets_btn.clicked.connect(self._dbg_assets_manage)
-        self.dbg_delete_btn = QPushButton("删除长弓溪谷")
-        self.dbg_delete_btn.setObjectName("secondaryButton")
-        self.dbg_delete_btn.clicked.connect(self._dbg_delete_changgong)
-        self.dbg_restart_btn = QPushButton("重新启动游戏")
-        self.dbg_restart_btn.setObjectName("secondaryButton")
-        self.dbg_restart_btn.clicked.connect(self._dbg_restart_game)
-        post_row.addWidget(post_hint)
-        post_row.addWidget(self.dbg_wait_wegame_btn)
-        post_row.addWidget(self.dbg_more_btn)
-        post_row.addWidget(self.dbg_assets_btn)
-        post_row.addWidget(self.dbg_delete_btn)
-        post_row.addWidget(self.dbg_restart_btn)
-        post_row.addStretch(1)
-        debug_body_layout.addLayout(post_row)
+        sec1_hint = QLabel("自动识别游戏画面并逐级推进 10 步流程，选人界面触发时自动退出游戏：")
+        sec1_hint.setStyleSheet("color: #94a3b8; font-size: 11px;")
 
-        # Row 3: pak file ops
-        pak_row = QHBoxLayout()
-        pak_hint = QLabel("Pak 文件：")
-        pak_hint.setFixedWidth(80)
-        self.dbg_rename_pak_btn = QPushButton("重命名 pak")
-        self.dbg_rename_pak_btn.setObjectName("secondaryButton")
+        sec1_main_row.addWidget(self.dbg_nav_start_btn)
+        sec1_main_row.addSpacing(8)
+        sec1_main_row.addWidget(sec1_hint)
+        sec1_main_row.addStretch(1)
+
+        # 10 sub-step pills
+        sub_steps_row = QHBoxLayout()
+        sub_steps_row.setSpacing(4)
+        self.sub_step_names = [
+            "1.模式",
+            "2.关弹窗",
+            "3.进大厅",
+            "4.选地图",
+            "5.选长弓",
+            "6.行动",
+            "7.配装",
+            "8.继续",
+            "9.出发",
+            "10.选人",
+        ]
+        self.sub_step_pills: list[QLabel] = []
+        for sname in self.sub_step_names:
+            pill = QLabel(sname)
+            pill.setProperty("class", "subStepPill")
+            pill.setProperty("pillState", "")
+            self.sub_step_pills.append(pill)
+            sub_steps_row.addWidget(pill)
+        sub_steps_row.addStretch(1)
+
+        sec1_layout.addWidget(sec1_title)
+        sec1_layout.addLayout(sec1_main_row)
+        sec1_layout.addLayout(sub_steps_row)
+        debug_body_layout.addWidget(sec1_card)
+
+        # ── Section 2: Pak File Isolation ────────────────────────────────────
+        sec2_card = QFrame()
+        sec2_card.setProperty("class", "debugSectionCard")
+        sec2_layout = QVBoxLayout(sec2_card)
+        sec2_layout.setContentsMargins(12, 8, 12, 10)
+        sec2_layout.setSpacing(6)
+
+        sec2_title = QLabel("阶段 2 · Pak 补丁隔离 (Pak File Isolation)")
+        sec2_title.setProperty("class", "debugSectionTitle")
+
+        sec2_btn_row = QHBoxLayout()
+        sec2_btn_row.setSpacing(8)
+        self.dbg_rename_pak_btn = QPushButton("📦 2. 屏蔽 Pak (重命名 .disabled)")
+        self.dbg_rename_pak_btn.setProperty("class", "stepBtn")
+        self.dbg_rename_pak_btn.setProperty("stepState", "idle")
+        self.dbg_rename_pak_btn.setToolTip("重命名长弓溪谷 Pak 文件为 .disabled 状态以屏蔽加载")
         self.dbg_rename_pak_btn.clicked.connect(self._dbg_rename_pak)
-        self.dbg_open_paks_btn = QPushButton("打开 Paks 目录")
-        self.dbg_open_paks_btn.setObjectName("secondaryButton")
+
+        self.dbg_open_paks_btn = QPushButton("📂 浏览 Paks 目录")
+        self.dbg_open_paks_btn.setProperty("class", "stepAuxBtn")
+        self.dbg_open_paks_btn.setToolTip("在资源管理器中打开 Paks 补丁文件夹（测试辅助）")
         self.dbg_open_paks_btn.clicked.connect(self._dbg_open_paks)
-        pak_row.addWidget(pak_hint)
-        pak_row.addWidget(self.dbg_rename_pak_btn)
-        pak_row.addWidget(self.dbg_open_paks_btn)
-        pak_row.addStretch(1)
-        debug_body_layout.addLayout(pak_row)
+
+        sec2_btn_row.addWidget(self.dbg_rename_pak_btn)
+        sec2_btn_row.addWidget(self.dbg_open_paks_btn)
+        sec2_btn_row.addStretch(1)
+
+        sec2_layout.addWidget(sec2_title)
+        sec2_layout.addLayout(sec2_btn_row)
+        debug_body_layout.addWidget(sec2_card)
+
+        # ── Section 3: WeGame Post-process & Restart ────────────────────────
+        sec3_card = QFrame()
+        sec3_card.setProperty("class", "debugSectionCard")
+        sec3_layout = QVBoxLayout(sec3_card)
+        sec3_layout.setContentsMargins(12, 8, 12, 10)
+        sec3_layout.setSpacing(6)
+
+        sec3_title = QLabel("阶段 3 · WeGame 修复重置与拉起 (Post-Process & Launch)")
+        sec3_title.setProperty("class", "debugSectionTitle")
+
+        sec3_btn_row = QHBoxLayout()
+        sec3_btn_row.setSpacing(8)
+
+        self.dbg_wait_wegame_btn = QPushButton("⏳ 3. 等待启动按钮")
+        self.dbg_wait_wegame_btn.setProperty("class", "stepBtn")
+        self.dbg_wait_wegame_btn.setProperty("stepState", "idle")
+        self.dbg_wait_wegame_btn.setToolTip("等待 WeGame 客户端回到启动按钮可用状态")
+        self.dbg_wait_wegame_btn.clicked.connect(self._dbg_wait_wegame)
+
+        self.dbg_more_btn = QPushButton("⋯ 4. 点击选项菜单")
+        self.dbg_more_btn.setProperty("class", "stepBtn")
+        self.dbg_more_btn.setProperty("stepState", "idle")
+        self.dbg_more_btn.setToolTip("点击 WeGame 游戏主页右侧的更多操作 (...) 按钮")
+        self.dbg_more_btn.clicked.connect(self._dbg_click_more)
+
+        self.dbg_assets_btn = QPushButton("📁 5. 资源包管理")
+        self.dbg_assets_btn.setProperty("class", "stepBtn")
+        self.dbg_assets_btn.setProperty("stepState", "idle")
+        self.dbg_assets_btn.setToolTip("点击弹出菜单中的“游戏资源包管理”项")
+        self.dbg_assets_btn.clicked.connect(self._dbg_assets_manage)
+
+        self.dbg_delete_btn = QPushButton("🗑️ 6. 删除长弓溪谷")
+        self.dbg_delete_btn.setProperty("class", "stepBtn")
+        self.dbg_delete_btn.setProperty("stepState", "idle")
+        self.dbg_delete_btn.setToolTip("在资源管理窗口中自动滚动并点击删除长弓溪谷地图资源")
+        self.dbg_delete_btn.clicked.connect(self._dbg_delete_changgong)
+
+        self.dbg_restart_btn = QPushButton("🚀 7. 重新启动游戏")
+        self.dbg_restart_btn.setProperty("class", "stepBtn")
+        self.dbg_restart_btn.setProperty("stepState", "idle")
+        self.dbg_restart_btn.setToolTip("在 WeGame 中点击启动按钮重新拉起三角洲行动")
+        self.dbg_restart_btn.clicked.connect(self._dbg_restart_game)
+
+        sec3_btn_row.addWidget(self.dbg_wait_wegame_btn)
+        sec3_btn_row.addWidget(self.dbg_more_btn)
+        sec3_btn_row.addWidget(self.dbg_assets_btn)
+        sec3_btn_row.addWidget(self.dbg_delete_btn)
+        sec3_btn_row.addWidget(self.dbg_restart_btn)
+        sec3_btn_row.addStretch(1)
+
+        sec3_layout.addWidget(sec3_title)
+        sec3_layout.addLayout(sec3_btn_row)
+        debug_body_layout.addWidget(sec3_card)
+
+        # Mapping for step status updates
+        self._step_buttons = {
+            "nav_game": {
+                "button": self.dbg_nav_start_btn,
+                "base_text": "▶ 1. 接管游戏导航",
+                "title": "接管游戏导航",
+            },
+            "rename_pak": {
+                "button": self.dbg_rename_pak_btn,
+                "base_text": "📦 2. 屏蔽 Pak (重命名 .disabled)",
+                "title": "屏蔽 Pak",
+            },
+            "open_paks": {
+                "button": self.dbg_open_paks_btn,
+                "base_text": "📂 浏览 Paks 目录",
+                "title": "打开 Paks 目录",
+            },
+            "wait_wegame": {
+                "button": self.dbg_wait_wegame_btn,
+                "base_text": "⏳ 3. 等待启动按钮",
+                "title": "等待启动按钮",
+            },
+            "click_more": {
+                "button": self.dbg_more_btn,
+                "base_text": "⋯ 4. 点击选项菜单",
+                "title": "点击选项菜单",
+            },
+            "assets_manage": {
+                "button": self.dbg_assets_btn,
+                "base_text": "📁 5. 资源包管理",
+                "title": "资源包管理",
+            },
+            "delete_map": {
+                "button": self.dbg_delete_btn,
+                "base_text": "🗑️ 6. 删除长弓溪谷",
+                "title": "删除长弓溪谷",
+            },
+            "restart_game": {
+                "button": self.dbg_restart_btn,
+                "base_text": "🚀 7. 重新启动游戏",
+                "title": "重新启动游戏",
+            },
+        }
 
         debug_outer.addWidget(self.debug_body)
         self.debug_panel.hide()  # only shown after window binding
+
 
         self.log_panel = QFrame()
         self.log_panel.setObjectName("logPanel")
@@ -427,6 +571,17 @@ class MainWindow(QWidget):
         except Exception:
             pass
 
+        for step_id, info in getattr(self, "_step_buttons", {}).items():
+            btn = info["button"]
+            if btn.property("stepState") == "running":
+                self.set_step_state(step_id, "idle")
+        if hasattr(self, "workflow_status_badge"):
+            self.workflow_status_badge.setText("🛑 任务已停止")
+            self.workflow_status_badge.setProperty("state", "idle")
+            self.workflow_status_badge.style().unpolish(self.workflow_status_badge)
+            self.workflow_status_badge.style().polish(self.workflow_status_badge)
+            self.workflow_status_badge.update()
+
         if was_running:
             self.write_log("🛑【任务停止】已通过快捷键/按钮停止当前自动化任务！")
         else:
@@ -537,7 +692,7 @@ class MainWindow(QWidget):
 
         # Only auto-scroll if user hasn't scrolled up and isn't selecting
         if was_at_bottom and not user_has_selection:
-            self.log_output.moveCursor(self.log_output.textCursor().End)
+            self.log_output.moveCursor(QTextCursor.MoveOperation.End)
             self.log_output.ensureCursorVisible()
 
     def start_template_capture(self) -> None:
@@ -601,6 +756,7 @@ class MainWindow(QWidget):
         return QRect(QPoint(left, top), QPoint(right, bottom)).normalized()
 
     def start_card_mail(self) -> None:
+        self.reset_all_step_states()
         # Check if Delta Force is already running; if so, directly take over navigation
         game_process = self.workflow.find_game_process()
         if game_process is not None:
@@ -614,6 +770,8 @@ class MainWindow(QWidget):
             self.stop_button.setEnabled(True)
             self.resync_button.setEnabled(True)
 
+            self.set_step_state("nav_game", "running")
+            self.update_nav_substep_pills(0)
             event = self.workflow.start_game_navigation(game_process)
             self.write_log(event.message)
             self.navigation_timer.start()
@@ -653,6 +811,12 @@ class MainWindow(QWidget):
             f"confidence={position.confidence:.3f}, template={template_path.name}"
         )
         self.write_log("正在等待三角洲行动游戏进程...")
+        if hasattr(self, "workflow_status_badge"):
+            self.workflow_status_badge.setText("⏳ 等待三角洲行动启动...")
+            self.workflow_status_badge.setProperty("state", "running")
+            self.workflow_status_badge.style().unpolish(self.workflow_status_badge)
+            self.workflow_status_badge.style().polish(self.workflow_status_badge)
+            self.workflow_status_badge.update()
         self.game_process_timer.start()
         self.check_game_process()
 
@@ -664,6 +828,8 @@ class MainWindow(QWidget):
                 "已找到三角洲行动游戏进程："
                 f"{game_process.name} | pid={game_process.process_id}"
             )
+            self.set_step_state("nav_game", "running")
+            self.update_nav_substep_pills(0)
             event = self.workflow.start_game_navigation(game_process)
             self.write_log(event.message)
             self.navigation_timer.start()
@@ -680,8 +846,18 @@ class MainWindow(QWidget):
             self.write_log(
                 f"等待游戏进程超时（{self.config.game_process_timeout_seconds} 秒）。"
             )
+            if hasattr(self, "workflow_status_badge"):
+                self.workflow_status_badge.setText("✕ 等待游戏启动超时")
+                self.workflow_status_badge.setProperty("state", "failed")
+                self.workflow_status_badge.style().unpolish(self.workflow_status_badge)
+                self.workflow_status_badge.style().polish(self.workflow_status_badge)
+                self.workflow_status_badge.update()
 
     def advance_game_navigation(self) -> None:
+        # Reflect sub-step pills with current index
+        cur_step_idx = getattr(self.workflow.game_navigator, "step_index", 0)
+        self.update_nav_substep_pills(cur_step_idx)
+
         try:
             event = self.workflow.advance_game_navigation()
         except Exception as exc:
@@ -691,6 +867,7 @@ class MainWindow(QWidget):
             self._set_pause_button_state(is_paused=False)
             self.stop_button.setEnabled(False)
             self.resync_button.setEnabled(False)
+            self.set_step_state("nav_game", "failed", str(exc))
             self.write_log(f"自动导航失败：{exc}")
             return
 
@@ -700,6 +877,12 @@ class MainWindow(QWidget):
         self.write_log(event.message)
         if event.status == NavigationStatus.PAUSED:
             self._set_pause_button_state(is_paused=True)
+            if hasattr(self, "workflow_status_badge"):
+                self.workflow_status_badge.setText(f"⏸️ 流程已暂停（当前处于步骤 {cur_step_idx + 1}）")
+                self.workflow_status_badge.setProperty("state", "running")
+                self.workflow_status_badge.style().unpolish(self.workflow_status_badge)
+                self.workflow_status_badge.style().polish(self.workflow_status_badge)
+                self.workflow_status_badge.update()
             return
 
         if event.status in (NavigationStatus.COMPLETE, NavigationStatus.FAILED):
@@ -709,7 +892,14 @@ class MainWindow(QWidget):
             self._set_pause_button_state(is_paused=False)
             self.stop_button.setEnabled(False)
             self.resync_button.setEnabled(False)
+
+            if event.status == NavigationStatus.FAILED:
+                self.set_step_state("nav_game", "failed", event.message)
+                return
+
             if event.status == NavigationStatus.COMPLETE:
+                self.set_step_state("nav_game", "success")
+                self.update_nav_substep_pills(len(self.sub_step_pills))
                 process_exited, process_message = self.workflow.kill_game_process()
                 self.write_log(process_message)
 
@@ -739,12 +929,15 @@ class MainWindow(QWidget):
                         paks_path = None
 
                     if paks_path is not None:
+                        self.set_step_state("rename_pak", "running")
                         try:
                             results = self.workflow.rename_pak_files(
                                 self.config.game_install_dir,
                                 self.config.pak_file_names,
                             )
+                            self.set_step_state("rename_pak", "success")
                         except OSError as exc:
+                            self.set_step_state("rename_pak", "failed", str(exc))
                             self.write_log(f"重命名 pak 文件失败：{exc}")
                         else:
                             for message in results:
@@ -769,63 +962,173 @@ class MainWindow(QWidget):
         if self.bound_window is None:
             return
 
-        self.write_log("正在等待 WeGame 启动按钮重新出现...")
-        QApplication.processEvents()
-
+        current_step = "wait_wegame"
         try:
+            self.set_step_state("wait_wegame", "running")
+            self.write_log("正在等待 WeGame 启动按钮重新出现...")
+            QApplication.processEvents()
+
             self.workflow.wait_for_wegame_ready(
                 self.bound_window,
                 self.config.start_button_templates,
                 self.config.template_match_threshold,
                 timeout=getattr(self.config, "wegame_ready_timeout_seconds", 60),
             )
+            self.set_step_state("wait_wegame", "success")
             self.write_log("WeGame 启动按钮已重新出现。")
             QApplication.processEvents()
 
+            current_step = "click_more"
+            self.set_step_state("click_more", "running")
             self.write_log("正在点击更多选项（...）...")
             self.workflow.click_wegame_more(
                 self.bound_window,
                 getattr(self.config, "wegame_more_template", "wegame_more.png"),
                 self.config.template_match_threshold,
             )
+            self.set_step_state("click_more", "success")
             self.write_log("已点击更多选项。")
             QApplication.processEvents()
             time.sleep(0.5)
 
+            current_step = "assets_manage"
+            self.set_step_state("assets_manage", "running")
             self.write_log("正在打开游戏资源包管理...")
             self.workflow.click_assets_manage(
                 self.bound_window,
                 getattr(self.config, "wegame_assets_manage_template", "wegame_assets_manage.png"),
                 self.config.template_match_threshold,
             )
+            self.set_step_state("assets_manage", "success")
             self.write_log("已打开游戏资源包管理。")
             QApplication.processEvents()
             time.sleep(1.0)
 
+            current_step = "delete_map"
+            self.set_step_state("delete_map", "running")
             self.write_log("正在等待资源管理窗口并删除长弓溪谷资源包...")
             pos = self.workflow.delete_changgong_map(
                 getattr(self.config, "wegame_delete_map_template", "wegame_delete_map.png"),
                 self.config.template_match_threshold,
                 timeout=getattr(self.config, "delete_map_timeout_seconds", 30),
             )
+            self.set_step_state("delete_map", "success")
             self.write_log(f"已点击删除长弓溪谷资源包（x={pos.x}, y={pos.y}）。")
             QApplication.processEvents()
 
             time.sleep(1.2)
+            current_step = "restart_game"
+            self.set_step_state("restart_game", "running")
             self.write_log("切回 WeGame 窗口，准备重新拉起游戏...")
             position, template_path = self.workflow.click_start_button(
                 self.bound_window,
                 self.config.start_button_templates,
                 self.config.template_match_threshold,
             )
+            self.set_step_state("restart_game", "success")
             self.write_log(
                 f"已重新点击启动按钮，游戏正在拉起：{template_path.name} "
                 f"(x={position.x}, y={position.y})"
             )
+            if hasattr(self, "workflow_status_badge"):
+                self.workflow_status_badge.setText("✓ 全流程自动化已顺利完成")
+                self.workflow_status_badge.setProperty("state", "success")
+                self.workflow_status_badge.style().unpolish(self.workflow_status_badge)
+                self.workflow_status_badge.style().polish(self.workflow_status_badge)
+                self.workflow_status_badge.update()
         except Exception as exc:
+            self.set_step_state(current_step, "failed", str(exc))
             self.write_log(f"WeGame 删包或重开失败：{exc}")
 
-    # ── Debug panel helpers ─────────────────────────────────────────────────
+
+    # ── Debug & Step Status Management ──────────────────────────────────────
+
+    def set_step_state(self, step_id: str, state: str, detail: str = "") -> None:
+        """Update step button state ('idle' | 'running' | 'success' | 'failed') and global badge."""
+        step_info = getattr(self, "_step_buttons", {}).get(step_id)
+        title = step_info["title"] if step_info else step_id
+        if step_info:
+            btn = step_info["button"]
+            base_text = step_info["base_text"]
+
+            btn.setProperty("stepState", state)
+            if state == "running":
+                btn.setText(f"⏳ {title}...")
+            elif state == "success":
+                btn.setText(f"✓ {title}")
+            elif state == "failed":
+                btn.setText(f"✕ {title}")
+            else:
+                btn.setText(base_text)
+
+            btn.style().unpolish(btn)
+            btn.style().polish(btn)
+            btn.update()
+
+        # Update global workflow status badge
+        if hasattr(self, "workflow_status_badge"):
+            if state == "running":
+                badge_text = f"⏳ 正在执行：{title}" + (f" ({detail})" if detail else "")
+                self.workflow_status_badge.setText(badge_text)
+                self.workflow_status_badge.setProperty("state", "running")
+            elif state == "success":
+                badge_text = f"✓ 步骤完成：{title}"
+                self.workflow_status_badge.setText(badge_text)
+                self.workflow_status_badge.setProperty("state", "success")
+            elif state == "failed":
+                badge_text = f"✕ 步骤失败：{title}" + (f" ({detail})" if detail else "")
+                self.workflow_status_badge.setText(badge_text)
+                self.workflow_status_badge.setProperty("state", "failed")
+
+            self.workflow_status_badge.style().unpolish(self.workflow_status_badge)
+            self.workflow_status_badge.style().polish(self.workflow_status_badge)
+            self.workflow_status_badge.update()
+
+        QApplication.processEvents()
+
+    def update_nav_substep_pills(self, active_index: int) -> None:
+        """Update 10 navigation sub-step pills: done, active, or idle."""
+        if not hasattr(self, "sub_step_pills"):
+            return
+        for idx, pill in enumerate(self.sub_step_pills):
+            if idx < active_index:
+                pill_state = "done"
+            elif idx == active_index:
+                pill_state = "active"
+            else:
+                pill_state = ""
+            pill.setProperty("pillState", pill_state)
+            pill.style().unpolish(pill)
+            pill.style().polish(pill)
+            pill.update()
+        QApplication.processEvents()
+
+    def reset_all_step_states(self) -> None:
+        """Reset all buttons and sub-step pills to idle."""
+        if hasattr(self, "_step_buttons"):
+            for step_id, info in self._step_buttons.items():
+                btn = info["button"]
+                btn.setProperty("stepState", "idle")
+                btn.setText(info["base_text"])
+                btn.style().unpolish(btn)
+                btn.style().polish(btn)
+                btn.update()
+
+        if hasattr(self, "sub_step_pills"):
+            for pill in self.sub_step_pills:
+                pill.setProperty("pillState", "")
+                pill.style().unpolish(pill)
+                pill.style().polish(pill)
+                pill.update()
+
+        if hasattr(self, "workflow_status_badge"):
+            self.workflow_status_badge.setText("● 待命就绪")
+            self.workflow_status_badge.setProperty("state", "idle")
+            self.workflow_status_badge.style().unpolish(self.workflow_status_badge)
+            self.workflow_status_badge.style().polish(self.workflow_status_badge)
+            self.workflow_status_badge.update()
+
+        QApplication.processEvents()
 
     def _toggle_debug_panel(self) -> None:
         if self.debug_body.isVisible():
@@ -850,7 +1153,11 @@ class MainWindow(QWidget):
         game_process = self.workflow.find_game_process()
         if game_process is None:
             self.write_log("调试：未检测到游戏进程，请先启动三角洲行动再使用此功能。")
+            self.set_step_state("nav_game", "failed", "未检测到游戏进程")
             return
+
+        self.set_step_state("nav_game", "running")
+        self.update_nav_substep_pills(0)
         self.write_log(
             f"调试：检测到游戏进程 {game_process.name} | pid={game_process.process_id}，接管导航..."
         )
@@ -864,10 +1171,10 @@ class MainWindow(QWidget):
         self.resync_button.setEnabled(True)
         self.advance_game_navigation()
 
-
     def _dbg_wait_wegame(self) -> None:
         if not self._dbg_require_bound():
             return
+        self.set_step_state("wait_wegame", "running")
         self.write_log("调试：等待 WeGame 启动按钮出现...")
         try:
             self.workflow.wait_for_wegame_ready(
@@ -876,13 +1183,16 @@ class MainWindow(QWidget):
                 self.config.template_match_threshold,
                 timeout=getattr(self.config, "wegame_ready_timeout_seconds", 60),
             )
+            self.set_step_state("wait_wegame", "success")
             self.write_log("调试：WeGame 启动按钮已出现 ✓")
         except Exception as exc:
+            self.set_step_state("wait_wegame", "failed", str(exc))
             self.write_log(f"调试：等待 WeGame 启动按钮失败：{exc}")
 
     def _dbg_click_more(self) -> None:
         if not self._dbg_require_bound():
             return
+        self.set_step_state("click_more", "running")
         self.write_log("调试：点击 WeGame 更多按钮（...）...")
         try:
             pos = self.workflow.click_wegame_more(
@@ -890,13 +1200,16 @@ class MainWindow(QWidget):
                 getattr(self.config, "wegame_more_template", "wegame_more.png"),
                 self.config.template_match_threshold,
             )
+            self.set_step_state("click_more", "success")
             self.write_log(f"调试：已点击更多按钮 (x={pos.x}, y={pos.y}) ✓")
         except Exception as exc:
+            self.set_step_state("click_more", "failed", str(exc))
             self.write_log(f"调试：点击更多按钮失败：{exc}")
 
     def _dbg_assets_manage(self) -> None:
         if not self._dbg_require_bound():
             return
+        self.set_step_state("assets_manage", "running")
         self.write_log("调试：点击游戏资源包管理...")
         try:
             pos = self.workflow.click_assets_manage(
@@ -904,13 +1217,16 @@ class MainWindow(QWidget):
                 getattr(self.config, "wegame_assets_manage_template", "wegame_assets_manage.png"),
                 self.config.template_match_threshold,
             )
+            self.set_step_state("assets_manage", "success")
             self.write_log(f"调试：已打开资源包管理 (x={pos.x}, y={pos.y}) ✓")
         except Exception as exc:
+            self.set_step_state("assets_manage", "failed", str(exc))
             self.write_log(f"调试：打开资源包管理失败：{exc}")
 
     def _dbg_delete_changgong(self) -> None:
         if not self._dbg_require_bound():
             return
+        self.set_step_state("delete_map", "running")
         self.write_log("调试：在资源管理窗口中查找并删除长弓溪谷（会自动向下滚动）...")
         try:
             pos = self.workflow.delete_changgong_map(
@@ -918,13 +1234,16 @@ class MainWindow(QWidget):
                 self.config.template_match_threshold,
                 timeout=getattr(self.config, "delete_map_timeout_seconds", 30),
             )
+            self.set_step_state("delete_map", "success")
             self.write_log(f"调试：已点击删除长弓溪谷 (x={pos.x}, y={pos.y}) ✓")
         except Exception as exc:
+            self.set_step_state("delete_map", "failed", str(exc))
             self.write_log(f"调试：删除长弓溪谷失败：{exc}")
 
     def _dbg_restart_game(self) -> None:
         if not self._dbg_require_bound():
             return
+        self.set_step_state("restart_game", "running")
         self.write_log("调试：点击 WeGame 启动按钮重新启动游戏...")
         try:
             position, template_path = self.workflow.click_start_button(
@@ -932,30 +1251,37 @@ class MainWindow(QWidget):
                 self.config.start_button_templates,
                 self.config.template_match_threshold,
             )
+            self.set_step_state("restart_game", "success")
             self.write_log(
                 f"调试：已点击启动按钮 {template_path.name} (x={position.x}, y={position.y}) ✓"
             )
         except Exception as exc:
+            self.set_step_state("restart_game", "failed", str(exc))
             self.write_log(f"调试：重新启动游戏失败：{exc}")
 
     def _dbg_rename_pak(self) -> None:
         if not self.config.game_install_dir:
             self.write_log("调试：未配置游戏安装目录，请先填写安装目录。")
+            self.set_step_state("rename_pak", "failed", "未配置游戏安装目录")
             return
+        self.set_step_state("rename_pak", "running")
         self.write_log("调试：重命名 pak 文件...")
         try:
             results = self.workflow.rename_pak_files(
                 self.config.game_install_dir,
                 self.config.pak_file_names,
             )
+            self.set_step_state("rename_pak", "success")
             for msg in results:
                 self.write_log(f"调试：{msg}")
         except OSError as exc:
+            self.set_step_state("rename_pak", "failed", str(exc))
             self.write_log(f"调试：重命名 pak 文件失败：{exc}")
 
     def _dbg_open_paks(self) -> None:
         if not self.config.game_install_dir:
             self.write_log("调试：未配置游戏安装目录，请先填写安装目录。")
+            self.set_step_state("open_paks", "failed", "未配置游戏安装目录")
             return
         paks_path = (
             Path(self.config.game_install_dir)
@@ -963,9 +1289,13 @@ class MainWindow(QWidget):
             / "PackContent"
             / "Paks"
         )
+        self.set_step_state("open_paks", "running")
         try:
             subprocess.Popen(["explorer", str(paks_path)])
+            self.set_step_state("open_paks", "success")
             self.write_log(f"调试：已打开 Paks 目录：{paks_path}")
         except OSError as exc:
+            self.set_step_state("open_paks", "failed", str(exc))
             self.write_log(f"调试：打开 Paks 目录失败：{exc}")
+
 
