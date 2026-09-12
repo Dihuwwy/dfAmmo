@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QRadioButton,
+    QScrollBar,
     QVBoxLayout,
     QWidget,
 )
@@ -208,10 +209,19 @@ class MainWindow(QWidget):
         self.log_output = QPlainTextEdit()
         self.log_output.setObjectName("logOutput")
         self.log_output.setReadOnly(True)
-        self.log_output.setFixedHeight(130)
-        self.log_output.document().setMaximumBlockCount(200)
+        self.log_output.setFixedHeight(180)
+        self.log_output.document().setMaximumBlockCount(500)
+        # Performance: use NoWrap so long lines don't force complex layout
+        self.log_output.setLineWrapMode(QPlainTextEdit.NoWrap)
         log_layout.addWidget(log_title)
         log_layout.addWidget(self.log_output)
+
+        # Pending log lines buffered between timer flushes
+        self._log_buffer: list[str] = []
+        self._log_flush_timer = QTimer(self)
+        self._log_flush_timer.setInterval(150)
+        self._log_flush_timer.timeout.connect(self._flush_log_buffer)
+        self._log_flush_timer.start()
 
         root.addWidget(title)
         root.addWidget(self.subtitle)
@@ -412,7 +422,36 @@ class MainWindow(QWidget):
 
     def write_log(self, message: str) -> None:
         timestamp = time.strftime("%H:%M:%S")
-        self.log_output.appendPlainText(f"[{timestamp}] {message}")
+        self._log_buffer.append(f"[{timestamp}] {message}")
+
+    def _flush_log_buffer(self) -> None:
+        if not self._log_buffer:
+            return
+
+        lines = self._log_buffer
+        self._log_buffer = []
+
+        # Check if user is currently selecting text – don't disturb cursor
+        cursor = self.log_output.textCursor()
+        user_has_selection = cursor.hasSelection()
+
+        # Check if user has scrolled up manually
+        vbar = self.log_output.verticalScrollBar()
+        was_at_bottom = vbar.value() >= vbar.maximum() - 4
+
+        # Block signals during batch insert to avoid per-line repaints
+        self.log_output.setUpdatesEnabled(False)
+        try:
+            for line in lines:
+                self.log_output.appendPlainText(line)
+        finally:
+            self.log_output.setUpdatesEnabled(True)
+            self.log_output.update()
+
+        # Only auto-scroll if user hasn't scrolled up and isn't selecting
+        if was_at_bottom and not user_has_selection:
+            self.log_output.moveCursor(self.log_output.textCursor().End)
+            self.log_output.ensureCursorVisible()
 
     def start_template_capture(self) -> None:
         name, ok = QInputDialog.getText(self, "保存模板", "模板名称，例如 wegame_start_button：")
@@ -598,6 +637,9 @@ class MainWindow(QWidget):
                 if not process_exited:
                     return
 
+                # Rename pak files BEFORE opening explorer, so explorer doesn't steal
+                # focus and break the WeGame window handle
+                paks_path: Path | None = None
                 if self.config.game_install_dir:
                     paks_path = (
                         Path(self.config.game_install_dir)
@@ -607,30 +649,34 @@ class MainWindow(QWidget):
                     )
                     if not paks_path.is_dir():
                         self.write_log(f"Paks 目录不存在，请检查安装目录：{paks_path}")
-                        return
+                        paks_path = None
 
+                    if paks_path is not None:
+                        try:
+                            results = self.workflow.rename_pak_files(
+                                self.config.game_install_dir,
+                                self.config.pak_file_names,
+                            )
+                        except OSError as exc:
+                            self.write_log(f"重命名 pak 文件失败：{exc}")
+                        else:
+                            for message in results:
+                                self.write_log(message)
+                else:
+                    self.write_log("未配置游戏安装目录，跳过 pak 文件重命名。")
+
+                # Run WeGame post-process (delete map pkg, restart) BEFORE opening explorer
+                if self.bound_window is not None:
+                    self._run_wegame_post_process()
+
+                # Open explorer LAST so it doesn't steal focus from WeGame
+                if paks_path is not None:
                     try:
                         subprocess.Popen(["explorer", str(paks_path)])
                     except OSError as exc:
                         self.write_log(f"打开 Paks 目录失败：{exc}")
-                        return
-                    self.write_log(f"已打开 Paks 目录：{paks_path}")
-
-                    try:
-                        results = self.workflow.rename_pak_files(
-                            self.config.game_install_dir,
-                            self.config.pak_file_names,
-                        )
-                    except OSError as exc:
-                        self.write_log(f"重命名 pak 文件失败：{exc}")
                     else:
-                        for message in results:
-                            self.write_log(message)
-                else:
-                    self.write_log("未配置游戏安装目录，跳过 pak 文件重命名。")
-
-                if self.bound_window is not None:
-                    self._run_wegame_post_process()
+                        self.write_log(f"已打开 Paks 目录：{paks_path}")
 
     def _run_wegame_post_process(self) -> None:
         if self.bound_window is None:
