@@ -30,3 +30,7 @@ desktop.ini
 # ── PyInstaller output ────────────────────────────────────────────────────
 *.exe
 *.app
+
+# ── Scratch & temp test scripts ───────────────────────────────────────────
+scratch/
+
