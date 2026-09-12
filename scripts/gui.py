@@ -524,6 +524,7 @@ class MainWindow(QWidget):
 
         root.addLayout(content_layout, stretch=1)
         self.setStyleSheet(MAIN_WINDOW_STYLE)
+        self._sync_pak_button_state()
 
     def clear_log(self) -> None:
         """Clear current log console output."""
@@ -728,6 +729,7 @@ class MainWindow(QWidget):
 
         self.config = updated_config
         self.write_log("游戏安装目录已保存。")
+        self._sync_pak_button_state()
 
     def _on_mode_changed(self) -> None:
         new_mode = "semi_auto" if self.semi_auto_radio.isChecked() else "full_auto"
@@ -1028,6 +1030,7 @@ class MainWindow(QWidget):
                                 self.config.game_install_dir,
                                 self.config.pak_file_names,
                             )
+                            self._sync_pak_button_state()
                             self.set_step_state("rename_pak", "success")
                         except OSError as exc:
                             self.set_step_state("rename_pak", "failed", str(exc))
@@ -1172,6 +1175,9 @@ class MainWindow(QWidget):
                 badge_text = f"✕ 步骤失败：{title}" + (f" ({detail})" if detail else "")
                 self.workflow_status_badge.setText(badge_text)
                 self.workflow_status_badge.setProperty("state", "failed")
+            else:
+                self.workflow_status_badge.setText("● 待命就绪")
+                self.workflow_status_badge.setProperty("state", "idle")
 
             self.workflow_status_badge.style().unpolish(self.workflow_status_badge)
             self.workflow_status_badge.style().polish(self.workflow_status_badge)
@@ -1221,6 +1227,7 @@ class MainWindow(QWidget):
             self.workflow_status_badge.style().polish(self.workflow_status_badge)
             self.workflow_status_badge.update()
 
+        self._sync_pak_button_state()
         QApplication.processEvents()
 
     def _toggle_debug_panel(self) -> None:
@@ -1352,24 +1359,71 @@ class MainWindow(QWidget):
             self.set_step_state("restart_game", "failed", str(exc))
             self.write_log(f"调试：重新启动游戏失败：{exc}")
 
+    def _sync_pak_button_state(self) -> None:
+        """Inspect actual disk files and sync the pak button label and tooltip."""
+        if not hasattr(self, "dbg_rename_pak_btn"):
+            return
+        status = self.workflow.get_pak_status(
+            self.config.game_install_dir,
+            self.config.pak_file_names,
+        )
+        if status == "disabled":
+            text = "🔄 2. 恢复 Pak (移除 .disabled)"
+            tooltip = "当前 Pak 文件已被屏蔽（重命名为 .disabled），点击恢复为正常 .pak 文件"
+            self.dbg_rename_pak_btn.setText(text)
+            self.dbg_rename_pak_btn.setToolTip(tooltip)
+            if hasattr(self, "_step_buttons") and "rename_pak" in self._step_buttons:
+                self._step_buttons["rename_pak"]["base_text"] = text
+                self._step_buttons["rename_pak"]["title"] = "恢复 Pak"
+            self.dbg_rename_pak_btn.setProperty("stepState", "success")
+        else:
+            text = "📦 2. 屏蔽 Pak (重命名 .disabled)"
+            tooltip = "重命名长弓溪谷 Pak 文件为 .disabled 状态以屏蔽加载（再点一次可恢复正常）"
+            self.dbg_rename_pak_btn.setText(text)
+            self.dbg_rename_pak_btn.setToolTip(tooltip)
+            if hasattr(self, "_step_buttons") and "rename_pak" in self._step_buttons:
+                self._step_buttons["rename_pak"]["base_text"] = text
+                self._step_buttons["rename_pak"]["title"] = "屏蔽 Pak"
+            current_state = self.dbg_rename_pak_btn.property("stepState")
+            if current_state not in ("running", "failed"):
+                self.dbg_rename_pak_btn.setProperty("stepState", "idle")
+
+        self.dbg_rename_pak_btn.style().unpolish(self.dbg_rename_pak_btn)
+        self.dbg_rename_pak_btn.style().polish(self.dbg_rename_pak_btn)
+        self.dbg_rename_pak_btn.update()
+
     def _dbg_rename_pak(self) -> None:
         if not self.config.game_install_dir:
             self.write_log("调试：未配置游戏安装目录，请先填写安装目录。")
             self.set_step_state("rename_pak", "failed", "未配置游戏安装目录")
             return
+
         self.set_step_state("rename_pak", "running")
-        self.write_log("调试：重命名 pak 文件...")
         try:
-            results = self.workflow.rename_pak_files(
+            action, results = self.workflow.toggle_pak_files(
                 self.config.game_install_dir,
                 self.config.pak_file_names,
             )
-            self.set_step_state("rename_pak", "success")
+            if action == "disabled":
+                self.set_step_state("rename_pak", "success")
+                self.write_log("调试：【已屏蔽 Pak】已重命名为 .disabled 状态（再点一次恢复正常）✓")
+            else:
+                self.set_step_state("rename_pak", "idle")
+                if hasattr(self, "workflow_status_badge"):
+                    self.workflow_status_badge.setText("✓ 步骤完成：恢复 Pak")
+                    self.workflow_status_badge.setProperty("state", "success")
+                    self.workflow_status_badge.style().unpolish(self.workflow_status_badge)
+                    self.workflow_status_badge.style().polish(self.workflow_status_badge)
+                    self.workflow_status_badge.update()
+                self.write_log("调试：【已恢复 Pak】已去除 .disabled 后缀，文件恢复正常（再点一次重新屏蔽）✓")
+
+            self._sync_pak_button_state()
+
             for msg in results:
-                self.write_log(f"调试：{msg}")
-        except OSError as exc:
+                self.write_log(f"  └─ {msg}")
+        except Exception as exc:
             self.set_step_state("rename_pak", "failed", str(exc))
-            self.write_log(f"调试：重命名 pak 文件失败：{exc}")
+            self.write_log(f"调试：操作 pak 文件失败：{exc}")
 
     def _dbg_open_paks(self) -> None:
         if not self.config.game_install_dir:

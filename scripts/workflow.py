@@ -185,6 +185,97 @@ class Workflow:
         results = self.rename_pak_files(game_install_dir)
         return "\n".join(results)
 
+    def restore_pak_files(
+        self,
+        game_install_dir: str,
+        pak_names: tuple[str, ...] | list[str] = (
+            "pak-0-2-pakchunk90-WindowsClient.pak",
+            "pak-0-2-pakchunk90optional-WindowsClient.pak",
+        ),
+    ) -> list[str]:
+        pak_dir = Path(game_install_dir) / "DeltaForce" / "PackContent" / "Paks"
+        results: list[str] = []
+
+        if not pak_dir.is_dir():
+            raise FileNotFoundError(f"Paks 目录不存在：{pak_dir}")
+
+        for pak_name in pak_names:
+            pak_path = pak_dir / pak_name
+            disabled_path = pak_dir / f"{pak_name}.disabled"
+
+            if not disabled_path.exists():
+                if pak_path.exists():
+                    results.append(f"文件已是正常状态：{pak_name}")
+                else:
+                    results.append(f"文件不存在：{pak_name}（及 .disabled）")
+                continue
+
+            if pak_path.exists():
+                results.append(f"检测到同名正常文件 {pak_name}，正在覆盖恢复...")
+                try:
+                    pak_path.unlink()
+                except OSError as exc:
+                    results.append(f"删除同名文件失败：{exc}")
+                    continue
+
+            disabled_path.rename(pak_path)
+            results.append(f"已恢复正常：{disabled_path.name} -> {pak_name}")
+
+        return results
+
+    def get_pak_status(
+        self,
+        game_install_dir: str,
+        pak_names: tuple[str, ...] | list[str] = (
+            "pak-0-2-pakchunk90-WindowsClient.pak",
+            "pak-0-2-pakchunk90optional-WindowsClient.pak",
+        ),
+    ) -> str:
+        """Return 'disabled' if any target pak has .disabled extension, 'normal' if present without .disabled, or 'missing'."""
+        if not game_install_dir:
+            return "unknown"
+        pak_dir = Path(game_install_dir) / "DeltaForce" / "PackContent" / "Paks"
+        if not pak_dir.is_dir():
+            return "unknown"
+
+        disabled_count = 0
+        normal_count = 0
+        for pak_name in pak_names:
+            disabled_path = pak_dir / f"{pak_name}.disabled"
+            pak_path = pak_dir / pak_name
+            if disabled_path.exists():
+                disabled_count += 1
+            elif pak_path.exists():
+                normal_count += 1
+
+        if disabled_count > 0:
+            return "disabled"
+        if normal_count > 0:
+            return "normal"
+        return "missing"
+
+    def toggle_pak_files(
+        self,
+        game_install_dir: str,
+        pak_names: tuple[str, ...] | list[str] = (
+            "pak-0-2-pakchunk90-WindowsClient.pak",
+            "pak-0-2-pakchunk90optional-WindowsClient.pak",
+        ),
+    ) -> tuple[str, list[str]]:
+        """Toggle pak files between .disabled and normal .pak.
+
+        Returns:
+            ("disabled", results): if files were renamed to .disabled
+            ("restored", results): if files were restored back to normal .pak
+        """
+        status = self.get_pak_status(game_install_dir, pak_names)
+        if status == "disabled":
+            results = self.restore_pak_files(game_install_dir, pak_names)
+            return "restored", results
+        else:
+            results = self.rename_pak_files(game_install_dir, pak_names)
+            return "disabled", results
+
     def wait_for_wegame_ready(
         self,
         bound_window: BoundWindow,
