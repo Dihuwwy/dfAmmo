@@ -13,14 +13,16 @@ class BindButton(QPushButton):
 
     released_at = Signal(int, int)
 
-    def __init__(self) -> None:
-        super().__init__("按住拖到 WeGame 窗口后松开")
+    def __init__(self, text: str = "🎯 拖拽至 WeGame 窗口绑定") -> None:
+        super().__init__(text)
+        self.default_text = text
+        self.setObjectName("bindButton")
         self.setCursor(Qt.OpenHandCursor)
-        self.setMinimumSize(320, 72)
+        self.setMinimumSize(220, 36)
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.LeftButton:
-            self.setText("松开鼠标以绑定窗口")
+            self.setText("🎯 松开鼠标完成绑定")
             self.setCursor(Qt.CrossCursor)
             QApplication.setOverrideCursor(QCursor(Qt.CrossCursor))
             self.grabMouse()
@@ -34,7 +36,7 @@ class BindButton(QPushButton):
             self.releaseMouse()
             QApplication.restoreOverrideCursor()
             self.setCursor(Qt.OpenHandCursor)
-            self.setText("按住拖到 WeGame 窗口后松开")
+            self.setText(self.default_text)
 
             # Qt coordinates can be logical pixels on a scaled desktop. Read
             # the release point from Win32 so binding uses the same space as

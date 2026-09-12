@@ -97,49 +97,60 @@ class MainWindow(QWidget):
         title = QLabel(self.config.window_title)
         title.setObjectName("title")
 
-        self.subtitle = QLabel("先绑定 WeGame 主窗口，绑定成功后再显示可用功能。")
+        self.subtitle = QLabel("WeGame 辅助就绪 · 支持窗口智能吸附、实时步骤跟踪与单步调试")
         self.subtitle.setObjectName("subtitle")
 
         header_col.addWidget(title)
         header_col.addWidget(self.subtitle)
         root.addLayout(header_col)
 
+        # ── Connection Status Bar ─────────────────────────────────────────────
         self.bind_panel = QFrame()
         self.bind_panel.setObjectName("bindPanel")
-        bind_layout = QVBoxLayout(self.bind_panel)
-        bind_layout.setContentsMargins(28, 28, 28, 28)
-        bind_layout.setSpacing(14)
-        bind_layout.setAlignment(Qt.AlignCenter)
+        bind_layout = QHBoxLayout(self.bind_panel)
+        bind_layout.setContentsMargins(16, 10, 16, 10)
+        bind_layout.setSpacing(12)
 
-        bind_content = QWidget()
-        bind_content.setObjectName("bindContent")
-        bind_content.setFixedWidth(480)
-        bind_content_layout = QVBoxLayout(bind_content)
-        bind_content_layout.setContentsMargins(0, 0, 0, 0)
-        bind_content_layout.setSpacing(18)
-        bind_content_layout.setAlignment(Qt.AlignCenter)
+        status_box = QVBoxLayout()
+        status_box.setSpacing(3)
 
-        bind_title = QLabel("绑定 WeGame 窗口")
-        bind_title.setObjectName("sectionTitle")
-        bind_title.setAlignment(Qt.AlignCenter)
+        status_title_row = QHBoxLayout()
+        status_title_row.setSpacing(8)
+
+        conn_icon_label = QLabel("🔗 WeGame 客户端：")
+        conn_icon_label.setObjectName("connStatusLabel")
+
+        self.conn_badge = QLabel("⚪ 未连接")
+        self.conn_badge.setObjectName("connBadge")
+        self.conn_badge.setProperty("connected", "false")
+
+        status_title_row.addWidget(conn_icon_label)
+        status_title_row.addWidget(self.conn_badge)
+        status_title_row.addStretch(1)
+
+        self.conn_detail_label = QLabel("请按住右侧按钮拖动到 WeGame 主窗口后松开（如游戏已运行可直接卡邮件）")
+        self.conn_detail_label.setObjectName("connDetail")
+
+        status_box.addLayout(status_title_row)
+        status_box.addWidget(self.conn_detail_label)
 
         self.bind_button = BindButton()
         self.bind_button.released_at.connect(self.bind_window_at)
 
-        bind_content_layout.addWidget(bind_title)
-        bind_content_layout.addWidget(self.bind_button)
-        bind_layout.addWidget(bind_content)
+        bind_layout.addLayout(status_box, stretch=1)
+        bind_layout.addWidget(self.bind_button)
 
+        # ── Feature panel ────────────────────────────────────────────────────
         self.feature_panel = QFrame()
         self.feature_panel.setObjectName("featurePanel")
         feature_layout = QVBoxLayout(self.feature_panel)
         feature_layout.setContentsMargins(16, 12, 16, 12)
         feature_layout.setSpacing(8)
 
-        feature_title = QLabel("后续功能")
+        feature_title = QLabel("🎮 核心控制与配置")
         feature_title.setObjectName("sectionTitle")
         self.window_info = QLabel("")
-        self.window_info.setWordWrap(True)
+        self.window_info.hide()
 
         dir_row = QHBoxLayout()
         dir_label = QLabel("游戏安装目录：")
@@ -210,7 +221,6 @@ class MainWindow(QWidget):
         feature_layout.addLayout(dir_row)
         feature_layout.addLayout(mode_row)
         feature_layout.addLayout(button_row)
-        self.feature_panel.hide()
 
         # ── Debug panel ──────────────────────────────────────────────────────
         # ── Debug & Execution Tracker Panel ──────────────────────────────────
@@ -440,7 +450,6 @@ class MainWindow(QWidget):
         }
 
         debug_outer.addWidget(self.debug_body)
-        self.debug_panel.hide()  # only shown after window binding
 
         # ── Right column: Log Panel ──────────────────────────────────────────
         self.log_panel = QFrame()
@@ -541,17 +550,23 @@ class MainWindow(QWidget):
             return
 
         self.bound_window = bound_window
-        self.window_info.setText(
-            "已绑定窗口："
+        info_text = (
             f"{bound_window.title or '<无标题>'} | "
             f"{bound_window.process_name or '<未知进程>'} | "
             f"pid={bound_window.process_id or '-'} | "
             f"handle={bound_window.handle}"
         )
-        self.bind_panel.hide()
-        self.feature_panel.show()
-        self.debug_panel.show()
-        self.subtitle.setText("WeGame 窗口已绑定，可以开始执行任务。")
+        self.conn_badge.setText("🟢 已连接")
+        self.conn_badge.setProperty("connected", "true")
+        self.conn_badge.style().unpolish(self.conn_badge)
+        self.conn_badge.style().polish(self.conn_badge)
+        self.conn_badge.update()
+
+        self.conn_detail_label.setText(info_text)
+        self.bind_button.default_text = "🎯 重新拖拽绑定"
+        self.bind_button.setText("🎯 重新拖拽绑定")
+
+        self.subtitle.setText("WeGame 窗口已绑定，可以开始执行自动化流程或单步调试。")
         self.write_log(
             "窗口绑定成功："
             f"{bound_window.title or '<无标题>'} | "
@@ -569,10 +584,18 @@ class MainWindow(QWidget):
         self.stop_button.setEnabled(False)
         self.resync_button.setEnabled(False)
         self.bound_window = None
-        self.feature_panel.hide()
-        self.debug_panel.hide()
-        self.bind_panel.show()
-        self.subtitle.setText("先绑定 WeGame 主窗口，绑定成功后再显示可用功能。")
+
+        self.conn_badge.setText("⚪ 未连接")
+        self.conn_badge.setProperty("connected", "false")
+        self.conn_badge.style().unpolish(self.conn_badge)
+        self.conn_badge.style().polish(self.conn_badge)
+        self.conn_badge.update()
+
+        self.conn_detail_label.setText("请按住右侧按钮拖动到 WeGame 主窗口后松开（如游戏已运行可直接卡邮件）")
+        self.bind_button.default_text = "🎯 拖拽至 WeGame 窗口绑定"
+        self.bind_button.setText("🎯 拖拽至 WeGame 窗口绑定")
+
+        self.subtitle.setText("WeGame 辅助就绪 · 支持窗口智能吸附、实时步骤跟踪与单步调试")
         self.write_log("已解除窗口绑定，请重新选择 WeGame 窗口。")
 
     def _set_pause_button_state(self, is_paused: bool) -> None:
@@ -848,7 +871,8 @@ class MainWindow(QWidget):
             return
 
         if self.bound_window is None:
-            self.write_log("请先绑定 WeGame 窗口。")
+            self.write_log("⚠️ 未检测到运行中的游戏，且尚未绑定 WeGame 窗口。")
+            self.write_log("👉 请先按住上方「拖到 WeGame 窗口」按钮完成绑定，以自动拉起游戏。")
             return
 
         self.write_log("准备识别并点击启动元素...")

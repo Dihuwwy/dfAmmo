@@ -31,6 +31,47 @@ QFrame#logPanel {
     border: 1px solid #dce3ed;
     border-radius: 8px;
 }
+QLabel#connStatusLabel {
+    font-size: 13px;
+    font-weight: 700;
+    color: #334155;
+}
+QLabel#connBadge {
+    border-radius: 10px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+}
+QLabel#connBadge[connected="false"] {
+    background: #f1f5f9;
+    color: #64748b;
+    border: 1px solid #cbd5e1;
+}
+QLabel#connBadge[connected="true"] {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+}
+QLabel#connDetail {
+    color: #64748b;
+    font-size: 12px;
+}
+QPushButton#bindButton {
+    background: #1f7aec;
+    border: 1px solid #1a6cd3;
+    border-radius: 6px;
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 6px 14px;
+    min-height: 34px;
+}
+QPushButton#bindButton:hover {
+    background: #176bd3;
+}
+QPushButton#bindButton:pressed {
+    background: #1258ad;
+}
 QPushButton {
     background: #1f7aec;
     border: 0;
