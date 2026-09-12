@@ -26,6 +26,8 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QScrollBar,
+    QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -78,20 +80,29 @@ class MainWindow(QWidget):
 
         self.setWindowTitle(self.config.window_title)
         self.setObjectName("mainWindow")
-        self.resize(800, 600)
+        self.resize(1180, 640)
+        self.setMinimumSize(1020, 530)
         self._build_ui()
         self.write_log("请先绑定 WeGame 主窗口（如游戏已在运行，可直接点击“开始卡邮件”）。")
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(28, 24, 28, 24)
-        root.setSpacing(18)
+        root.setContentsMargins(20, 16, 20, 16)
+        root.setSpacing(10)
+
+        # Header area
+        header_col = QVBoxLayout()
+        header_col.setSpacing(2)
 
         title = QLabel(self.config.window_title)
         title.setObjectName("title")
 
         self.subtitle = QLabel("先绑定 WeGame 主窗口，绑定成功后再显示可用功能。")
         self.subtitle.setObjectName("subtitle")
+
+        header_col.addWidget(title)
+        header_col.addWidget(self.subtitle)
+        root.addLayout(header_col)
 
         self.bind_panel = QFrame()
         self.bind_panel.setObjectName("bindPanel")
@@ -122,8 +133,8 @@ class MainWindow(QWidget):
         self.feature_panel = QFrame()
         self.feature_panel.setObjectName("featurePanel")
         feature_layout = QVBoxLayout(self.feature_panel)
-        feature_layout.setContentsMargins(20, 18, 20, 18)
-        feature_layout.setSpacing(10)
+        feature_layout.setContentsMargins(16, 12, 16, 12)
+        feature_layout.setSpacing(8)
 
         feature_title = QLabel("后续功能")
         feature_title.setObjectName("sectionTitle")
@@ -144,6 +155,7 @@ class MainWindow(QWidget):
         dir_row.addWidget(self.game_dir_button)
 
         button_row = QHBoxLayout()
+        button_row.setSpacing(6)
         self.start_card_mail_button = QPushButton("开始卡邮件")
         self.start_card_mail_button.clicked.connect(self.start_card_mail)
 
@@ -157,12 +169,13 @@ class MainWindow(QWidget):
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.emergency_stop)
 
-        self.resync_button = QPushButton("界面重同步")
+        self.resync_button = QPushButton("重同步")
         self.resync_button.setObjectName("secondaryButton")
         self.resync_button.setEnabled(False)
         self.resync_button.clicked.connect(self.manual_resync)
 
-        self.capture_button = QPushButton("采集元素模板")
+        self.capture_button = QPushButton("采集模板")
+        self.capture_button.setObjectName("secondaryButton")
         self.capture_button.clicked.connect(self.start_template_capture)
 
         self.rebind_button = QPushButton("重新绑定")
@@ -174,8 +187,8 @@ class MainWindow(QWidget):
         button_row.addWidget(self.stop_button)
         button_row.addWidget(self.resync_button)
         button_row.addWidget(self.capture_button)
-        button_row.addStretch(1)
         button_row.addWidget(self.rebind_button)
+        button_row.addStretch(1)
 
         mode_row = QHBoxLayout()
         mode_label = QLabel("运行模式：")
@@ -328,14 +341,11 @@ class MainWindow(QWidget):
         sec3_card = QFrame()
         sec3_card.setProperty("class", "debugSectionCard")
         sec3_layout = QVBoxLayout(sec3_card)
-        sec3_layout.setContentsMargins(12, 8, 12, 10)
+        sec3_layout.setContentsMargins(12, 8, 12, 8)
         sec3_layout.setSpacing(6)
 
         sec3_title = QLabel("阶段 3 · WeGame 修复重置与拉起 (Post-Process & Launch)")
         sec3_title.setProperty("class", "debugSectionTitle")
-
-        sec3_btn_row = QHBoxLayout()
-        sec3_btn_row.setSpacing(8)
 
         self.dbg_wait_wegame_btn = QPushButton("⏳ 3. 等待启动按钮")
         self.dbg_wait_wegame_btn.setProperty("class", "stepBtn")
@@ -367,15 +377,22 @@ class MainWindow(QWidget):
         self.dbg_restart_btn.setToolTip("在 WeGame 中点击启动按钮重新拉起三角洲行动")
         self.dbg_restart_btn.clicked.connect(self._dbg_restart_game)
 
-        sec3_btn_row.addWidget(self.dbg_wait_wegame_btn)
-        sec3_btn_row.addWidget(self.dbg_more_btn)
-        sec3_btn_row.addWidget(self.dbg_assets_btn)
-        sec3_btn_row.addWidget(self.dbg_delete_btn)
-        sec3_btn_row.addWidget(self.dbg_restart_btn)
-        sec3_btn_row.addStretch(1)
+        sec3_row1 = QHBoxLayout()
+        sec3_row1.setSpacing(8)
+        sec3_row1.addWidget(self.dbg_wait_wegame_btn)
+        sec3_row1.addWidget(self.dbg_more_btn)
+        sec3_row1.addWidget(self.dbg_assets_btn)
+        sec3_row1.addStretch(1)
+
+        sec3_row2 = QHBoxLayout()
+        sec3_row2.setSpacing(8)
+        sec3_row2.addWidget(self.dbg_delete_btn)
+        sec3_row2.addWidget(self.dbg_restart_btn)
+        sec3_row2.addStretch(1)
 
         sec3_layout.addWidget(sec3_title)
-        sec3_layout.addLayout(sec3_btn_row)
+        sec3_layout.addLayout(sec3_row1)
+        sec3_layout.addLayout(sec3_row2)
         debug_body_layout.addWidget(sec3_card)
 
         # Mapping for step status updates
@@ -425,23 +442,41 @@ class MainWindow(QWidget):
         debug_outer.addWidget(self.debug_body)
         self.debug_panel.hide()  # only shown after window binding
 
-
+        # ── Right column: Log Panel ──────────────────────────────────────────
         self.log_panel = QFrame()
         self.log_panel.setObjectName("logPanel")
         log_layout = QVBoxLayout(self.log_panel)
-        log_layout.setContentsMargins(16, 14, 16, 16)
+        log_layout.setContentsMargins(14, 12, 14, 12)
         log_layout.setSpacing(8)
 
+        log_header = QHBoxLayout()
         log_title = QLabel("运行日志")
         log_title.setObjectName("sectionTitle")
+
+        self.copy_log_btn = QPushButton("复制")
+        self.copy_log_btn.setObjectName("copyLogBtn")
+        self.copy_log_btn.setToolTip("复制当前所有运行日志")
+        self.copy_log_btn.clicked.connect(self.copy_log)
+
+        self.clear_log_btn = QPushButton("清空")
+        self.clear_log_btn.setObjectName("clearLogBtn")
+        self.clear_log_btn.setToolTip("清空当前显示的日志")
+        self.clear_log_btn.clicked.connect(self.clear_log)
+
+        log_header.addWidget(log_title)
+        log_header.addStretch(1)
+        log_header.addWidget(self.copy_log_btn)
+        log_header.addWidget(self.clear_log_btn)
+
         self.log_output = QPlainTextEdit()
         self.log_output.setObjectName("logOutput")
         self.log_output.setReadOnly(True)
-        self.log_output.setFixedHeight(180)
-        self.log_output.document().setMaximumBlockCount(500)
-        # Performance: use NoWrap so long lines don't force complex layout
-        self.log_output.setLineWrapMode(QPlainTextEdit.NoWrap)
-        log_layout.addWidget(log_title)
+        self.log_output.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.log_output.setMinimumHeight(350)
+        self.log_output.document().setMaximumBlockCount(800)
+        self.log_output.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+
+        log_layout.addLayout(log_header)
         log_layout.addWidget(self.log_output)
 
         # Pending log lines buffered between timer flushes
@@ -451,14 +486,48 @@ class MainWindow(QWidget):
         self._log_flush_timer.timeout.connect(self._flush_log_buffer)
         self._log_flush_timer.start()
 
-        root.addWidget(title)
-        root.addWidget(self.subtitle)
-        root.addWidget(self.bind_panel, stretch=1)
-        root.addWidget(self.feature_panel)
-        root.addWidget(self.debug_panel)
-        root.addWidget(self.log_panel)
+        # ── Two-column content layout ─────────────────────────────────────────
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(14)
 
+        # Left scroll area wrapping operations for smooth, unconstrained scaling
+        self.left_scroll = QScrollArea()
+        self.left_scroll.setObjectName("leftScrollArea")
+        self.left_scroll.setWidgetResizable(True)
+        self.left_scroll.setFrameShape(QFrame.NoFrame)
+        self.left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
+        # Left column content widget
+        self.left_column = QWidget()
+        left_layout = QVBoxLayout(self.left_column)
+        left_layout.setContentsMargins(0, 0, 8, 0)
+        left_layout.setSpacing(10)
+
+        left_layout.addWidget(self.bind_panel)
+        left_layout.addWidget(self.feature_panel)
+        left_layout.addWidget(self.debug_panel)
+        left_layout.addStretch(1)
+
+        self.left_scroll.setWidget(self.left_column)
+
+        content_layout.addWidget(self.left_scroll, stretch=63)
+        content_layout.addWidget(self.log_panel, stretch=37)
+
+        root.addLayout(content_layout, stretch=1)
         self.setStyleSheet(MAIN_WINDOW_STYLE)
+
+    def clear_log(self) -> None:
+        """Clear current log console output."""
+        self.log_output.clear()
+        self._log_buffer.clear()
+
+    def copy_log(self) -> None:
+        """Copy all log content to clipboard."""
+        text = self.log_output.toPlainText()
+        if text:
+            clipboard = QApplication.clipboard()
+            clipboard.setText(text)
+            self.write_log("📋 已将运行日志复制到剪贴板。")
 
     def bind_window_at(self, x: int, y: int) -> None:
         try:

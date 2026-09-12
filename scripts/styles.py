@@ -274,4 +274,50 @@ QLabel.subStepPill[pillState="done"] {
     color: #6ee7b7;
     border: 1px solid #059669;
 }
+
+/* Log Panel action buttons */
+QPushButton#clearLogBtn,
+QPushButton#copyLogBtn {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    min-height: 22px;
+}
+QPushButton#clearLogBtn:hover,
+QPushButton#copyLogBtn:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+    border-color: #94a3b8;
+}
+
+/* Left Scroll Area */
+QScrollArea#leftScrollArea {
+    background: transparent;
+    border: none;
+}
+QScrollArea#leftScrollArea > QWidget > QWidget {
+    background: transparent;
+}
+QScrollArea#leftScrollArea QScrollBar:vertical {
+    width: 6px;
+    background: transparent;
+}
+QScrollArea#leftScrollArea QScrollBar::handle:vertical {
+    background: #cbd5e1;
+    border-radius: 3px;
+    min-height: 20px;
+}
+QScrollArea#leftScrollArea QScrollBar::handle:vertical:hover {
+    background: #94a3b8;
+}
+QScrollArea#leftScrollArea QScrollBar::add-line:vertical,
+QScrollArea#leftScrollArea QScrollBar::sub-line:vertical {
+    height: 0;
+}
 """
+
+
