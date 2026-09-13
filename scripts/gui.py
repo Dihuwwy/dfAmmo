@@ -88,13 +88,13 @@ class MainWindow(QWidget):
     def _init_window_geometry(self) -> None:
         """Calculate optimal initial window geometry and center on screen."""
         ideal_width = 1180
-        ideal_height = 780
+        ideal_height = 830
 
         screen = QApplication.primaryScreen()
         if screen is not None:
             avail = screen.availableGeometry()
-            max_w = max(1000, avail.width() - 40)
-            max_h = max(550, avail.height() - 25)
+            max_w = max(1000, avail.width() - 60)
+            max_h = max(550, avail.height() - 70)
 
             target_w = min(ideal_width, max_w)
             target_h = min(ideal_height, max_h)
@@ -108,8 +108,8 @@ class MainWindow(QWidget):
 
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(18, 12, 18, 12)
-        root.setSpacing(8)
+        root.setContentsMargins(20, 16, 20, 16)
+        root.setSpacing(10)
 
         # Header area
         header_col = QVBoxLayout()
@@ -129,11 +129,11 @@ class MainWindow(QWidget):
         self.bind_panel = QFrame()
         self.bind_panel.setObjectName("bindPanel")
         bind_layout = QHBoxLayout(self.bind_panel)
-        bind_layout.setContentsMargins(14, 6, 14, 6)
-        bind_layout.setSpacing(10)
+        bind_layout.setContentsMargins(16, 10, 16, 10)
+        bind_layout.setSpacing(12)
 
         status_box = QVBoxLayout()
-        status_box.setSpacing(2)
+        status_box.setSpacing(3)
 
         status_title_row = QHBoxLayout()
         status_title_row.setSpacing(8)
@@ -165,8 +165,8 @@ class MainWindow(QWidget):
         self.feature_panel = QFrame()
         self.feature_panel.setObjectName("featurePanel")
         feature_layout = QVBoxLayout(self.feature_panel)
-        feature_layout.setContentsMargins(16, 8, 16, 8)
-        feature_layout.setSpacing(6)
+        feature_layout.setContentsMargins(16, 12, 16, 12)
+        feature_layout.setSpacing(8)
 
         feature_title = QLabel("🎮 核心控制与配置")
         feature_title.setObjectName("sectionTitle")
@@ -248,8 +248,8 @@ class MainWindow(QWidget):
         self.debug_panel = QFrame()
         self.debug_panel.setObjectName("debugPanel")
         debug_outer = QVBoxLayout(self.debug_panel)
-        debug_outer.setContentsMargins(14, 8, 14, 8)
-        debug_outer.setSpacing(6)
+        debug_outer.setContentsMargins(18, 14, 18, 14)
+        debug_outer.setSpacing(10)
 
         # Header: Title, Global Status Badge, Reset Button, Toggle Button
         debug_header = QHBoxLayout()
@@ -280,15 +280,15 @@ class MainWindow(QWidget):
 
         self.debug_body = QWidget()
         debug_body_layout = QVBoxLayout(self.debug_body)
-        debug_body_layout.setContentsMargins(0, 2, 0, 0)
-        debug_body_layout.setSpacing(5)
+        debug_body_layout.setContentsMargins(0, 4, 0, 0)
+        debug_body_layout.setSpacing(8)
 
         # ── Section 1: In-game Navigation ────────────────────────────────────
         sec1_card = QFrame()
         sec1_card.setProperty("class", "debugSectionCard")
         sec1_layout = QVBoxLayout(sec1_card)
-        sec1_layout.setContentsMargins(10, 5, 10, 5)
-        sec1_layout.setSpacing(4)
+        sec1_layout.setContentsMargins(12, 8, 12, 10)
+        sec1_layout.setSpacing(6)
 
         sec1_title = QLabel("阶段 1 · 游戏内自动化导航 (In-Game Automation)")
         sec1_title.setProperty("class", "debugSectionTitle")
@@ -349,8 +349,8 @@ class MainWindow(QWidget):
         sec2_card = QFrame()
         sec2_card.setProperty("class", "debugSectionCard")
         sec2_layout = QVBoxLayout(sec2_card)
-        sec2_layout.setContentsMargins(10, 5, 10, 5)
-        sec2_layout.setSpacing(4)
+        sec2_layout.setContentsMargins(12, 8, 12, 10)
+        sec2_layout.setSpacing(6)
 
         sec2_title = QLabel("阶段 2 · Pak 补丁隔离 (Pak File Isolation)")
         sec2_title.setProperty("class", "debugSectionTitle")
@@ -380,8 +380,8 @@ class MainWindow(QWidget):
         sec3_card = QFrame()
         sec3_card.setProperty("class", "debugSectionCard")
         sec3_layout = QVBoxLayout(sec3_card)
-        sec3_layout.setContentsMargins(10, 5, 10, 6)
-        sec3_layout.setSpacing(4)
+        sec3_layout.setContentsMargins(12, 8, 12, 8)
+        sec3_layout.setSpacing(6)
 
         sec3_title = QLabel("阶段 3 · WeGame 修复重置与拉起 (Post-Process & Launch)")
         sec3_title.setProperty("class", "debugSectionTitle")
@@ -526,7 +526,7 @@ class MainWindow(QWidget):
 
         # ── Two-column content layout ─────────────────────────────────────────
         content_layout = QHBoxLayout()
-        content_layout.setSpacing(12)
+        content_layout.setSpacing(14)
 
         # Left scroll area wrapping operations for smooth, unconstrained scaling
         self.left_scroll = QScrollArea()
@@ -538,8 +538,8 @@ class MainWindow(QWidget):
         # Left column content widget
         self.left_column = QWidget()
         left_layout = QVBoxLayout(self.left_column)
-        left_layout.setContentsMargins(0, 0, 4, 0)
-        left_layout.setSpacing(6)
+        left_layout.setContentsMargins(0, 0, 8, 0)
+        left_layout.setSpacing(10)
 
         left_layout.addWidget(self.bind_panel)
         left_layout.addWidget(self.feature_panel)
