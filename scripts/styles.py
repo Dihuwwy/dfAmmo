@@ -294,7 +294,45 @@ QPushButton#resetStatusBtn:hover {
     border-color: #475569;
 }
 
-/* Sub-step pills for game navigation */
+/* Sub-step pills for game navigation (Interactive buttons) */
+QPushButton.subStepBtn {
+    background: #0b1120;
+    color: #94a3b8;
+    border: 1px solid #1e293b;
+    border-radius: 5px;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 500;
+    min-height: 25px;
+    max-height: 25px;
+}
+QPushButton.subStepBtn:hover {
+    background: #1e293b;
+    border: 1px solid #38bdf8;
+    color: #f8fafc;
+}
+QPushButton.subStepBtn:pressed {
+    background: #0f172a;
+}
+QPushButton.subStepBtn[pillState="active"] {
+    background: #1d4ed8;
+    color: #ffffff;
+    border: 1px solid #60a5fa;
+    font-weight: 700;
+}
+QPushButton.subStepBtn[pillState="active"]:hover {
+    background: #2563eb;
+    border: 1px solid #93c5fd;
+}
+QPushButton.subStepBtn[pillState="done"] {
+    background: #064e3b;
+    color: #6ee7b7;
+    border: 1px solid #059669;
+}
+QPushButton.subStepBtn[pillState="done"]:hover {
+    background: #065f46;
+    border: 1px solid #34d399;
+}
 QLabel.subStepPill {
     background: #0b1120;
     color: #64748b;
@@ -303,17 +341,6 @@ QLabel.subStepPill {
     padding: 2px 7px;
     font-size: 11px;
     font-weight: 500;
-}
-QLabel.subStepPill[pillState="active"] {
-    background: #1d4ed8;
-    color: #ffffff;
-    border: 1px solid #60a5fa;
-    font-weight: 700;
-}
-QLabel.subStepPill[pillState="done"] {
-    background: #064e3b;
-    color: #6ee7b7;
-    border: 1px solid #059669;
 }
 
 /* Log Panel action buttons */

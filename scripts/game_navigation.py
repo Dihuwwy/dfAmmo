@@ -97,10 +97,10 @@ class GameNavigator:
         self.last_confidence = 0.0
         self.best_confidence = 0.0
 
-    def start(self, process_id: int) -> NavigationEvent:
+    def start(self, process_id: int, initial_step: int = 0) -> NavigationEvent:
         self.process_id = process_id
         self.bound_window = None
-        self.step_index = 0
+        self.step_index = max(0, min(initial_step, len(NAVIGATION_STEPS) - 1))
         self.deadline = time.monotonic() + self.window_timeout_seconds
         self.next_action_at = 0.0
         self.finished = False
@@ -108,7 +108,34 @@ class GameNavigator:
         self._last_resync_check = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
+        if self.step_index > 0:
+            step_name = NAVIGATION_STEPS[self.step_index].name
+            return NavigationEvent(
+                NavigationStatus.RUNNING,
+                f"正在连接游戏窗口，准备从步骤【{step_name}】推进...",
+            )
         return NavigationEvent(NavigationStatus.RUNNING, "正在等待三角洲行动主窗口...")
+
+    def jump_to_step(self, step_index: int) -> NavigationEvent:
+        """Manually jump to a specific step index and immediately prepare for execution."""
+        if step_index < 0:
+            step_index = 0
+        elif step_index >= len(NAVIGATION_STEPS):
+            step_index = len(NAVIGATION_STEPS) - 1
+
+        self.step_index = step_index
+        self.deadline = time.monotonic() + self.step_timeout_seconds
+        self.next_action_at = 0.0
+        self.finished = False
+        self.is_paused = False
+        self.last_confidence = 0.0
+        self.best_confidence = 0.0
+
+        target_step = NAVIGATION_STEPS[step_index]
+        return NavigationEvent(
+            NavigationStatus.RUNNING,
+            f"👉 手动跳转至步骤【{target_step.name}】，立即执行...",
+        )
 
     def cancel(self) -> None:
         self.finished = True
@@ -252,10 +279,17 @@ class GameNavigator:
                 return None
 
             self.deadline = now + self.step_timeout_seconds
+            # If starting from step 0, attempt auto-aligning to current game state immediately
+            resync_msg = ""
+            if self.step_index == 0:
+                resync_event = self.resync_state()
+                if resync_event is not None:
+                    resync_msg = f" | {resync_event.message}"
+
             return NavigationEvent(
                 NavigationStatus.RUNNING,
                 f"已绑定游戏窗口：{self.bound_window.title or '<无标题>'} | "
-                f"handle={self.bound_window.handle}",
+                f"handle={self.bound_window.handle}{resync_msg}",
             )
 
         if now < self.next_action_at:
@@ -291,13 +325,9 @@ class GameNavigator:
             self.last_confidence = result.position.confidence
             self.best_confidence = max(self.best_confidence, self.last_confidence)
             if not result.matched:
-                # If stuck on match preparation / departure steps for > 4s, try smart resync
+                # If stuck waiting on ANY step for > 3s, try smart resync to auto-align to current UI
                 step_elapsed = now - (self.deadline - self.step_timeout_seconds)
-                if (
-                    self.step_index >= 5
-                    and step_elapsed >= 4.0
-                    and (now - self._last_resync_check >= 3.0)
-                ):
+                if step_elapsed >= 3.0 and (now - self._last_resync_check >= 2.5):
                     self._last_resync_check = now
                     resync_event = self.resync_state()
                     if resync_event is not None:

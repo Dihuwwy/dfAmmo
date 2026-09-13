@@ -97,9 +97,12 @@ class Workflow:
     def find_game_process(self) -> GameProcess | None:
         return self.game_process_finder.find()
 
-    def start_game_navigation(self, game_process: GameProcess) -> NavigationEvent:
+    def start_game_navigation(self, game_process: GameProcess, initial_step: int = 0) -> NavigationEvent:
         self._game_process = game_process
-        return self.game_navigator.start(game_process.process_id)
+        return self.game_navigator.start(game_process.process_id, initial_step=initial_step)
+
+    def jump_to_navigation_step(self, step_index: int) -> NavigationEvent:
+        return self.game_navigator.jump_to_step(step_index)
 
     def advance_game_navigation(self) -> NavigationEvent | None:
         return self.game_navigator.tick()

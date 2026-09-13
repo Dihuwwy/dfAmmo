@@ -34,7 +34,7 @@ from PySide6.QtWidgets import (
 
 from scripts.bind_button import BindButton
 from scripts.config import AppConfig
-from scripts.game_navigation import NavigationStatus
+from scripts.game_navigation import NAVIGATION_STEPS, NavigationStatus
 from scripts.styles import MAIN_WINDOW_STYLE
 from scripts.template_capture import TemplateCaptureOverlay
 from scripts.workflow import Workflow
@@ -300,7 +300,7 @@ class MainWindow(QWidget):
         self.dbg_nav_start_btn.setToolTip("检测游戏窗口并自动推进 10 个菜单与模式步骤")
         self.dbg_nav_start_btn.clicked.connect(self._dbg_takeover_navigation)
 
-        sec1_hint = QLabel("自动识别游戏画面并逐级推进 10 步流程，选人界面触发时自动退出游戏：")
+        sec1_hint = QLabel("智能自动对齐画面推进；点击下方任意步骤胶囊可直接跳转执行：")
         sec1_hint.setStyleSheet("color: #94a3b8; font-size: 11px;")
 
         sec1_main_row.addWidget(self.dbg_nav_start_btn)
@@ -308,7 +308,7 @@ class MainWindow(QWidget):
         sec1_main_row.addWidget(sec1_hint)
         sec1_main_row.addStretch(1)
 
-        # 10 sub-step pills
+        # 10 interactive sub-step buttons
         sub_steps_row = QHBoxLayout()
         sub_steps_row.setSpacing(4)
         self.sub_step_names = [
@@ -323,11 +323,19 @@ class MainWindow(QWidget):
             "9.出发",
             "10.选人",
         ]
-        self.sub_step_pills: list[QLabel] = []
-        for sname in self.sub_step_names:
-            pill = QLabel(sname)
-            pill.setProperty("class", "subStepPill")
+        self.sub_step_pills: list[QPushButton] = []
+        for idx, sname in enumerate(self.sub_step_names):
+            pill = QPushButton(sname)
+            pill.setProperty("class", "subStepBtn")
             pill.setProperty("pillState", "")
+            pill.setCursor(Qt.PointingHandCursor)
+            step_desc = (
+                NAVIGATION_STEPS[idx].name if idx < len(NAVIGATION_STEPS) else sname
+            )
+            pill.setToolTip(f"点击直接跳转至第 {idx + 1} 步执行：【{step_desc}】")
+            pill.clicked.connect(
+                lambda checked=False, i=idx: self._on_step_pill_clicked(i)
+            )
             self.sub_step_pills.append(pill)
             sub_steps_row.addWidget(pill)
         sub_steps_row.addStretch(1)
@@ -1268,19 +1276,16 @@ class MainWindow(QWidget):
         return True
 
     def _dbg_takeover_navigation(self) -> None:
-        """Resume game navigation from the current step (skips WeGame launch)."""
-        if not self._dbg_require_bound():
-            return
+        """Resume game navigation and auto-align with the current game screen."""
         game_process = self.workflow.find_game_process()
         if game_process is None:
-            self.write_log("调试：未检测到游戏进程，请先启动三角洲行动再使用此功能。")
+            self.write_log("调试：未检测到三角洲行动游戏进程，请先启动游戏再使用此功能。")
             self.set_step_state("nav_game", "failed", "未检测到游戏进程")
             return
 
         self.set_step_state("nav_game", "running")
-        self.update_nav_substep_pills(0)
         self.write_log(
-            f"调试：检测到游戏进程 {game_process.name} | pid={game_process.process_id}，接管导航..."
+            f"调试：检测到游戏进程 {game_process.name} | pid={game_process.process_id}，接管导航并自动对齐画面..."
         )
         event = self.workflow.start_game_navigation(game_process)
         self.write_log(event.message)
@@ -1290,6 +1295,43 @@ class MainWindow(QWidget):
         self._set_pause_button_state(is_paused=False)
         self.stop_button.setEnabled(True)
         self.resync_button.setEnabled(True)
+        self.advance_game_navigation()
+
+    def _on_step_pill_clicked(self, step_index: int) -> None:
+        """Directly jump to and execute the selected navigation step."""
+        game_process = self.workflow.find_game_process()
+        if game_process is None:
+            self.write_log("⚠️ 未检测到三角洲行动游戏进程，请先启动游戏再点击步骤跳转。")
+            return
+
+        target_step = NAVIGATION_STEPS[step_index]
+        self.write_log(
+            f"🎯【手动跳转】用户点击指定第 {step_index + 1} 步：【{target_step.name}】！"
+        )
+
+        self.workflow._game_process = game_process
+        if (
+            self.workflow.game_navigator.process_id != game_process.process_id
+            or self.workflow.game_navigator.bound_window is None
+        ):
+            event = self.workflow.start_game_navigation(
+                game_process, initial_step=step_index
+            )
+            self.write_log(event.message)
+        else:
+            event = self.workflow.jump_to_navigation_step(step_index)
+            self.write_log(event.message)
+
+        self.start_card_mail_button.setEnabled(False)
+        self.pause_resume_button.setEnabled(True)
+        self._set_pause_button_state(is_paused=False)
+        self.stop_button.setEnabled(True)
+        self.resync_button.setEnabled(True)
+        self.set_step_state("nav_game", "running")
+        self.update_nav_substep_pills(step_index)
+
+        if not self.navigation_timer.isActive():
+            self.navigation_timer.start()
         self.advance_game_navigation()
 
     def _dbg_wait_wegame(self) -> None:
