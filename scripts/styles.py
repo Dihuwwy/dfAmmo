@@ -63,8 +63,8 @@ QPushButton#bindButton {
     color: white;
     font-size: 13px;
     font-weight: 600;
-    padding: 6px 14px;
-    min-height: 34px;
+    padding: 4px 12px;
+    min-height: 30px;
 }
 QPushButton#bindButton:hover {
     background: #176bd3;
@@ -78,8 +78,8 @@ QPushButton {
     border-radius: 6px;
     color: white;
     font-weight: 600;
-    padding: 10px 16px;
-    min-height: 38px;
+    padding: 6px 14px;
+    min-height: 32px;
 }
 QPushButton:hover {
     background: #176bd3;
@@ -223,10 +223,10 @@ QPushButton.stepBtn {
     border: 1px solid #334155;
     border-radius: 6px;
     color: #cbd5e1;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
-    padding: 6px 14px;
-    min-height: 32px;
+    padding: 4px 10px;
+    min-height: 28px;
 }
 QPushButton.stepBtn:hover {
     background: #28384f;
@@ -267,8 +267,8 @@ QPushButton.stepAuxBtn {
     color: #94a3b8;
     font-size: 12px;
     font-weight: 500;
-    padding: 6px 12px;
-    min-height: 32px;
+    padding: 4px 10px;
+    min-height: 28px;
 }
 QPushButton.stepAuxBtn:hover {
     border-color: #38bdf8;
