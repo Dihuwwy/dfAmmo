@@ -297,7 +297,7 @@ class MainWindow(QWidget):
         self.dbg_nav_start_btn = QPushButton("▶ 1. 接管游戏导航")
         self.dbg_nav_start_btn.setProperty("class", "stepBtn")
         self.dbg_nav_start_btn.setProperty("stepState", "idle")
-        self.dbg_nav_start_btn.setToolTip("检测游戏窗口并自动推进 10 个菜单与模式步骤")
+        self.dbg_nav_start_btn.setToolTip("检测游戏窗口并自动推进游戏菜单与模式步骤")
         self.dbg_nav_start_btn.clicked.connect(self._dbg_takeover_navigation)
 
         sec1_hint = QLabel("智能自动对齐画面推进；点击下方任意步骤胶囊可直接跳转执行：")
@@ -308,20 +308,19 @@ class MainWindow(QWidget):
         sec1_main_row.addWidget(sec1_hint)
         sec1_main_row.addStretch(1)
 
-        # 10 interactive sub-step buttons
+        # 9 interactive sub-step buttons
         sub_steps_row = QHBoxLayout()
         sub_steps_row.setSpacing(4)
         self.sub_step_names = [
             "1.模式",
-            "2.关弹窗",
-            "3.进大厅",
-            "4.选地图",
-            "5.选长弓",
-            "6.行动",
-            "7.配装",
-            "8.继续",
-            "9.出发",
-            "10.选人",
+            "2.进大厅",
+            "3.选地图",
+            "4.选长弓",
+            "5.行动",
+            "6.配装",
+            "7.继续",
+            "8.出发",
+            "9.选人",
         ]
         self.sub_step_pills: list[QPushButton] = []
         for idx, sname in enumerate(self.sub_step_names):
@@ -339,6 +338,7 @@ class MainWindow(QWidget):
             self.sub_step_pills.append(pill)
             sub_steps_row.addWidget(pill)
         sub_steps_row.addStretch(1)
+
 
         sec1_layout.addWidget(sec1_title)
         sec1_layout.addLayout(sec1_main_row)

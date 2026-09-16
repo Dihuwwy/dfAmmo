@@ -17,3 +17,14 @@ class KeyboardController:
             if index + 1 < repeat:
                 time.sleep(interval)
 
+    def press_sequence(
+        self,
+        sequence: list[tuple[int, int]] | tuple[tuple[int, int], ...],
+        pause_between: float = 0.25,
+    ) -> None:
+        for index, (vk, repeat) in enumerate(sequence):
+            self.press(vk, repeat=repeat)
+            if index + 1 < len(sequence):
+                time.sleep(pause_between)
+
+

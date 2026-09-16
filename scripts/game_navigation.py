@@ -31,28 +31,21 @@ class NavigationEvent:
 @dataclass(frozen=True)
 class NavigationStep:
     name: str
-    action: Literal["click", "press", "press_when_visible", "detect"]
+    action: Literal["click", "press", "press_sequence", "press_when_visible", "detect"]
     template_name: str = ""
     virtual_key: int = 0
     repeat: int = 1
+    key_sequence: tuple[tuple[int, int], ...] = ()
     delay_after: float = 1.2
 
 
 NAVIGATION_STEPS = (
     NavigationStep("选择烽火地带模式", "click", "df_mode_choose.png", delay_after=2.0),
     NavigationStep(
-        "关闭活动弹窗",
-        "press",
-        virtual_key=win32con.VK_SPACE,
-        repeat=5,
-        delay_after=1.5,
-    ),
-    NavigationStep(
         "进入烽火地带大厅",
-        "press_when_visible",
-        "df_enter_game.png",
-        virtual_key=win32con.VK_TAB,
-        delay_after=2.0,
+        "press_sequence",
+        key_sequence=((win32con.VK_SPACE, 5), (win32con.VK_TAB, 2)),
+        delay_after=2.5,
     ),
     NavigationStep("打开地图选择", "click", "df_map_choose.png", delay_after=1.2),
     NavigationStep("选择长弓溪谷", "click", "df_changgong_choose.png", delay_after=1.2),
@@ -62,6 +55,7 @@ NAVIGATION_STEPS = (
     NavigationStep("点击出发", "click", "df_go.png", delay_after=2.0),
     NavigationStep("等待选人界面", "detect", "df_operator_select.png", delay_after=0.0),
 )
+
 
 
 class GameNavigator:
@@ -94,6 +88,7 @@ class GameNavigator:
         self.finished = True
         self.is_paused = False
         self._last_resync_check = 0.0
+        self._last_tab_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
 
@@ -106,6 +101,7 @@ class GameNavigator:
         self.finished = False
         self.is_paused = False
         self._last_resync_check = 0.0
+        self._last_tab_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
         if self.step_index > 0:
@@ -128,8 +124,10 @@ class GameNavigator:
         self.next_action_at = 0.0
         self.finished = False
         self.is_paused = False
+        self._last_tab_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
+
 
         target_step = NAVIGATION_STEPS[step_index]
         return NavigationEvent(
@@ -203,7 +201,7 @@ class GameNavigator:
                     )
 
         # 2. Candidate step indices to inspect, ordered from downstream to upstream
-        candidate_indices = [9, 8, 7, 6, 5, 4, 3, 2, 0]
+        candidate_indices = [8, 7, 6, 5, 4, 3, 2, 0]
         for idx in candidate_indices:
             if idx >= len(NAVIGATION_STEPS):
                 continue
@@ -325,8 +323,18 @@ class GameNavigator:
             self.last_confidence = result.position.confidence
             self.best_confidence = max(self.best_confidence, self.last_confidence)
             if not result.matched:
-                # If stuck waiting on ANY step for > 3s, try smart resync to auto-align to current UI
                 step_elapsed = now - (self.deadline - self.step_timeout_seconds)
+                # If waiting on "打开地图选择" (step 2) for > 3.5s and still not matched,
+                # retry pressing Tab once every 3.0s in case the game lagged on the entrance gate screen
+                if self.step_index == 2 and step_elapsed >= 3.5 and (now - self._last_tab_retry >= 3.0):
+                    self._last_tab_retry = now
+                    try:
+                        self.bound_window = self.window_binder.activate(self.bound_window)
+                        self.keyboard.press(win32con.VK_TAB, repeat=1)
+                    except Exception:
+                        pass
+
+                # If stuck waiting on ANY step for > 3s, try smart resync to auto-align to current UI
                 if step_elapsed >= 3.0 and (now - self._last_resync_check >= 2.5):
                     self._last_resync_check = now
                     resync_event = self.resync_state()
@@ -359,10 +367,13 @@ class GameNavigator:
 
         if step.action == "click" and position is not None:
             self.clicker.click(position, self.bound_window.handle)
+        elif step.action == "press_sequence" and step.key_sequence:
+            self.keyboard.press_sequence(step.key_sequence)
         elif step.action in ("press", "press_when_visible"):
             self.keyboard.press(step.virtual_key, step.repeat)
         elif step.action == "detect":
             return self._complete()
+
 
         self.step_index += 1
         self.next_action_at = time.monotonic() + step.delay_after
