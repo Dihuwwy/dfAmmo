@@ -153,6 +153,11 @@ class Workflow:
             return False, "已发送终止请求，但尚未确认进程退出；已停止后续文件操作。"
         return True, "游戏进程已终止并退出。"
 
+    @staticmethod
+    def get_paks_dir(game_install_dir: str) -> Path:
+        """Return the Delta Force Paks directory path for given game install directory."""
+        return Path(game_install_dir) / "DeltaForce" / "PackContent" / "Paks"
+
     def rename_pak_files(
         self,
         game_install_dir: str,
@@ -161,7 +166,7 @@ class Workflow:
             "pak-0-2-pakchunk90optional-WindowsClient.pak",
         ),
     ) -> list[str]:
-        pak_dir = Path(game_install_dir) / "DeltaForce" / "PackContent" / "Paks"
+        pak_dir = self.get_paks_dir(game_install_dir)
         results: list[str] = []
 
         for pak_name in pak_names:
@@ -196,7 +201,7 @@ class Workflow:
             "pak-0-2-pakchunk90optional-WindowsClient.pak",
         ),
     ) -> list[str]:
-        pak_dir = Path(game_install_dir) / "DeltaForce" / "PackContent" / "Paks"
+        pak_dir = self.get_paks_dir(game_install_dir)
         results: list[str] = []
 
         if not pak_dir.is_dir():
@@ -237,7 +242,7 @@ class Workflow:
         """Return 'disabled' if any target pak has .disabled extension, 'normal' if present without .disabled, or 'missing'."""
         if not game_install_dir:
             return "unknown"
-        pak_dir = Path(game_install_dir) / "DeltaForce" / "PackContent" / "Paks"
+        pak_dir = self.get_paks_dir(game_install_dir)
         if not pak_dir.is_dir():
             return "unknown"
 

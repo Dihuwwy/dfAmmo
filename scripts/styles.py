@@ -1,391 +1,565 @@
-MAIN_WINDOW_STYLE = """
-QWidget#mainWindow {
-    background: #f5f7fb;
-    color: #172033;
-    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-    font-size: 14px;
-}
-QWidget {
-    color: #172033;
-    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
-    font-size: 14px;
-}
-QLabel {
-    background: transparent;
-}
-QLabel#title {
-    font-size: 24px;
-    font-weight: 700;
-}
-QLabel#subtitle {
-    color: #607089;
-}
-QLabel#sectionTitle {
-    font-size: 17px;
-    font-weight: 700;
-}
-QFrame#bindPanel,
-QFrame#featurePanel,
-QFrame#logPanel {
-    background: #ffffff;
-    border: 1px solid #dce3ed;
-    border-radius: 8px;
-}
-QLabel#connStatusLabel {
+"""Design tokens and unified Windows desktop utility stylesheet for dfAmmo Assistant.
+
+Adheres strictly to Windows desktop utility conventions:
+- Information architecture prioritized over decoration
+- Solid colors only (zero gradients)
+- Compact, high-density desktop layout (4px-6px radii)
+- 1px subtle borders and separators
+- Monospace quiet dark log panel
+"""
+
+# ── Design Tokens ─────────────────────────────────────────────────────────────
+
+# Color Palette (Solid Colors)
+COLOR_APP_BG = "#F6F7F9"
+COLOR_SURFACE = "#FFFFFF"
+COLOR_SURFACE_SECONDARY = "#F8FAFC"
+COLOR_SURFACE_HOVER = "#F1F5F9"
+COLOR_SURFACE_PRESSED = "#E2E8F0"
+
+COLOR_BORDER = "#DDE1E7"
+COLOR_BORDER_SUBTLE = "#E6E9ED"
+COLOR_BORDER_FOCUS = "#2563EB"
+
+COLOR_TEXT_MAIN = "#1F2328"
+COLOR_TEXT_SECONDARY = "#475569"
+COLOR_TEXT_MUTED = "#64748B"
+COLOR_TEXT_DISABLED = "#94A3B8"
+
+# Semantic Accents (Low Saturation)
+COLOR_PRIMARY = "#2563EB"
+COLOR_PRIMARY_HOVER = "#1D4ED8"
+COLOR_PRIMARY_PRESSED = "#1E40AF"
+COLOR_PRIMARY_DISABLED = "#93C5FD"
+
+COLOR_SUCCESS = "#16A34A"
+COLOR_SUCCESS_BG = "#F0FDF4"
+COLOR_SUCCESS_BORDER = "#86EFAC"
+
+COLOR_WARNING = "#D97706"
+COLOR_WARNING_BG = "#FFFBEB"
+COLOR_WARNING_BORDER = "#FDE68A"
+
+COLOR_DANGER = "#DC2626"
+COLOR_DANGER_BG = "#FEF2F2"
+COLOR_DANGER_BORDER = "#FECACA"
+
+# Log Console (The only dark surface)
+COLOR_LOG_BG = "#15191F"
+COLOR_LOG_BORDER = "#232B38"
+COLOR_LOG_TEXT = "#D8DEE9"
+
+# Geometry & Metrics
+RADIUS_CONTROL = "4px"
+RADIUS_PANEL = "6px"
+
+MAIN_WINDOW_STYLE = f"""
+/* ── Global App Canvas ────────────────────────────────────────────────────── */
+QWidget#mainWindow {{
+    background-color: {COLOR_APP_BG};
+    color: {COLOR_TEXT_MAIN};
+    font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", -apple-system, sans-serif;
     font-size: 13px;
-    font-weight: 700;
-    color: #334155;
-}
-QLabel#connBadge {
+}}
+
+QWidget {{
+    color: {COLOR_TEXT_MAIN};
+    font-family: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei", -apple-system, sans-serif;
+    font-size: 13px;
+}}
+
+QLabel {{
+    background: transparent;
+    color: {COLOR_TEXT_MAIN};
+}}
+
+/* Typography */
+QLabel#windowTitle {{
+    font-size: 16px;
+    font-weight: 600;
+    color: {COLOR_TEXT_MAIN};
+}}
+
+QLabel#sectionTitle {{
+    font-size: 13px;
+    font-weight: 600;
+    color: {COLOR_TEXT_MAIN};
+}}
+
+QLabel#fieldLabel {{
+    font-size: 12px;
+    font-weight: 500;
+    color: {COLOR_TEXT_SECONDARY};
+}}
+
+QLabel#secondaryText {{
+    font-size: 12px;
+    color: {COLOR_TEXT_MUTED};
+}}
+
+/* ── Panel / Surface Containers ───────────────────────────────────────────── */
+QFrame#connectionBar,
+QFrame#settingsCard,
+QFrame#stepperCard,
+QFrame#logPanel {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_PANEL};
+}}
+
+/* Horizontal 1px Divider */
+QFrame.divider {{
+    background-color: {COLOR_BORDER_SUBTLE};
+    border: none;
+    max-height: 1px;
+    min-height: 1px;
+}}
+
+/* ── Connection Bar Components ────────────────────────────────────────────── */
+QLabel#connStatusLabel {{
+    font-size: 13px;
+    font-weight: 600;
+    color: {COLOR_TEXT_MAIN};
+}}
+
+QLabel#connDetail {{
+    color: {COLOR_TEXT_MUTED};
+    font-size: 12px;
+}}
+
+QLabel#connDot {{
+    font-size: 11px;
+}}
+QLabel#connDot[connected="false"] {{
+    color: {COLOR_TEXT_DISABLED};
+}}
+QLabel#connDot[connected="true"] {{
+    color: {COLOR_SUCCESS};
+}}
+
+QLabel#connBadge {{
+    border-radius: 3px;
+    padding: 2px 6px;
+    font-size: 11px;
+    font-weight: 500;
+}}
+QLabel#connBadge[connected="false"] {{
+    background-color: {COLOR_SURFACE_HOVER};
+    color: {COLOR_TEXT_MUTED};
+    border: 1px solid {COLOR_BORDER};
+}}
+QLabel#connBadge[connected="true"] {{
+    background-color: {COLOR_SUCCESS_BG};
+    color: {COLOR_SUCCESS};
+    border: 1px solid {COLOR_SUCCESS_BORDER};
+}}
+
+/* ── Form Controls (Inputs, Radios) ───────────────────────────────────────── */
+QLineEdit {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CONTROL};
+    color: {COLOR_TEXT_MAIN};
+    font-size: 12px;
+    padding: 0 8px;
+    min-height: 28px;
+    max-height: 30px;
+    selection-background-color: {COLOR_PRIMARY};
+}}
+
+QLineEdit:hover {{
+    border-color: #CBD5E1;
+}}
+
+QLineEdit:focus {{
+    border-color: {COLOR_BORDER_FOCUS};
+    background-color: #FFFFFF;
+}}
+
+QLineEdit:disabled {{
+    background-color: {COLOR_SURFACE_HOVER};
+    color: {COLOR_TEXT_DISABLED};
+    border-color: {COLOR_BORDER_SUBTLE};
+}}
+
+QRadioButton {{
+    spacing: 6px;
+    font-size: 12px;
+    color: {COLOR_TEXT_MAIN};
+}}
+
+QRadioButton::indicator {{
+    width: 14px;
+    height: 14px;
+}}
+
+/* ── Buttons (Strict Hierarchy) ───────────────────────────────────────────── */
+/* Base QPushButton: Secondary / Desktop Neutral */
+QPushButton {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CONTROL};
+    color: {COLOR_TEXT_MAIN};
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 12px;
+    min-height: 28px;
+}}
+
+QPushButton:hover {{
+    background-color: {COLOR_SURFACE_HOVER};
+    border-color: #CBD5E1;
+}}
+
+QPushButton:pressed {{
+    background-color: {COLOR_SURFACE_PRESSED};
+}}
+
+QPushButton:disabled {{
+    background-color: {COLOR_SURFACE_SECONDARY};
+    border-color: {COLOR_BORDER_SUBTLE};
+    color: {COLOR_TEXT_DISABLED};
+}}
+
+/* Primary Action Button (The single focal action) */
+QPushButton#primaryButton,
+QPushButton#startCardMailBtn {{
+    background-color: {COLOR_PRIMARY};
+    border: 1px solid {COLOR_PRIMARY_HOVER};
+    border-radius: {RADIUS_CONTROL};
+    color: #FFFFFF;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 16px;
+    min-height: 30px;
+}}
+
+QPushButton#primaryButton:hover,
+QPushButton#startCardMailBtn:hover {{
+    background-color: {COLOR_PRIMARY_HOVER};
+}}
+
+QPushButton#primaryButton:pressed,
+QPushButton#startCardMailBtn:pressed {{
+    background-color: {COLOR_PRIMARY_PRESSED};
+}}
+
+QPushButton#primaryButton:disabled,
+QPushButton#startCardMailBtn:disabled {{
+    background-color: {COLOR_PRIMARY_DISABLED};
+    border-color: {COLOR_PRIMARY_DISABLED};
+    color: #F8FAFC;
+}}
+
+/* Secondary / Ghost Toolbar Buttons */
+QPushButton#secondaryButton,
+QPushButton#bindButton {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    color: {COLOR_TEXT_MAIN};
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 12px;
+    min-height: 28px;
+}}
+
+QPushButton#secondaryButton:hover,
+QPushButton#bindButton:hover {{
+    background-color: {COLOR_SURFACE_HOVER};
+    border-color: #CBD5E1;
+}}
+
+QPushButton#secondaryButton:pressed,
+QPushButton#bindButton:pressed {{
+    background-color: {COLOR_SURFACE_PRESSED};
+}}
+
+/* State-specific execution buttons */
+QPushButton#pauseButton {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_WARNING};
+    color: {COLOR_WARNING};
+    font-weight: 600;
+    min-height: 28px;
+}}
+
+QPushButton#pauseButton:hover {{
+    background-color: {COLOR_WARNING_BG};
+}}
+
+QPushButton#resumeButton {{
+    background-color: {COLOR_SUCCESS};
+    border: 1px solid #15803D;
+    color: #FFFFFF;
+    font-weight: 600;
+    min-height: 28px;
+}}
+
+QPushButton#resumeButton:hover {{
+    background-color: #15803D;
+}}
+
+QPushButton#stopButton {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_DANGER};
+    color: {COLOR_DANGER};
+    font-weight: 500;
+    min-height: 28px;
+}}
+
+QPushButton#stopButton:hover {{
+    background-color: {COLOR_DANGER_BG};
+}}
+
+QPushButton#stopButton:disabled {{
+    background-color: {COLOR_SURFACE_SECONDARY};
+    border-color: {COLOR_BORDER_SUBTLE};
+    color: {COLOR_TEXT_DISABLED};
+}}
+
+/* Compact Utility Buttons (Reset, Toggle, Copy, Clear) */
+QPushButton#resetStatusBtn,
+QPushButton#debugToggleBtn,
+QPushButton#copyLogBtn,
+QPushButton#clearLogBtn {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CONTROL};
+    color: {COLOR_TEXT_SECONDARY};
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    min-height: 24px;
+}}
+
+QPushButton#resetStatusBtn:hover,
+QPushButton#debugToggleBtn:hover,
+QPushButton#copyLogBtn:hover,
+QPushButton#clearLogBtn:hover {{
+    background-color: {COLOR_SURFACE_HOVER};
+    color: {COLOR_TEXT_MAIN};
+    border-color: #CBD5E1;
+}}
+
+/* ── Stepper & Workflow Components ────────────────────────────────────────── */
+/* Global status indicator */
+QLabel#workflowStatusBadge {{
+    background-color: {COLOR_SURFACE_HOVER};
+    color: {COLOR_TEXT_SECONDARY};
+    border: 1px solid {COLOR_BORDER};
     border-radius: 10px;
     padding: 2px 10px;
     font-size: 12px;
-    font-weight: 600;
-}
-QLabel#connBadge[connected="false"] {
-    background: #f1f5f9;
-    color: #64748b;
-    border: 1px solid #cbd5e1;
-}
-QLabel#connBadge[connected="true"] {
-    background: #ecfdf5;
-    color: #059669;
-    border: 1px solid #a7f3d0;
-}
-QLabel#connDetail {
-    color: #64748b;
-    font-size: 12px;
-}
-QPushButton#bindButton {
-    background: #1f7aec;
-    border: 1px solid #1a6cd3;
-    border-radius: 6px;
-    color: white;
+    font-weight: 500;
+}}
+
+QLabel#workflowStatusBadge[state="running"] {{
+    background-color: #EFF6FF;
+    color: {COLOR_PRIMARY};
+    border-color: #BFDBFE;
+}}
+
+QLabel#workflowStatusBadge[state="success"] {{
+    background-color: {COLOR_SUCCESS_BG};
+    color: {COLOR_SUCCESS};
+    border-color: {COLOR_SUCCESS_BORDER};
+}}
+
+QLabel#workflowStatusBadge[state="failed"] {{
+    background-color: {COLOR_DANGER_BG};
+    color: {COLOR_DANGER};
+    border-color: {COLOR_DANGER_BORDER};
+}}
+
+/* Step Title / Subtitle */
+QLabel.stepTitle {{
     font-size: 13px;
     font-weight: 600;
-    padding: 6px 14px;
-    min-height: 34px;
-}
-QPushButton#bindButton:hover {
-    background: #176bd3;
-}
-QPushButton#bindButton:pressed {
-    background: #1258ad;
-}
-QPushButton {
-    background: #1f7aec;
-    border: 0;
-    border-radius: 6px;
-    color: white;
-    font-weight: 600;
-    padding: 10px 16px;
-    min-height: 38px;
-}
-QPushButton:hover {
-    background: #176bd3;
-}
-QPushButton:pressed {
-    background: #1258ad;
-}
-QPushButton:disabled {
-    background: #a8bfdc;
-    color: #eef3f9;
-}
-QPushButton#secondaryButton {
-    background: #eef2f7;
-    border: 1px solid #cfd8e5;
-    color: #34445d;
-}
-QPushButton#secondaryButton:hover {
-    background: #e3e9f1;
-}
-QPushButton#stopButton {
-    background: #e53935;
-    border: 0;
-    color: white;
-    font-weight: 700;
-}
-QPushButton#stopButton:hover {
-    background: #d32f2f;
-}
-QPushButton#stopButton:pressed {
-    background: #b71c1c;
-}
-QPushButton#stopButton:disabled {
-    background: #f2a4a4;
-    color: #fbe9e7;
-}
-QPushButton#pauseButton {
-    background: #d97706;
-    border: 0;
-    color: white;
-    font-weight: 600;
-}
-QPushButton#pauseButton:hover {
-    background: #b45309;
-}
-QPushButton#pauseButton:pressed {
-    background: #92400e;
-}
-QPushButton#pauseButton:disabled {
-    background: #e5c596;
-    color: #fffbeb;
-}
-QPushButton#resumeButton {
-    background: #10b981;
-    border: 0;
-    color: white;
-    font-weight: 700;
-}
-QPushButton#resumeButton:hover {
-    background: #059669;
-}
-QPushButton#resumeButton:pressed {
-    background: #047857;
-}
-QPushButton#resumeButton:disabled {
-    background: #a7f3d0;
-    color: #ecfdf5;
-}
-QPlainTextEdit#logOutput {
-    background: #141a23;
-    border: 1px solid #293344;
-    border-radius: 5px;
-    color: #dbe5f3;
-    font-family: "Cascadia Mono", "Consolas", monospace;
-    font-size: 12px;
-    padding: 8px;
-    selection-background-color: #1f7aec;
-}
-QRadioButton {
-    spacing: 8px;
-    font-size: 14px;
-    color: #243048;
-}
-QRadioButton::indicator {
-    width: 18px;
-    height: 18px;
-}
-QFrame#debugPanel {
-    background: #0f172a;
-    border: 1px solid #1e293b;
-    border-radius: 10px;
-}
-QFrame#debugPanel QLabel {
-    color: #e2e8f0;
-}
-QFrame#debugPanel QLabel#sectionTitle {
-    color: #38bdf8;
-    font-size: 15px;
-    font-weight: 700;
-}
-QLabel#workflowStatusBadge {
-    background: #1e293b;
-    color: #94a3b8;
-    border: 1px solid #334155;
-    border-radius: 12px;
-    padding: 3px 12px;
-    font-size: 12px;
-    font-weight: 600;
-}
-QLabel#workflowStatusBadge[state="running"] {
-    background: #1e3a8a;
-    color: #93c5fd;
-    border: 1px solid #3b82f6;
-}
-QLabel#workflowStatusBadge[state="success"] {
-    background: #064e3b;
-    color: #6ee7b7;
-    border: 1px solid #10b981;
-}
-QLabel#workflowStatusBadge[state="failed"] {
-    background: #7f1d1d;
-    color: #fca5a5;
-    border: 1px solid #ef4444;
-}
+    color: {COLOR_TEXT_MAIN};
+}}
 
-/* Debug Section Cards */
-QFrame.debugSectionCard {
-    background: #131d2e;
-    border: 1px solid #1e2d42;
-    border-radius: 8px;
-    padding: 2px;
-}
-QLabel.debugSectionTitle {
-    color: #7dd3fc;
+QLabel.stepSubtitle {{
+    font-size: 11px;
+    color: {COLOR_TEXT_MUTED};
+}}
+
+/* Stepper Node Indicator Dot */
+QLabel.stepDot {{
     font-size: 12px;
-    font-weight: 700;
-}
+    color: {COLOR_TEXT_DISABLED};
+}}
+QLabel.stepDot[state="idle"] {{
+    color: {COLOR_TEXT_DISABLED};
+}}
+QLabel.stepDot[state="running"] {{
+    color: {COLOR_PRIMARY};
+    font-weight: bold;
+}}
+QLabel.stepDot[state="success"] {{
+    color: {COLOR_SUCCESS};
+    font-weight: bold;
+}}
+QLabel.stepDot[state="failed"] {{
+    color: {COLOR_DANGER};
+    font-weight: bold;
+}}
 
-/* Step Action Buttons */
-QPushButton.stepBtn {
-    background: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 6px;
-    color: #cbd5e1;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 6px 14px;
-    min-height: 32px;
-}
-QPushButton.stepBtn:hover {
-    background: #28384f;
-    border-color: #60a5fa;
-    color: #ffffff;
-}
-QPushButton.stepBtn:pressed {
-    background: #162030;
-}
-QPushButton.stepBtn[stepState="idle"] {
-    background: #1e293b;
-    border: 1px solid #334155;
-    color: #cbd5e1;
-}
-QPushButton.stepBtn[stepState="running"] {
-    background: #2563eb;
-    border: 2px solid #93c5fd;
-    color: #ffffff;
-    font-weight: 700;
-}
-QPushButton.stepBtn[stepState="success"] {
-    background: #065f46;
-    border: 1px solid #34d399;
-    color: #ecfdf5;
-    font-weight: 600;
-}
-QPushButton.stepBtn[stepState="failed"] {
-    background: #991b1b;
-    border: 1px solid #f87171;
-    color: #fef2f2;
-    font-weight: 600;
-}
-
-QPushButton.stepAuxBtn {
-    background: transparent;
-    border: 1px dashed #334155;
-    border-radius: 6px;
-    color: #94a3b8;
+/* Step Action Buttons (Compact Step Triggers) */
+QPushButton.stepBtn {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CONTROL};
+    color: {COLOR_TEXT_MAIN};
     font-size: 12px;
     font-weight: 500;
-    padding: 6px 12px;
-    min-height: 32px;
-}
-QPushButton.stepAuxBtn:hover {
-    border-color: #38bdf8;
-    color: #e2e8f0;
-    background: #1e293b;
-}
-
-QPushButton#debugToggleBtn,
-QPushButton#resetStatusBtn {
-    background: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 5px;
-    color: #94a3b8;
-    font-size: 12px;
-    font-weight: 600;
-    padding: 4px 10px;
+    padding: 3px 10px;
     min-height: 26px;
-}
-QPushButton#debugToggleBtn:hover,
-QPushButton#resetStatusBtn:hover {
-    background: #273549;
-    color: #e2e8f0;
-    border-color: #475569;
-}
+}}
 
-/* Sub-step pills for game navigation (Interactive buttons) */
-QPushButton.subStepBtn {
-    background: #0b1120;
-    color: #94a3b8;
-    border: 1px solid #1e293b;
-    border-radius: 5px;
-    padding: 2px 7px;
-    font-size: 11px;
-    font-weight: 500;
-    min-height: 25px;
-    max-height: 25px;
-}
-QPushButton.subStepBtn:hover {
-    background: #1e293b;
-    border: 1px solid #38bdf8;
-    color: #f8fafc;
-}
-QPushButton.subStepBtn:pressed {
-    background: #0f172a;
-}
-QPushButton.subStepBtn[pillState="active"] {
-    background: #1d4ed8;
-    color: #ffffff;
-    border: 1px solid #60a5fa;
-    font-weight: 700;
-}
-QPushButton.subStepBtn[pillState="active"]:hover {
-    background: #2563eb;
-    border: 1px solid #93c5fd;
-}
-QPushButton.subStepBtn[pillState="done"] {
-    background: #064e3b;
-    color: #6ee7b7;
-    border: 1px solid #059669;
-}
-QPushButton.subStepBtn[pillState="done"]:hover {
-    background: #065f46;
-    border: 1px solid #34d399;
-}
-QLabel.subStepPill {
-    background: #0b1120;
-    color: #64748b;
-    border: 1px solid #1e293b;
-    border-radius: 4px;
-    padding: 2px 7px;
-    font-size: 11px;
-    font-weight: 500;
-}
+QPushButton.stepBtn:hover {{
+    background-color: {COLOR_SURFACE_HOVER};
+    border-color: #94A3B8;
+}}
 
-/* Log Panel action buttons */
-QPushButton#clearLogBtn,
-QPushButton#copyLogBtn {
-    background: #f1f5f9;
-    border: 1px solid #cbd5e1;
-    border-radius: 4px;
-    color: #475569;
-    font-size: 11px;
+QPushButton.stepBtn[stepState="idle"] {{
+    background-color: {COLOR_SURFACE};
+    border: 1px solid {COLOR_BORDER};
+    color: {COLOR_TEXT_MAIN};
+}}
+
+QPushButton.stepBtn[stepState="running"] {{
+    background-color: #EFF6FF;
+    border: 1px solid {COLOR_PRIMARY};
+    color: {COLOR_PRIMARY};
     font-weight: 600;
+}}
+
+QPushButton.stepBtn[stepState="success"] {{
+    background-color: {COLOR_SUCCESS_BG};
+    border: 1px solid {COLOR_SUCCESS_BORDER};
+    color: #15803D;
+    font-weight: 500;
+}}
+
+QPushButton.stepBtn[stepState="failed"] {{
+    background-color: {COLOR_DANGER_BG};
+    border: 1px solid {COLOR_DANGER_BORDER};
+    color: {COLOR_DANGER};
+    font-weight: 500;
+}}
+
+QPushButton.stepAuxBtn {{
+    background-color: transparent;
+    border: 1px dashed {COLOR_BORDER};
+    border-radius: {RADIUS_CONTROL};
+    color: {COLOR_TEXT_MUTED};
+    font-size: 11px;
+    padding: 3px 8px;
+    min-height: 26px;
+}}
+
+QPushButton.stepAuxBtn:hover {{
+    background-color: {COLOR_SURFACE_HOVER};
+    border-color: #94A3B8;
+    color: {COLOR_TEXT_MAIN};
+}}
+
+/* Navigation Sub-step Pills */
+QPushButton.subStepBtn {{
+    background-color: {COLOR_SURFACE_SECONDARY};
+    border: 1px solid {COLOR_BORDER};
+    border-radius: {RADIUS_CONTROL};
+    color: {COLOR_TEXT_SECONDARY};
     padding: 2px 8px;
-    min-height: 22px;
-}
-QPushButton#clearLogBtn:hover,
-QPushButton#copyLogBtn:hover {
-    background: #e2e8f0;
-    color: #0f172a;
-    border-color: #94a3b8;
-}
+    font-size: 11px;
+    font-weight: 500;
+    min-height: 24px;
+    max-height: 24px;
+}}
+
+QPushButton.subStepBtn:hover {{
+    background-color: {COLOR_SURFACE_HOVER};
+    border-color: #94A3B8;
+    color: {COLOR_TEXT_MAIN};
+}}
+
+QPushButton.subStepBtn[pillState="active"] {{
+    background-color: {COLOR_PRIMARY};
+    border: 1px solid {COLOR_PRIMARY_HOVER};
+    color: #FFFFFF;
+    font-weight: 600;
+}}
+
+QPushButton.subStepBtn[pillState="done"] {{
+    background-color: {COLOR_SUCCESS_BG};
+    border: 1px solid {COLOR_SUCCESS_BORDER};
+    color: #15803D;
+    font-weight: 500;
+}}
+
+/* ── Log Console Area ─────────────────────────────────────────────────────── */
+QPlainTextEdit#logOutput {{
+    background-color: {COLOR_LOG_BG};
+    border: 1px solid {COLOR_LOG_BORDER};
+    border-radius: {RADIUS_CONTROL};
+    color: {COLOR_LOG_TEXT};
+    font-family: "Consolas", "Cascadia Mono", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 6px;
+    selection-background-color: {COLOR_PRIMARY};
+}}
+
+/* ── Splitter ─────────────────────────────────────────────────────────────── */
+QSplitter::handle {{
+    background-color: {COLOR_BORDER_SUBTLE};
+}}
+
+QSplitter::handle:horizontal {{
+    width: 3px;
+}}
+
+QSplitter::handle:horizontal:hover {{
+    background-color: #CBD5E1;
+}}
+
+/* ── Scrollbars (Slim Desktop Style) ──────────────────────────────────────── */
+QScrollBar:vertical {{
+    width: 8px;
+    background-color: transparent;
+    margin: 0;
+}}
+
+QScrollBar::handle:vertical {{
+    background-color: #D1D5DB;
+    border-radius: 4px;
+    min-height: 24px;
+}}
+
+QScrollBar::handle:vertical:hover {{
+    background-color: #9CA3AF;
+}}
+
+QScrollBar::add-line:vertical,
+QScrollBar::sub-line:vertical {{
+    height: 0;
+}}
+
+QScrollBar::add-page:vertical,
+QScrollBar::sub-page:vertical {{
+    background: transparent;
+}}
 
 /* Left Scroll Area */
-QScrollArea#leftScrollArea {
+QScrollArea#leftScrollArea {{
     background: transparent;
     border: none;
-}
-QScrollArea#leftScrollArea > QWidget > QWidget {
+}}
+
+QScrollArea#leftScrollArea > QWidget > QWidget {{
     background: transparent;
-}
-QScrollArea#leftScrollArea QScrollBar:vertical {
-    width: 6px;
-    background: transparent;
-}
-QScrollArea#leftScrollArea QScrollBar::handle:vertical {
-    background: #cbd5e1;
-    border-radius: 3px;
-    min-height: 20px;
-}
-QScrollArea#leftScrollArea QScrollBar::handle:vertical:hover {
-    background: #94a3b8;
-}
-QScrollArea#leftScrollArea QScrollBar::add-line:vertical,
-QScrollArea#leftScrollArea QScrollBar::sub-line:vertical {
-    height: 0;
-}
+}}
 """
+
 
 

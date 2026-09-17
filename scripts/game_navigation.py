@@ -132,7 +132,7 @@ class GameNavigator:
         target_step = NAVIGATION_STEPS[step_index]
         return NavigationEvent(
             NavigationStatus.RUNNING,
-            f"👉 手动跳转至步骤【{target_step.name}】，立即执行...",
+            f"[跳转] 手动跳转至步骤【{target_step.name}】，立即执行...",
         )
 
     def cancel(self) -> None:
@@ -148,7 +148,7 @@ class GameNavigator:
         )
         return NavigationEvent(
             NavigationStatus.PAUSED,
-            f"⏸️【已暂停】自动化已暂停（当前处于：{step_name}）。"
+            f"[已暂停] 自动化已暂停（当前处于：{step_name}）。"
             "请在游戏中处理弹窗/违禁物品，处理完毕后按 F12 或点击“继续”恢复运行。",
         )
 
@@ -167,7 +167,7 @@ class GameNavigator:
         )
         return NavigationEvent(
             NavigationStatus.RUNNING,
-            f"▶️【已继续】自动化已恢复运行，正在推进步骤：【{step_name}】。",
+            f"[已继续] 自动化已恢复运行，正在推进步骤：【{step_name}】。",
         )
 
     def resync_state(self) -> NavigationEvent | None:
@@ -196,7 +196,7 @@ class GameNavigator:
                     self.is_paused = True
                     return NavigationEvent(
                         NavigationStatus.PAUSED,
-                        "⚠️【检测到违禁物品弹窗】游戏提示禁止进入！已自动为您暂停。"
+                        "[警告] 检测到违禁物品弹窗，游戏提示禁止进入！已自动为您暂停。"
                         "请在游戏中移出保险箱中的四级弹/违禁物品，处理完毕后按 F12 继续！",
                     )
 
@@ -242,12 +242,12 @@ class GameNavigator:
                 if old_index != idx:
                     return NavigationEvent(
                         NavigationStatus.RUNNING,
-                        f"🔄 智能对齐：识别到游戏画面处于【{cand_step.name}】"
+                        f"[对齐] 识别到游戏画面处于【{cand_step.name}】"
                         f"（相似度={match_res.position.confidence:.3f}），已同步执行进度！",
                     )
                 return NavigationEvent(
                     NavigationStatus.RUNNING,
-                    f"🎯 当前画面对齐【{cand_step.name}】（相似度={match_res.position.confidence:.3f}），继续执行...",
+                    f"[对齐] 当前画面对齐【{cand_step.name}】（相似度={match_res.position.confidence:.3f}），继续执行...",
                 )
 
         return None
