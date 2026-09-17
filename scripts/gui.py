@@ -7,7 +7,7 @@ import win32api
 import win32con
 import win32gui
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtWidgets import QApplication, QWidget
 
 from scripts.config import AppConfig
@@ -59,27 +59,51 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
 
         self.setWindowTitle(self.config.window_title)
         self.setObjectName("mainWindow")
-        self.setMinimumSize(700, 600)
+        self.setMinimumSize(820, 560)
         self._build_ui()
         self._init_window_geometry()
         self.write_log("请先绑定 WeGame 主窗口（如游戏已在运行，可直接点击“开始卡邮件”）。")
 
     def _init_window_geometry(self) -> None:
-        """Let Qt compute natural window size from layout sizeHint, then clamp to 85% screen and center."""
-        self.adjustSize()
+        """Restore previous window geometry/splitter if saved, or compute true content size and center."""
+        settings = QSettings("dfAmmo", "Assistant")
+        saved_geo = settings.value("geometry")
+        saved_splitter = settings.value("splitter")
 
-        screen = QApplication.primaryScreen()
-        if screen is None:
+        if saved_geo and self.restoreGeometry(saved_geo):
+            if saved_splitter:
+                self.main_splitter.restoreState(saved_splitter)
             return
 
-        avail = screen.availableGeometry()
-        w = min(self.width(), int(avail.width() * 0.85))
-        h = min(self.height(), int(avail.height() * 0.85))
-        self.resize(w, h)
+        # Optimal initial size derived from actual content cards (avoiding QScrollArea dummy sizeHint)
+        content_w = max(
+            self.left_column.sizeHint().width() + 32,
+            self.bind_panel.sizeHint().width() + 32,
+            860,
+        )
+        content_h = (
+            self.bind_panel.sizeHint().height()
+            + self.left_column.sizeHint().height()
+            + 190
+            + 40
+        )
 
-        geo = self.geometry()
-        geo.moveCenter(avail.center())
-        self.setGeometry(geo)
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            w = min(content_w, int(avail.width() * 0.90))
+            h = min(content_h, int(avail.height() * 0.90))
+        else:
+            w, h = content_w, content_h
+
+        self.resize(w, h)
+        top_h = min(self.left_column.sizeHint().height() + 10, int(h * 0.70))
+        self.main_splitter.setSizes([top_h, max(100, h - top_h - self.bind_panel.height())])
+
+        if screen is not None:
+            geo = self.geometry()
+            geo.moveCenter(screen.availableGeometry().center())
+            self.setGeometry(geo)
 
     def _check_hotkey(self) -> None:
         now = time_val = win32api.GetTickCount() / 1000.0
@@ -109,9 +133,14 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         return super().nativeEvent(event_type, message)
 
     def closeEvent(self, event) -> None:
+        settings = QSettings("dfAmmo", "Assistant")
+        settings.setValue("geometry", self.saveGeometry())
+        settings.setValue("splitter", self.main_splitter.saveState())
+
         if getattr(self, "hotkey_registered", False):
             try:
                 win32gui.UnregisterHotKey(int(self.winId()), 1001)
             except Exception:
                 pass
         super().closeEvent(event)
+

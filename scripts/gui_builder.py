@@ -87,7 +87,7 @@ class BuilderMixin:
         self.left_scroll.setObjectName("leftScrollArea")
         self.left_scroll.setWidgetResizable(True)
         self.left_scroll.setFrameShape(QFrame.NoFrame)
-        self.left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         self.left_column = QWidget()
         # MinimumExpanding: content sets min size; when scroll area viewport is taller,
