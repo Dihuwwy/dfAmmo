@@ -59,7 +59,7 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
 
         self.setWindowTitle(self.config.window_title)
         self.setObjectName("mainWindow")
-        self.setMinimumSize(1020, 560)
+        self.setMinimumSize(700, 600)
         self._build_ui()
         self._init_window_geometry()
         self.write_log("请先绑定 WeGame 主窗口（如游戏已在运行，可直接点击“开始卡邮件”）。")

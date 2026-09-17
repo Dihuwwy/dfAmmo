@@ -78,8 +78,8 @@ class BuilderMixin:
         self.subtitle = QLabel("WeGame 辅助就绪")
         self.subtitle.hide()
 
-        # ── 2. QSplitter: Left (Controls & Stepper) + Right (Log Panel) ────────
-        self.main_splitter = QSplitter(Qt.Horizontal)
+        # ── 2. QSplitter: Top (Controls & Stepper) + Bottom (Log Panel) ───────
+        self.main_splitter = QSplitter(Qt.Vertical)
         self.main_splitter.setObjectName("mainSplitter")
 
         # Left Scroll Area
@@ -131,8 +131,8 @@ class BuilderMixin:
         mode_label = QLabel("运行模式：")
         mode_label.setObjectName("fieldLabel")
         mode_label.setFixedWidth(64)
-        self.semi_auto_radio = QRadioButton("半自动模式（手动购入穿戴）")
-        self.full_auto_radio = QRadioButton("全自动模式（配装方案一键买齐）")
+        self.semi_auto_radio = QRadioButton("半自动模式 (手动购入穿戴)")
+        self.full_auto_radio = QRadioButton("全自动模式 (配装方案一键买齐)")
         current_mode = getattr(self.config, "operation_mode", "semi_auto")
         if current_mode == "full_auto":
             self.full_auto_radio.setChecked(True)
@@ -523,15 +523,13 @@ class BuilderMixin:
         # ── 4. Assemble QSplitter ─────────────────────────────────────────────
         self.main_splitter.addWidget(self.left_scroll)
         self.main_splitter.addWidget(self.log_panel)
-        # Use stretch factors so the ratio is maintained when window is resized.
-        # Left ~65%, right log ~35%.
-        self.main_splitter.setStretchFactor(0, 2)  # left gets 2/3
-        self.main_splitter.setStretchFactor(1, 1)  # right gets 1/3
+        # Top controls & stepper gets 3 parts, bottom log gets 1 part
+        self.main_splitter.setStretchFactor(0, 3)
+        self.main_splitter.setStretchFactor(1, 1)
         self.main_splitter.setCollapsible(0, False)
         self.main_splitter.setCollapsible(1, False)
-        # Set minimum pane widths so neither side collapses completely
-        self.left_scroll.setMinimumWidth(340)
-        self.log_panel.setMinimumWidth(160)
+        self.left_scroll.setMinimumHeight(300)
+        self.log_panel.setMinimumHeight(100)
 
         root.addWidget(self.main_splitter, stretch=1)
         self.setStyleSheet(MAIN_WINDOW_STYLE)

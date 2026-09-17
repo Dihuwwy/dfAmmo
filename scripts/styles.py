@@ -191,6 +191,19 @@ QRadioButton {{
 QRadioButton::indicator {{
     width: 14px;
     height: 14px;
+    border-radius: 7px;
+    border: 1px solid {COLOR_BORDER};
+    background-color: #FFFFFF;
+}}
+
+QRadioButton::indicator:hover {{
+    border-color: {COLOR_PRIMARY};
+}}
+
+QRadioButton::indicator:checked {{
+    border: 1px solid {COLOR_PRIMARY};
+    background-color: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5,
+        stop:0 {COLOR_PRIMARY}, stop:0.52 {COLOR_PRIMARY}, stop:0.58 #FFFFFF, stop:1 #FFFFFF);
 }}
 
 /* ── Buttons (Strict Hierarchy) ───────────────────────────────────────────── */
