@@ -642,19 +642,23 @@ class ActionsMixin:
 
         if hasattr(self, "workflow_status_badge"):
             if state == "running":
-                badge_text = f"正在执行：{title}" + (f" ({detail})" if detail else "")
+                badge_text = f"正在执行：{title}"
                 badge_state = "running"
             elif state == "success":
                 badge_text = f"步骤完成：{title}"
                 badge_state = "success"
             elif state == "failed":
-                badge_text = f"步骤失败：{title}" + (f" ({detail})" if detail else "")
+                badge_text = f"步骤失败：{title}"
                 badge_state = "failed"
             else:
                 badge_text = "待命就绪"
                 badge_state = "idle"
 
             self._set_badge(self.workflow_status_badge, badge_text, badge_state)
+            if state == "failed" and detail:
+                self.workflow_status_badge.setToolTip(f"失败详情：{detail}")
+            else:
+                self.workflow_status_badge.setToolTip("")
 
         QApplication.processEvents()
 

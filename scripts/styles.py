@@ -364,6 +364,8 @@ QLabel#workflowStatusBadge {{
     padding: 2px 10px;
     font-size: 12px;
     font-weight: 500;
+    max-width: 200px;
+    qproperty-alignment: AlignCenter;
 }}
 
 QLabel#workflowStatusBadge[state="running"] {{

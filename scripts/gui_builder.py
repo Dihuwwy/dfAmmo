@@ -187,6 +187,8 @@ class BuilderMixin:
         self.workflow_status_badge = QLabel("待命就绪")
         self.workflow_status_badge.setObjectName("workflowStatusBadge")
         self.workflow_status_badge.setProperty("state", "idle")
+        self.workflow_status_badge.setMaximumWidth(200)
+        self.workflow_status_badge.setAlignment(Qt.AlignCenter)
 
         action_bar.addWidget(self.start_card_mail_button)
         action_bar.addWidget(self.pause_resume_button)
