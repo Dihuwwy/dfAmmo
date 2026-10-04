@@ -361,6 +361,7 @@ class ActionsMixin:
 
     def start_card_mail(self) -> None:
         self.reset_all_step_states()
+        self._continue_after_navigation = True
         game_process = self.workflow.find_game_process()
         if game_process is not None:
             self.write_log(
@@ -492,6 +493,10 @@ class ActionsMixin:
                 if not process_exited:
                     return
 
+                if not getattr(self, "_continue_after_navigation", True):
+                    self.write_log("调试：单步导航完成，停在此步。")
+                    return
+
                 paks_path: Path | None = None
                 if self.config.game_install_dir:
                     paks_path = Workflow.get_paks_dir(self.config.game_install_dir)
@@ -528,80 +533,90 @@ class ActionsMixin:
                     else:
                         self.write_log(f"已打开 Paks 目录：{paks_path}")
 
-    def _run_wegame_post_process(self) -> None:
+    def _run_wegame_post_process(self, start_step: str = "wait_wegame") -> None:
         if self.bound_window is None:
+            self.write_log("调试：需要先绑定 WeGame 窗口才能执行后续流程。")
             return
 
-        current_step = "wait_wegame"
+        order = ["wait_wegame", "click_more", "assets_manage", "delete_map", "restart_game"]
+        start_idx = order.index(start_step) if start_step in order else 0
+        current_step = start_step if start_step in order else "wait_wegame"
+
         try:
-            self.set_step_state("wait_wegame", "running")
-            self.write_log("正在等待 WeGame 启动按钮重新出现...")
-            QApplication.processEvents()
+            if start_idx <= 0:
+                current_step = "wait_wegame"
+                self.set_step_state("wait_wegame", "running")
+                self.write_log("正在等待 WeGame 启动按钮重新出现...")
+                QApplication.processEvents()
 
-            self.workflow.wait_for_wegame_ready(
-                self.bound_window,
-                self.config.start_button_templates,
-                self.config.template_match_threshold,
-                timeout=getattr(self.config, "wegame_ready_timeout_seconds", 60),
-            )
-            self.set_step_state("wait_wegame", "success")
-            self.write_log("WeGame 启动按钮已重新出现。")
-            QApplication.processEvents()
+                self.workflow.wait_for_wegame_ready(
+                    self.bound_window,
+                    self.config.start_button_templates,
+                    self.config.template_match_threshold,
+                    timeout=getattr(self.config, "wegame_ready_timeout_seconds", 60),
+                )
+                self.set_step_state("wait_wegame", "success")
+                self.write_log("WeGame 启动按钮已重新出现。")
+                QApplication.processEvents()
 
-            current_step = "click_more"
-            self.set_step_state("click_more", "running")
-            self.write_log("正在点击更多选项（...）...")
-            self.workflow.click_wegame_more(
-                self.bound_window,
-                getattr(self.config, "wegame_more_template", "wegame_more.png"),
-                self.config.template_match_threshold,
-            )
-            self.set_step_state("click_more", "success")
-            self.write_log("已点击更多选项。")
-            QApplication.processEvents()
-            time.sleep(0.5)
+            if start_idx <= 1:
+                current_step = "click_more"
+                self.set_step_state("click_more", "running")
+                self.write_log("正在点击更多选项（...）...")
+                self.workflow.click_wegame_more(
+                    self.bound_window,
+                    getattr(self.config, "wegame_more_template", "wegame_more.png"),
+                    self.config.template_match_threshold,
+                )
+                self.set_step_state("click_more", "success")
+                self.write_log("已点击更多选项。")
+                QApplication.processEvents()
+                time.sleep(0.5)
 
-            current_step = "assets_manage"
-            self.set_step_state("assets_manage", "running")
-            self.write_log("正在打开游戏资源包管理...")
-            self.workflow.click_assets_manage(
-                self.bound_window,
-                getattr(self.config, "wegame_assets_manage_template", "wegame_assets_manage.png"),
-                self.config.template_match_threshold,
-            )
-            self.set_step_state("assets_manage", "success")
-            self.write_log("已打开游戏资源包管理。")
-            QApplication.processEvents()
-            time.sleep(1.0)
+            if start_idx <= 2:
+                current_step = "assets_manage"
+                self.set_step_state("assets_manage", "running")
+                self.write_log("正在打开游戏资源包管理...")
+                self.workflow.click_assets_manage(
+                    self.bound_window,
+                    getattr(self.config, "wegame_assets_manage_template", "wegame_assets_manage.png"),
+                    self.config.template_match_threshold,
+                )
+                self.set_step_state("assets_manage", "success")
+                self.write_log("已打开游戏资源包管理。")
+                QApplication.processEvents()
+                time.sleep(1.0)
 
-            current_step = "delete_map"
-            self.set_step_state("delete_map", "running")
-            self.write_log("正在等待资源管理窗口并删除长弓溪谷资源包...")
-            pos = self.workflow.delete_changgong_map(
-                getattr(self.config, "wegame_delete_map_template", "wegame_delete_map.png"),
-                self.config.template_match_threshold,
-                timeout=getattr(self.config, "delete_map_timeout_seconds", 30),
-            )
-            self.set_step_state("delete_map", "success")
-            self.write_log(f"已点击删除长弓溪谷资源包（x={pos.x}, y={pos.y}）。")
-            QApplication.processEvents()
+            if start_idx <= 3:
+                current_step = "delete_map"
+                self.set_step_state("delete_map", "running")
+                self.write_log("正在等待资源管理窗口并删除长弓溪谷资源包...")
+                pos = self.workflow.delete_changgong_map(
+                    getattr(self.config, "wegame_delete_map_template", "wegame_delete_map.png"),
+                    self.config.template_match_threshold,
+                    timeout=getattr(self.config, "delete_map_timeout_seconds", 30),
+                )
+                self.set_step_state("delete_map", "success")
+                self.write_log(f"已点击删除长弓溪谷资源包（x={pos.x}, y={pos.y}）。")
+                QApplication.processEvents()
 
-            time.sleep(1.2)
-            current_step = "restart_game"
-            self.set_step_state("restart_game", "running")
-            self.write_log("切回 WeGame 窗口，准备重新拉起游戏...")
-            position, template_path = self.workflow.click_start_button(
-                self.bound_window,
-                self.config.start_button_templates,
-                self.config.template_match_threshold,
-            )
-            self.set_step_state("restart_game", "success")
-            self.write_log(
-                f"已重新点击启动按钮，游戏正在拉起：{template_path.name} "
-                f"(x={position.x}, y={position.y})"
-            )
-            if hasattr(self, "workflow_status_badge"):
-                self._set_badge(self.workflow_status_badge, "全流程自动化已顺利完成", "success")
+            if start_idx <= 4:
+                time.sleep(1.2)
+                current_step = "restart_game"
+                self.set_step_state("restart_game", "running")
+                self.write_log("切回 WeGame 窗口，准备重新拉起游戏...")
+                position, template_path = self.workflow.click_start_button(
+                    self.bound_window,
+                    self.config.start_button_templates,
+                    self.config.template_match_threshold,
+                )
+                self.set_step_state("restart_game", "success")
+                self.write_log(
+                    f"已重新点击启动按钮，游戏正在拉起：{template_path.name} "
+                    f"(x={position.x}, y={position.y})"
+                )
+                if hasattr(self, "workflow_status_badge"):
+                    self._set_badge(self.workflow_status_badge, "全流程自动化已顺利完成", "success")
         except Exception as exc:
             self.set_step_state(current_step, "failed", str(exc))
             self.write_log(f"WeGame 删包或重开失败：{exc}")
@@ -697,14 +712,22 @@ class ActionsMixin:
         self._sync_pak_button_state()
         QApplication.processEvents()
 
-    def _toggle_debug_panel(self) -> None:
-        if self.debug_body.isVisible():
-            self.debug_body.hide()
-            self.debug_toggle_button.setText("展开")
+    @property
+    def is_continuous_mode(self) -> bool:
+        """Return True if continuous step execution mode is enabled."""
+        toggle = getattr(self, "step_mode_toggle", None)
+        return toggle is not None and toggle.isChecked()
+
+    def _on_step_mode_toggled(self, checked: bool) -> None:
+        """Handle toggle between single-step mode and continuous mode."""
+        if checked:
+            self.step_mode_toggle.setText("连续")
+            self.step_mode_toggle.setToolTip("当前：连续模式（从点击的步骤继续往后执行）\n点击切换为单步模式（点击只执行该步骤）")
+            self.write_log("调试模式已切换为：【连续模式】（从点击的步骤顺序执行到后续完成）")
         else:
-            self.debug_body.show()
-            self.debug_toggle_button.setText("收起")
-        self.adjustSize()
+            self.step_mode_toggle.setText("单步")
+            self.step_mode_toggle.setToolTip("当前：单步模式（点击只执行该步骤）\n点击切换为连续模式（从该步骤继续往后执行）")
+            self.write_log("调试模式已切换为：【单步模式】（点击仅执行单一步骤）")
 
     def _dbg_require_bound(self) -> bool:
         """Return True if WeGame window is bound; log an error otherwise."""
@@ -721,10 +744,15 @@ class ActionsMixin:
             self.set_step_state("nav_game", "failed", "未检测到游戏进程")
             return
 
+        self._continue_after_navigation = self.is_continuous_mode
         self.set_step_state("nav_game", "running")
         self.write_log(
             f"调试：检测到游戏进程 {game_process.name} | pid={game_process.process_id}，接管导航并自动对齐画面..."
         )
+        if self.is_continuous_mode:
+            self.write_log("调试：已开启【连续模式】，导航完成后将自动衔接后续步骤。")
+        else:
+            self.write_log("调试：当前为【单步模式】，导航完成后将停在此步。")
         event = self.workflow.start_game_navigation(game_process)
         self.write_log(event.message)
         self.navigation_timer.start()
@@ -742,6 +770,7 @@ class ActionsMixin:
         self.write_log(
             f"【手动跳转】用户指定第 {step_index + 1} 步：【{target_step.name}】"
         )
+        self._continue_after_navigation = self.is_continuous_mode
 
         self.workflow._game_process = game_process
         if (
@@ -765,6 +794,9 @@ class ActionsMixin:
         self.advance_game_navigation()
 
     def _dbg_wait_wegame(self) -> None:
+        if self.is_continuous_mode:
+            self._run_wegame_post_process(start_step="wait_wegame")
+            return
         self._run_debug_step(
             step_id="wait_wegame",
             start_msg="等待 WeGame 启动按钮出现...",
@@ -779,6 +811,9 @@ class ActionsMixin:
         )
 
     def _dbg_click_more(self) -> None:
+        if self.is_continuous_mode:
+            self._run_wegame_post_process(start_step="click_more")
+            return
         self._run_debug_step(
             step_id="click_more",
             start_msg="点击 WeGame 更多按钮（...）...",
@@ -792,6 +827,9 @@ class ActionsMixin:
         )
 
     def _dbg_assets_manage(self) -> None:
+        if self.is_continuous_mode:
+            self._run_wegame_post_process(start_step="assets_manage")
+            return
         self._run_debug_step(
             step_id="assets_manage",
             start_msg="点击游戏资源包管理...",
@@ -805,6 +843,9 @@ class ActionsMixin:
         )
 
     def _dbg_delete_changgong(self) -> None:
+        if self.is_continuous_mode:
+            self._run_wegame_post_process(start_step="delete_map")
+            return
         self._run_debug_step(
             step_id="delete_map",
             start_msg="在资源管理窗口中查找并删除长弓溪谷（会自动向下滚动）...",
@@ -818,6 +859,9 @@ class ActionsMixin:
         )
 
     def _dbg_restart_game(self) -> None:
+        if self.is_continuous_mode:
+            self._run_wegame_post_process(start_step="restart_game")
+            return
         self._run_debug_step(
             step_id="restart_game",
             start_msg="点击 WeGame 启动按钮重新启动游戏...",
@@ -876,11 +920,19 @@ class ActionsMixin:
             if action == "disabled":
                 self.set_step_state("rename_pak", "success")
                 self.write_log("调试：【已屏蔽 Pak】已重命名为 .disabled 状态（再点一次恢复正常）。")
+                if self.is_continuous_mode:
+                    self.write_log("连续模式：已屏蔽 Pak，继续执行阶段 3 WeGame 流程...")
+                    if self.bound_window is not None:
+                        self._run_wegame_post_process()
+                    else:
+                        self.write_log("调试：未绑定 WeGame 窗口，无法继续执行阶段 3。")
             else:
                 self.set_step_state("rename_pak", "idle")
                 if hasattr(self, "workflow_status_badge"):
                     self._set_badge(self.workflow_status_badge, "步骤完成：恢复 Pak", "success")
                 self.write_log("调试：【已恢复 Pak】已去除 .disabled 后缀，文件恢复正常（再点一次重新屏蔽）。")
+                if self.is_continuous_mode:
+                    self.write_log("连续模式：已恢复 Pak（未屏蔽），停止后续 WeGame 删包流程。")
 
             self._sync_pak_button_state()
 

@@ -73,6 +73,11 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         if saved_geo and self.restoreGeometry(saved_geo):
             if saved_splitter:
                 self.main_splitter.restoreState(saved_splitter)
+                sizes = self.main_splitter.sizes()
+                if len(sizes) == 2 and sizes[1] < 160:
+                    top_target = max(280, self.left_column.sizeHint().height() + 8)
+                    total = sum(sizes)
+                    self.main_splitter.setSizes([min(top_target, total - 180), max(180, total - top_target)])
             return
 
         # Optimal initial size derived from actual content cards (avoiding QScrollArea dummy sizeHint)
@@ -84,7 +89,7 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         content_h = (
             self.bind_panel.sizeHint().height()
             + self.left_column.sizeHint().height()
-            + 190
+            + 220
             + 40
         )
 
@@ -97,8 +102,8 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
             w, h = content_w, content_h
 
         self.resize(w, h)
-        top_h = min(self.left_column.sizeHint().height() + 10, int(h * 0.70))
-        self.main_splitter.setSizes([top_h, max(100, h - top_h - self.bind_panel.height())])
+        top_h = self.left_column.sizeHint().height() + 8
+        self.main_splitter.setSizes([top_h, max(180, h - top_h - self.bind_panel.height())])
 
         if screen is not None:
             geo = self.geometry()

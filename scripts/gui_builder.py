@@ -205,37 +205,39 @@ class BuilderMixin:
         # ── 2.3 Stepper Panel (Workflow & Step Triggers) ──────────────────────
         self.debug_panel = QFrame()
         self.debug_panel.setObjectName("stepperCard")
-        # Expanding vertically: stepper card fills remaining left-column height
-        self.debug_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.debug_panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         debug_outer = QVBoxLayout(self.debug_panel)
-        debug_outer.setContentsMargins(14, 10, 14, 10)
-        debug_outer.setSpacing(8)
+        debug_outer.setContentsMargins(14, 12, 14, 12)
+        debug_outer.setSpacing(10)
 
         # Stepper Header
         debug_header = QHBoxLayout()
         debug_title = QLabel("执行流程与单步调试")
         debug_title.setObjectName("sectionTitle")
 
+        self.step_mode_toggle = QPushButton("单步")
+        self.step_mode_toggle.setObjectName("stepModeToggle")
+        self.step_mode_toggle.setCheckable(True)
+        self.step_mode_toggle.setChecked(False)
+        self.step_mode_toggle.setFixedWidth(54)
+        self.step_mode_toggle.setToolTip("当前：单步模式（点击只执行该步骤）\n点击切换为连续模式（从该步骤继续往后执行）")
+        self.step_mode_toggle.clicked.connect(self._on_step_mode_toggled)
+
         self.reset_status_btn = QPushButton("重置状态")
         self.reset_status_btn.setObjectName("resetStatusBtn")
         self.reset_status_btn.setToolTip("重置所有步骤状态为待命")
         self.reset_status_btn.clicked.connect(self.reset_all_step_states)
 
-        self.debug_toggle_button = QPushButton("收起")
-        self.debug_toggle_button.setObjectName("debugToggleBtn")
-        self.debug_toggle_button.setFixedWidth(54)
-        self.debug_toggle_button.clicked.connect(self._toggle_debug_panel)
-
         debug_header.addWidget(debug_title)
         debug_header.addStretch(1)
+        debug_header.addWidget(self.step_mode_toggle)
         debug_header.addWidget(self.reset_status_btn)
-        debug_header.addWidget(self.debug_toggle_button)
         debug_outer.addLayout(debug_header)
 
         self.debug_body = QWidget()
         debug_body_layout = QVBoxLayout(self.debug_body)
-        debug_body_layout.setContentsMargins(0, 2, 0, 0)
-        debug_body_layout.setSpacing(8)
+        debug_body_layout.setContentsMargins(0, 2, 0, 2)
+        debug_body_layout.setSpacing(10)
 
         # ── Step 1: In-game Navigation ────────────────────────
         step1_widget = QWidget()
@@ -265,9 +267,9 @@ class BuilderMixin:
         self.dbg_nav_start_btn.setToolTip("检测游戏窗口并自动推进游戏菜单与模式步骤")
         self.dbg_nav_start_btn.clicked.connect(self._dbg_takeover_navigation)
 
-        step1_header.addWidget(self.step1_dot)
+        step1_header.addWidget(self.step1_dot, alignment=Qt.AlignVCenter)
         step1_header.addLayout(s1_text_vbox, stretch=1)
-        step1_header.addWidget(self.dbg_nav_start_btn)
+        step1_header.addWidget(self.dbg_nav_start_btn, alignment=Qt.AlignVCenter)
         step1_vbox.addLayout(step1_header)
 
         # 9 sub-step pills
@@ -344,10 +346,10 @@ class BuilderMixin:
         self.dbg_open_paks_btn.setToolTip("在资源管理器中打开 Paks 补丁文件夹")
         self.dbg_open_paks_btn.clicked.connect(self._dbg_open_paks)
 
-        step2_header.addWidget(self.step2_dot)
+        step2_header.addWidget(self.step2_dot, alignment=Qt.AlignVCenter)
         step2_header.addLayout(s2_text_vbox, stretch=1)
-        step2_header.addWidget(self.dbg_rename_pak_btn)
-        step2_header.addWidget(self.dbg_open_paks_btn)
+        step2_header.addWidget(self.dbg_rename_pak_btn, alignment=Qt.AlignVCenter)
+        step2_header.addWidget(self.dbg_open_paks_btn, alignment=Qt.AlignVCenter)
         step2_vbox.addLayout(step2_header)
 
         debug_body_layout.addWidget(step2_widget)
@@ -378,7 +380,7 @@ class BuilderMixin:
         s3_text_vbox.addWidget(s3_title)
         s3_text_vbox.addWidget(s3_sub)
 
-        step3_header.addWidget(self.step3_dot)
+        step3_header.addWidget(self.step3_dot, alignment=Qt.AlignVCenter)
         step3_header.addLayout(s3_text_vbox, stretch=1)
         step3_vbox.addLayout(step3_header)
 
@@ -426,11 +428,10 @@ class BuilderMixin:
 
         step3_vbox.addLayout(sec3_row)
         debug_body_layout.addWidget(step3_widget)
-        debug_body_layout.addStretch(1)  # absorb extra vertical space at bottom of body
 
         debug_outer.addWidget(self.debug_body)
-        # stretch=1: stepper card expands to fill remaining vertical space in left column
-        left_layout.addWidget(self.debug_panel, stretch=1)
+        left_layout.addWidget(self.debug_panel)
+        left_layout.addStretch(1)
 
         self.left_scroll.setWidget(self.left_column)
 
@@ -508,7 +509,7 @@ class BuilderMixin:
         self.log_output.setObjectName("logOutput")
         self.log_output.setReadOnly(True)
         self.log_output.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.log_output.setMinimumHeight(80)  # small floor; splitter determines actual size
+        self.log_output.setMinimumHeight(120)  # small floor; splitter determines actual size
         self.log_output.document().setMaximumBlockCount(800)
         self.log_output.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
 
@@ -525,13 +526,13 @@ class BuilderMixin:
         # ── 4. Assemble QSplitter ─────────────────────────────────────────────
         self.main_splitter.addWidget(self.left_scroll)
         self.main_splitter.addWidget(self.log_panel)
-        # Top controls & stepper gets 3 parts, bottom log gets 1 part
-        self.main_splitter.setStretchFactor(0, 3)
+        # Top controls stay content-sized; bottom log expands with window resize
+        self.main_splitter.setStretchFactor(0, 0)
         self.main_splitter.setStretchFactor(1, 1)
         self.main_splitter.setCollapsible(0, False)
         self.main_splitter.setCollapsible(1, False)
-        self.left_scroll.setMinimumHeight(300)
-        self.log_panel.setMinimumHeight(100)
+        self.left_scroll.setMinimumHeight(280)
+        self.log_panel.setMinimumHeight(160)
 
         root.addWidget(self.main_splitter, stretch=1)
         self.setStyleSheet(MAIN_WINDOW_STYLE)
