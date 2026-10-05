@@ -292,14 +292,21 @@ class Workflow:
         timeout: float = 60.0,
         poll_interval: float = 1.0,
     ) -> tuple[ElementPosition, Path]:
-        """Activate WeGame window and poll until the start button reappears."""
+        """Activate WeGame window and poll until the start button reappears.
+
+        If the originally-bound handle has become stale (e.g. WeGame rebuilt its
+        main window after the game process exited), this method re-enumerates all
+        visible windows owned by the same WeGame process and retries with the
+        refreshed handle instead of failing outright.
+        """
         deadline = time.monotonic() + timeout
         last_error = ""
+        current_bound = bound_window  # may be refreshed inside the loop
 
         while time.monotonic() < deadline:
             QApplication.processEvents()
             try:
-                current_window = self.window_binder.activate(bound_window)
+                current_window = self.window_binder.activate(current_bound)
                 time.sleep(0.3)
                 position, template_path = self.find_start_button(
                     current_window, template_names, threshold
@@ -307,6 +314,16 @@ class Workflow:
                 return position, template_path
             except Exception as exc:
                 last_error = str(exc)
+                # If handle is stale, try re-locating the WeGame window by process id
+                if current_bound.process_id is not None:
+                    try:
+                        refreshed = self.window_binder.bind_by_process_id(
+                            current_bound.process_id
+                        )
+                        if refreshed is not None and refreshed.handle != current_bound.handle:
+                            current_bound = refreshed
+                    except Exception:
+                        pass
                 time.sleep(poll_interval)
 
         raise TimeoutError(f"等待 WeGame 启动按钮重新出现超时（{timeout:.0f}秒）：{last_error}")
@@ -381,6 +398,10 @@ class Workflow:
     ) -> ElementPosition:
         """Find the resource management window and click delete for changgong map.
 
+        The template covers the entire card row (thumbnail + text).  After
+        matching, the click is redirected to the right edge of the card where
+        the trash-can delete icon lives, rather than the card center.
+
         If the delete button is not visible immediately the method scrolls the
         window downward by *scroll_step* wheel-clicks every *scroll_interval*
         seconds until the button appears or *timeout* is reached.
@@ -398,8 +419,21 @@ class Workflow:
             result = self.locator.match_on_screen(template_path, threshold)
             best_confidence = max(best_confidence, result.position.confidence)
             if result.matched:
-                self.clicker.click(result.position)
-                return result.position
+                pos = result.position
+                # The template spans the whole row; the trash-can icon sits at
+                # the far-right edge of the card.  Shift the click from the
+                # matched center to (left_edge + card_width - 18px).
+                # pos.x is already the center of the matched region, and
+                # pos.width is the template width, so right_edge = pos.x + pos.width // 2.
+                # We back off ~18 px from the right to land on the icon.
+                click_x = pos.x + pos.width // 2 - 18
+                click_pos = ElementPosition(
+                    x=click_x, y=pos.y,
+                    confidence=pos.confidence,
+                    width=pos.width, height=pos.height,
+                )
+                self.clicker.click(click_pos)
+                return click_pos
 
             # Scroll the resource-manager window downward every scroll_interval seconds
             now = time.monotonic()

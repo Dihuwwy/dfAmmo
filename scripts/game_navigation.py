@@ -89,6 +89,7 @@ class GameNavigator:
         self.is_paused = False
         self._last_resync_check = 0.0
         self._last_tab_retry = 0.0
+        self._last_esc_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
 
@@ -102,6 +103,7 @@ class GameNavigator:
         self.is_paused = False
         self._last_resync_check = 0.0
         self._last_tab_retry = 0.0
+        self._last_esc_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
         if self.step_index > 0:
@@ -125,6 +127,7 @@ class GameNavigator:
         self.finished = False
         self.is_paused = False
         self._last_tab_retry = 0.0
+        self._last_esc_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
 
@@ -156,6 +159,7 @@ class GameNavigator:
         self.is_paused = False
         self.deadline = time.monotonic() + self.step_timeout_seconds
         self.next_action_at = 0.0
+        self._last_esc_retry = 0.0
         resync_event = self.resync_state()
         if resync_event is not None:
             return resync_event
@@ -206,35 +210,36 @@ class GameNavigator:
             if idx >= len(NAVIGATION_STEPS):
                 continue
             cand_step = NAVIGATION_STEPS[idx]
-            if not cand_step.template_name:
-                continue
+            candidate_tmpl_names = [cand_step.template_name]
+            if idx == 0:
+                candidate_tmpl_names.extend(["df_change_mode.png", "df_mode_init.png"])
+            elif cand_step.template_name == "df_mode_init.png":
+                candidate_tmpl_names.append("df_mode_choose.png")
 
-            tmpl_path = self.template_dir / cand_step.template_name
-            if not tmpl_path.exists():
-                alt_name = (
-                    "df_mode_init.png"
-                    if cand_step.template_name == "df_mode_choose.png"
-                    else (
-                        "df_mode_choose.png"
-                        if cand_step.template_name == "df_mode_init.png"
-                        else ""
-                    )
-                )
-                if alt_name and (self.template_dir / alt_name).exists():
-                    tmpl_path = self.template_dir / alt_name
-                else:
+            match_res = None
+            for tname in candidate_tmpl_names:
+                tmpl_path = self.template_dir / tname
+                if not tmpl_path.exists():
                     continue
+                res = self.locator.match_in_source(
+                    source, tmpl_path, self.bound_window, self.threshold
+                )
+                if res.matched:
+                    match_res = res
+                    break
 
-            match_res = self.locator.match_in_source(
-                source, tmpl_path, self.bound_window, self.threshold
-            )
-            if match_res.matched:
+            if match_res is not None and match_res.matched:
+                conf = (
+                    float(match_res.position.confidence)
+                    if hasattr(match_res.position, "confidence") and isinstance(match_res.position.confidence, (int, float))
+                    else 0.0
+                )
                 old_index = self.step_index
                 self.step_index = idx
                 self.deadline = time.monotonic() + self.step_timeout_seconds
                 self.next_action_at = 0.0
-                self.last_confidence = match_res.position.confidence
-                self.best_confidence = match_res.position.confidence
+                self.last_confidence = conf
+                self.best_confidence = conf
 
                 if cand_step.action == "detect":
                     return self._complete()
@@ -243,11 +248,11 @@ class GameNavigator:
                     return NavigationEvent(
                         NavigationStatus.RUNNING,
                         f"[对齐] 识别到游戏画面处于【{cand_step.name}】"
-                        f"（相似度={match_res.position.confidence:.3f}），已同步执行进度！",
+                        f"（相似度={conf:.3f}），已同步执行进度！",
                     )
                 return NavigationEvent(
                     NavigationStatus.RUNNING,
-                    f"[对齐] 当前画面对齐【{cand_step.name}】（相似度={match_res.position.confidence:.3f}），继续执行...",
+                    f"[对齐] 当前画面对齐【{cand_step.name}】（相似度={conf:.3f}），继续执行...",
                 )
 
         return None
@@ -298,32 +303,57 @@ class GameNavigator:
 
         step = NAVIGATION_STEPS[self.step_index]
         position = None
+        matched_cand_name = ""
         if step.template_name:
-            template_path = self.template_dir / step.template_name
-            if not template_path.exists():
-                alt_name = (
-                    "df_mode_init.png"
-                    if step.template_name == "df_mode_choose.png"
-                    else (
-                        "df_mode_choose.png"
-                        if step.template_name == "df_mode_init.png"
-                        else ""
-                    )
-                )
-                if alt_name and (self.template_dir / alt_name).exists():
-                    template_path = self.template_dir / alt_name
-                else:
-                    return self._fail(f"缺少模板：{step.template_name}")
+            candidate_names: list[str] = [step.template_name]
+            if self.step_index == 0:
+                candidate_names.append("df_change_mode.png")
+                if step.template_name == "df_mode_choose.png":
+                    candidate_names.append("df_mode_init.png")
+                elif step.template_name == "df_mode_init.png":
+                    candidate_names.append("df_mode_choose.png")
 
-            result = self.locator.match_by_image(
-                template_path,
-                self.bound_window,
-                self.threshold,
-            )
-            self.last_confidence = result.position.confidence
+            matched_result = None
+            best_cand_confidence = 0.0
+
+            for cand_name in candidate_names:
+                tmpl_path = self.template_dir / cand_name
+                if not tmpl_path.exists():
+                    continue
+                cand_res = self.locator.match_by_image(
+                    tmpl_path,
+                    self.bound_window,
+                    self.threshold,
+                )
+                if cand_res.position.confidence > best_cand_confidence:
+                    best_cand_confidence = cand_res.position.confidence
+                if cand_res.matched:
+                    matched_result = cand_res
+                    matched_cand_name = cand_name
+                    break
+
+            self.last_confidence = best_cand_confidence
             self.best_confidence = max(self.best_confidence, self.last_confidence)
-            if not result.matched:
+
+            if matched_result is None or not matched_result.matched:
                 step_elapsed = now - (self.deadline - self.step_timeout_seconds)
+
+                # If waiting on "选择烽火地带模式" (step 0) for > 3.5s and still not matched
+                # (e.g. game directly entered "黑潮爆破" or another mode's lobby),
+                # press ESC once every 3.0s to open the mode menu where df_change_mode can be matched
+                if self.step_index == 0 and step_elapsed >= 3.5 and (now - self._last_esc_retry >= 3.0):
+                    self._last_esc_retry = now
+                    try:
+                        self.bound_window = self.window_binder.activate(self.bound_window)
+                        self.keyboard.press(win32con.VK_ESCAPE, repeat=1)
+                        time.sleep(0.3)
+                        return NavigationEvent(
+                            NavigationStatus.RUNNING,
+                            "[提示] 未检测到初始模式选择界面（可能处于黑潮爆破等模式大厅），已按 ESC 调出模式菜单...",
+                        )
+                    except Exception:
+                        pass
+
                 # If waiting on "打开地图选择" (step 2) for > 3.5s and still not matched,
                 # retry pressing Tab once every 3.0s in case the game lagged on the entrance gate screen
                 if self.step_index == 2 and step_elapsed >= 3.5 and (now - self._last_tab_retry >= 3.0):
@@ -347,7 +377,7 @@ class GameNavigator:
                         f"最高相似度={self.best_confidence:.3f}。"
                     )
                 return None
-            position = result.position
+            position = matched_result.position
 
         # Only activate window when ready to perform an action (click or keypress),
         # so polling doesn't repeatedly steal foreground focus from user
@@ -381,9 +411,12 @@ class GameNavigator:
         matched_confidence = self.last_confidence
         self.last_confidence = 0.0
         self.best_confidence = 0.0
+        extra_note = ""
+        if self.step_index - 1 == 0 and matched_cand_name == "df_change_mode.png":
+            extra_note = "（通过模式切换菜单匹配）"
         return NavigationEvent(
             NavigationStatus.RUNNING,
-            f"步骤完成：{step.name}"
+            f"步骤完成：{step.name}{extra_note}"
             + (f" | confidence={matched_confidence:.3f}" if step.template_name else ""),
         )
 
