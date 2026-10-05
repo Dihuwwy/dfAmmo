@@ -415,6 +415,15 @@ class Workflow:
         last_scroll_at = 0.0
 
         while time.monotonic() < deadline:
+            # Ensure the resource manager window is active so it renders in focus (better match confidence)
+            # and receives the scroll events properly.
+            resource_window = self.window_binder.bind_by_title("游戏资源包管理")
+            if resource_window:
+                try:
+                    self.window_binder.activate(resource_window)
+                except Exception:
+                    pass
+
             QApplication.processEvents()
             result = self.locator.match_on_screen(template_path, threshold)
             best_confidence = max(best_confidence, result.position.confidence)
@@ -439,7 +448,8 @@ class Workflow:
             now = time.monotonic()
             if now - last_scroll_at >= scroll_interval:
                 last_scroll_at = now
-                self._scroll_active_window_down(scroll_step)
+                hwnd_to_scroll = resource_window.handle if resource_window else None
+                self._scroll_active_window_down(scroll_step, hwnd_to_scroll)
 
             time.sleep(0.3)
 
@@ -448,24 +458,24 @@ class Workflow:
             f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
         )
 
-    def _scroll_active_window_down(self, clicks: int = 3) -> None:
-        """Send WM_MOUSEWHEEL scroll-down messages to the foreground window."""
+    def _scroll_active_window_down(self, clicks: int = 3, hwnd: int | None = None) -> None:
+        """Send WM_MOUSEWHEEL scroll-down messages to the specified window or foreground window."""
         import win32api as _win32api
         import win32con as _win32con
         import win32gui as _win32gui
 
         try:
-            hwnd = _win32gui.GetForegroundWindow()
-            if not hwnd:
+            target_hwnd = hwnd or _win32gui.GetForegroundWindow()
+            if not target_hwnd:
                 return
-            rect = _win32gui.GetWindowRect(hwnd)
+            rect = _win32gui.GetWindowRect(target_hwnd)
             cx = (rect[0] + rect[2]) // 2
             cy = (rect[1] + rect[3]) // 2
             lparam = _win32api.MAKELONG(cx, cy)
             # WHEEL_DELTA = 120; negative = downward scroll
             wheel_delta = -120 * clicks
             wparam = _win32api.MAKELONG(0, wheel_delta & 0xFFFF)
-            _win32gui.PostMessage(hwnd, _win32con.WM_MOUSEWHEEL, wparam, lparam)
+            _win32gui.PostMessage(target_hwnd, _win32con.WM_MOUSEWHEEL, wparam, lparam)
         except Exception:
             pass
 

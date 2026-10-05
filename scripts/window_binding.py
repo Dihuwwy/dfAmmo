@@ -107,6 +107,35 @@ class WindowBinder:
             ),
         )
 
+    def bind_by_title(self, title_substring: str) -> BoundWindow | None:
+        candidates: list[BoundWindow] = []
+
+        def collect(handle: int, _: object) -> bool:
+            if not win32gui.IsWindowVisible(handle):
+                return True
+            
+            window_title = win32gui.GetWindowText(handle)
+            if title_substring in window_title:
+                try:
+                    bound_window = self.bind_by_handle(handle)
+                    if bound_window.right > bound_window.left and bound_window.bottom > bound_window.top:
+                        candidates.append(bound_window)
+                except Exception:
+                    pass
+            return True
+
+        with physical_coordinates():
+            win32gui.EnumWindows(collect, None)
+
+        if not candidates:
+            return None
+
+        # Return the one with the exact match if possible, else the first candidate
+        for c in candidates:
+            if c.title == title_substring:
+                return c
+        return candidates[0]
+
     def activate(self, bound_window: BoundWindow) -> BoundWindow:
         with physical_coordinates():
             if not win32gui.IsWindow(bound_window.handle):
