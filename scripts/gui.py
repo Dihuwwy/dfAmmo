@@ -132,6 +132,28 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
             geo.moveCenter(screen.availableGeometry().center())
             self.setGeometry(geo)
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        QTimer.singleShot(0, self._ensure_controls_expanded)
+
+    def _ensure_controls_expanded(self) -> None:
+        """Guarantee that the upper controls card is never clipped or truncated after DPI/font rendering."""
+        req_top_h = self.left_column.sizeHint().height() + 8
+        min_log_h = 160
+        overhead_h = self.bind_panel.height() + 48
+
+        needed_window_h = req_top_h + min_log_h + overhead_h
+        if self.height() < needed_window_h:
+            self.resize(self.width(), needed_window_h)
+
+        if self.layout() is not None:
+            self.layout().activate()
+
+        sizes = self.main_splitter.sizes()
+        if len(sizes) == 2 and sizes[0] < req_top_h:
+            avail = self.main_splitter.height()
+            self.main_splitter.setSizes([req_top_h, max(min_log_h, avail - req_top_h)])
+
     def _check_hotkey(self) -> None:
         now = time_val = win32api.GetTickCount() / 1000.0
         try:
