@@ -65,19 +65,38 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         self.write_log("请先绑定 WeGame 主窗口（如游戏已在运行，可直接点击“开始卡邮件”）。")
 
     def _init_window_geometry(self) -> None:
-        """Restore previous window geometry/splitter if saved, or compute true content size and center."""
+        """Restore previous window geometry/splitter if saved, or compute true content size and center.
+        Guarantees that the upper controls card is never clipped or truncated by old saved splitter ratios.
+        """
         settings = QSettings("dfAmmo", "Assistant")
         saved_geo = settings.value("geometry")
         saved_splitter = settings.value("splitter")
 
+        # Dynamic computation of required upper panel height
+        req_top_h = self.left_column.sizeHint().height() + 10
+        min_log_h = 160
+        overhead_h = self.bind_panel.sizeHint().height() + 48
+
         if saved_geo and self.restoreGeometry(saved_geo):
             if saved_splitter:
                 self.main_splitter.restoreState(saved_splitter)
-                sizes = self.main_splitter.sizes()
-                if len(sizes) == 2 and sizes[1] < 160:
-                    top_target = max(280, self.left_column.sizeHint().height() + 8)
-                    total = sum(sizes)
-                    self.main_splitter.setSizes([min(top_target, total - 180), max(180, total - top_target)])
+
+            # Ensure window is tall enough for full top controls + minimum log panel
+            needed_window_h = req_top_h + min_log_h + overhead_h
+            if self.height() < needed_window_h:
+                self.resize(self.width(), needed_window_h)
+
+            # Activate layout so main_splitter receives updated geometry before adjusting sizes
+            if self.layout() is not None:
+                self.layout().activate()
+
+            avail_splitter_h = self.main_splitter.height()
+            sizes = self.main_splitter.sizes()
+            if len(sizes) == 2:
+                top_h, bottom_h = sizes[0], sizes[1]
+                if top_h < req_top_h or bottom_h < min_log_h:
+                    target_top = min(req_top_h, max(280, avail_splitter_h - min_log_h))
+                    self.main_splitter.setSizes([target_top, max(min_log_h, avail_splitter_h - target_top)])
             return
 
         # Optimal initial size derived from actual content cards (avoiding QScrollArea dummy sizeHint)
@@ -88,8 +107,8 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         )
         content_h = (
             self.bind_panel.sizeHint().height()
-            + self.left_column.sizeHint().height()
-            + 220
+            + req_top_h
+            + 200
             + 40
         )
 
@@ -102,8 +121,11 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
             w, h = content_w, content_h
 
         self.resize(w, h)
-        top_h = self.left_column.sizeHint().height() + 8
-        self.main_splitter.setSizes([top_h, max(180, h - top_h - self.bind_panel.height())])
+        if self.layout() is not None:
+            self.layout().activate()
+
+        avail_splitter_h = self.main_splitter.height()
+        self.main_splitter.setSizes([req_top_h, max(min_log_h, avail_splitter_h - req_top_h)])
 
         if screen is not None:
             geo = self.geometry()
