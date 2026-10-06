@@ -41,11 +41,5 @@ temp/
 .pytest_cache/
 .coverage
 htmlcov/
-tests/*
-!tests/test_responsiveness.py
-!tests/test_ui.py
-!tests/test_workflow.py
-!tests/test_window_binding.py
-!tests/test_process_exit.py
-test/
+/tests/
 
