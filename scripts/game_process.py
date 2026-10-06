@@ -23,7 +23,7 @@ class GameProcessFinder:
 
     def find(self) -> GameProcess | None:
         matches: list[GameProcess] = []
-        for process in psutil.process_iter(("pid", "name", "exe", "create_time")):
+        for process in psutil.process_iter(("pid", "name")):
             try:
                 name = process.info.get("name") or ""
                 if name.casefold() not in self.process_names:
@@ -33,8 +33,8 @@ class GameProcessFinder:
                     GameProcess(
                         process_id=process.info["pid"],
                         name=name,
-                        executable=process.info.get("exe") or "",
-                        create_time=process.info.get("create_time") or 0.0,
+                        executable=process.exe(),
+                        create_time=process.create_time(),
                     )
                 )
             except (psutil.AccessDenied, psutil.NoSuchProcess, psutil.ZombieProcess):

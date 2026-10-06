@@ -8,6 +8,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_DIR = PROJECT_ROOT / "assets" / "templates"
 CONFIG_FILE = PROJECT_ROOT / "config.json"
+DEFAULT_PAK_NAMES = (
+    "pak-0-2-pakchunk90-WindowsClient.pak",
+    "pak-0-2-pakchunk90optional-WindowsClient.pak",
+)
 
 
 @dataclass(frozen=True)
@@ -32,10 +36,7 @@ class AppConfig:
     navigation_step_timeout_seconds: int = 60
     game_window_timeout_seconds: int = 90
     game_install_dir: str = ""
-    pak_file_names: tuple[str, ...] = (
-        "pak-0-2-pakchunk90-WindowsClient.pak",
-        "pak-0-2-pakchunk90optional-WindowsClient.pak",
-    )
+    pak_file_names: tuple[str, ...] = DEFAULT_PAK_NAMES
     operation_mode: str = "semi_auto"
     wegame_more_template: str = "wegame_more.png"
     wegame_assets_manage_template: str = "wegame_assets_manage.png"

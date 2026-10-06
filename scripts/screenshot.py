@@ -12,8 +12,6 @@ from scripts.dpi import physical_coordinates
 class ScreenshotService:
     """Responsible for screenshots."""
 
-    def capture(self) -> str | None:
-        return None
 
     def capture_region_to_template(
         self,

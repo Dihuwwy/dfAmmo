@@ -27,18 +27,7 @@ class BoundWindow:
 class WindowBinder:
     """Responsible for listing and binding target windows."""
 
-    def list_windows(self) -> list[BoundWindow]:
-        windows: list[BoundWindow] = []
 
-        def collect(handle: int, _: object) -> bool:
-            if win32gui.IsWindowVisible(handle):
-                bound_window = self.bind_by_handle(handle)
-                if bound_window.title:
-                    windows.append(bound_window)
-            return True
-
-        win32gui.EnumWindows(collect, None)
-        return windows
 
     def bind_by_handle(self, handle: int) -> BoundWindow:
         with physical_coordinates():
@@ -71,70 +60,36 @@ class WindowBinder:
 
         return self.bind_by_handle(handle)
 
-    def bind_by_process_id(self, process_id: int) -> BoundWindow | None:
-        candidates: list[BoundWindow] = []
-
-        def collect(handle: int, _: object) -> bool:
-            if not win32gui.IsWindowVisible(handle):
-                return True
-
-            _, window_process_id = win32process.GetWindowThreadProcessId(handle)
-            if window_process_id != process_id:
-                return True
-
+    def _window_candidates(self, process_id=None, title="") -> list[BoundWindow]:
+        candidates = []
+        def collect(handle, _):
             try:
-                bound_window = self.bind_by_handle(handle)
+                if not win32gui.IsWindowVisible(handle):
+                    return True
+                if process_id is not None and win32process.GetWindowThreadProcessId(handle)[1] != process_id:
+                    return True
+                if title and title not in win32gui.GetWindowText(handle):
+                    return True
+                window = self.bind_by_handle(handle)
+                if window.right > window.left and window.bottom > window.top:
+                    candidates.append(window)
             except Exception:
-                return True
-
-            if bound_window.right > bound_window.left and bound_window.bottom > bound_window.top:
-                candidates.append(bound_window)
+                pass  # Windows may disappear during enumeration.
             return True
-
         with physical_coordinates():
             win32gui.EnumWindows(collect, None)
+        return candidates
 
-        if not candidates:
-            return None
+    def bind_by_process_id(self, process_id: int) -> BoundWindow | None:
+        return max(self._window_candidates(process_id=process_id), default=None,
+                   key=lambda w: (bool(w.title.strip()), (w.right-w.left)*(w.bottom-w.top)))
 
-        # Prioritize windows with non-empty title (main game viewport vs splash),
-        # then by largest area
-        return max(
-            candidates,
-            key=lambda item: (
-                bool(item.title.strip()),
-                (item.right - item.left) * (item.bottom - item.top),
-            ),
-        )
 
     def bind_by_title(self, title_substring: str) -> BoundWindow | None:
-        candidates: list[BoundWindow] = []
+        candidates = self._window_candidates(title=title_substring)
+        return next((w for w in candidates if w.title == title_substring),
+                    candidates[0] if candidates else None)
 
-        def collect(handle: int, _: object) -> bool:
-            if not win32gui.IsWindowVisible(handle):
-                return True
-            
-            window_title = win32gui.GetWindowText(handle)
-            if title_substring in window_title:
-                try:
-                    bound_window = self.bind_by_handle(handle)
-                    if bound_window.right > bound_window.left and bound_window.bottom > bound_window.top:
-                        candidates.append(bound_window)
-                except Exception:
-                    pass
-            return True
-
-        with physical_coordinates():
-            win32gui.EnumWindows(collect, None)
-
-        if not candidates:
-            return None
-
-        # Return the one with the exact match if possible, else the first candidate
-        for c in candidates:
-            if c.title == title_substring:
-                return c
-        return candidates[0]
 
     def activate(self, bound_window: BoundWindow) -> BoundWindow:
         with physical_coordinates():
@@ -145,7 +100,27 @@ class WindowBinder:
                 win32gui.ShowWindow(bound_window.handle, win32con.SW_RESTORE)
 
             try:
-                win32gui.SetForegroundWindow(bound_window.handle)
+                import win32api
+                foreground_hwnd = win32gui.GetForegroundWindow()
+                if foreground_hwnd and foreground_hwnd != bound_window.handle:
+                    foreground_tid, _ = win32process.GetWindowThreadProcessId(foreground_hwnd)
+                    current_tid = win32api.GetCurrentThreadId()
+
+                    if foreground_tid != current_tid:
+                        import ctypes
+                        user32 = ctypes.windll.user32
+                        user32.AttachThreadInput(current_tid, foreground_tid, True)
+                        try:
+                            win32gui.SetForegroundWindow(bound_window.handle)
+                            win32gui.BringWindowToTop(bound_window.handle)
+                        finally:
+                            user32.AttachThreadInput(current_tid, foreground_tid, False)
+                    else:
+                        win32gui.SetForegroundWindow(bound_window.handle)
+                        win32gui.BringWindowToTop(bound_window.handle)
+                else:
+                    win32gui.SetForegroundWindow(bound_window.handle)
+                    win32gui.BringWindowToTop(bound_window.handle)
             except Exception:
                 win32gui.ShowWindow(bound_window.handle, win32con.SW_SHOW)
                 try:

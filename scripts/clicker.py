@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import ctypes
 import random
-import time
 
 import win32api
 import win32con
-import win32gui
 from pywinauto import mouse
 
+from scripts.task_control import TaskControl, ControlInterrupted
 from scripts.dpi import physical_coordinates
 from scripts.element_locator import ElementPosition
 
@@ -47,10 +46,9 @@ class Input(ctypes.Structure):
 class Clicker:
     """Responsible for mouse click actions."""
 
-    def move_to(self, position: ElementPosition) -> tuple[int, int]:
-        x, y = int(position.x), int(position.y)
-        with physical_coordinates():
-            return self._move_to_point(x, y)
+    def __init__(self, control: TaskControl | None = None):
+        self.control = control or TaskControl()
+
 
     def _move_to_point(self, x: int, y: int) -> tuple[int, int]:
         self._ensure_point_on_screen(x, y)
@@ -61,6 +59,7 @@ class Clicker:
             self._move_with_send_input,
             self._move_with_pywinauto,
         ):
+            self.control.check()
             try:
                 move_method(x, y)
                 if self._cursor_is_near(x, y):
@@ -70,6 +69,8 @@ class Clicker:
                     f"{move_method.__name__}: 调用成功但鼠标未到位，"
                     f"current=({current_x}, {current_y})"
                 )
+            except ControlInterrupted:
+                raise
             except Exception as exc:
                 errors.append(f"{move_method.__name__}: {exc}")
 
@@ -103,12 +104,15 @@ class Clicker:
         return abs(current_x - x) <= tolerance and abs(current_y - y) <= tolerance
 
     def click(self, position: ElementPosition, window_handle: int | None = None) -> bool:
+        self.control.check()
         x, y = self._humanized_point(position)
         with physical_coordinates():
             self._move_to_point(x, y)
-            time.sleep(random.uniform(0.08, 0.15))
+            self.control.wait(random.uniform(0.08, 0.15))
             try:
                 self._click_with_send_input(x, y)
+            except ControlInterrupted:
+                raise
             except Exception:
                 self._click_with_user32(x, y)
         return True
@@ -121,6 +125,7 @@ class Clicker:
         return x, y
 
     def _click_with_send_input(self, x: int, y: int) -> None:
+        self.control.check()
         left, top, right, bottom = self._screen_bounds()
         absolute_x = round((x - left) * 65535 / max(1, right - left - 1))
         absolute_y = round((y - top) * 65535 / max(1, bottom - top - 1))
@@ -137,32 +142,24 @@ class Clicker:
             x,
             y,
         )
-        time.sleep(random.uniform(0.09, 0.16))
-        self._send_inputs((self._mouse_input(0, 0, MOUSEEVENTF_LEFTUP),), x, y)
+        try:
+            self.control.wait(random.uniform(0.09, 0.16))
+        finally:
+            self._send_inputs((self._mouse_input(0, 0, MOUSEEVENTF_LEFTUP),), x, y)
 
     def _click_with_user32(self, x: int, y: int) -> None:
         user32 = ctypes.windll.user32
         if not user32.SetCursorPos(x, y):
             raise RuntimeError(f"SetCursorPos 失败：x={x}, y={y}")
 
-        time.sleep(0.08)
+        self.control.wait(0.08)
+        self.control.check()
         user32.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-        time.sleep(random.uniform(0.09, 0.16))
-        user32.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
+        try:
+            self.control.wait(random.uniform(0.09, 0.16))
+        finally:
+            user32.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
 
-    def _click_with_pywinauto(self, x: int, y: int) -> None:
-        mouse.click(button="left", coords=(x, y))
-
-    def _click_with_window_message(self, window_handle: int, x: int, y: int) -> None:
-        target_handle = win32gui.WindowFromPoint((x, y)) or window_handle
-        client_x, client_y = win32gui.ScreenToClient(target_handle, (x, y))
-        lparam = win32api.MAKELONG(client_x, client_y)
-
-        win32gui.PostMessage(target_handle, win32con.WM_MOUSEMOVE, 0, lparam)
-        time.sleep(0.04)
-        win32gui.PostMessage(target_handle, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, lparam)
-        time.sleep(random.uniform(0.045, 0.095))
-        win32gui.PostMessage(target_handle, win32con.WM_LBUTTONUP, 0, lparam)
 
     def _send_inputs(self, events: tuple[Input, ...], x: int, y: int) -> None:
         sent = ctypes.windll.user32.SendInput(

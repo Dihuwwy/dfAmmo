@@ -4,22 +4,21 @@ import time
 from pathlib import Path
 
 import psutil
-from PySide6.QtWidgets import QApplication
+from scripts.task_control import TaskControl, ControlInterrupted
 
 from scripts.clicker import Clicker
-from scripts.config import TEMPLATE_DIR
+from scripts.config import TEMPLATE_DIR, DEFAULT_PAK_NAMES
 from scripts.element_locator import ElementLocator, ElementPosition, MatchResult
 from scripts.game_process import GameProcess, GameProcessFinder
 from scripts.game_navigation import GameNavigator, NavigationEvent
 from scripts.keyboard import KeyboardController
-from scripts.ocr import OcrReader
 from scripts.privileges import ensure_can_control_process
 from scripts.screenshot import ScreenshotService
 from scripts.window_binding import BoundWindow, WindowBinder
 
 
 class Workflow:
-    """High-level workflow orchestration placeholder."""
+    """Game navigation, WeGame actions and Pak file operations."""
 
     def __init__(
         self,
@@ -28,12 +27,12 @@ class Workflow:
         navigation_step_timeout_seconds: int = 60,
         game_window_timeout_seconds: int = 90,
     ) -> None:
+        self.control = TaskControl()
         self.window_binder = WindowBinder()
         self.screenshot = ScreenshotService()
-        self.ocr = OcrReader()
-        self.locator = ElementLocator()
-        self.clicker = Clicker()
-        self.keyboard = KeyboardController()
+        self.locator = ElementLocator(self.control)
+        self.clicker = Clicker(self.control)
+        self.keyboard = KeyboardController(self.control)
         self.game_process_finder = GameProcessFinder(game_process_names)
         self._game_process: GameProcess | None = None
         self.game_navigator = GameNavigator(
@@ -45,10 +44,9 @@ class Workflow:
             locator=self.locator,
             clicker=self.clicker,
             keyboard=self.keyboard,
+            control=self.control,
         )
 
-    def run_once(self) -> bool:
-        return False
 
     def find_start_button(
         self,
@@ -62,8 +60,10 @@ class Workflow:
             raise FileNotFoundError(f"没有找到启动按钮模板，请先采集模板：{names}")
 
         best_result: tuple[MatchResult, Path] | None = None
+        source = self.locator.grab_window_bgr(bound_window)
         for template_path in existing_templates:
-            result = self.locator.match_by_image(template_path, bound_window, threshold)
+            self.control.check()
+            result = self.locator.match_in_source(source, template_path, bound_window, threshold)
             if best_result is None or result.position.confidence > best_result[0].position.confidence:
                 best_result = (result, template_path)
             if result.matched:
@@ -88,8 +88,9 @@ class Workflow:
         threshold: float = 0.78,
     ) -> tuple[ElementPosition, Path]:
         ensure_can_control_process(bound_window.process_id)
+        self.control.check()
         current_window = self.window_binder.activate(bound_window)
-        time.sleep(0.25)
+        self.control.wait(0.25)
         position, template_path = self.find_start_button(current_window, template_names, threshold)
         self.clicker.click(position, current_window.handle)
         return position, template_path
@@ -108,10 +109,9 @@ class Workflow:
         return self.game_navigator.tick()
 
     def cancel_game_navigation(self) -> None:
+        self.control.cancelled.set()
         self.game_navigator.cancel()
 
-    def pause_game_navigation(self) -> NavigationEvent:
-        return self.game_navigator.pause()
 
     def resume_game_navigation(self) -> NavigationEvent:
         return self.game_navigator.resume()
@@ -135,9 +135,18 @@ class Workflow:
             if not (same_name and same_start):
                 self._game_process = None
                 return False, "原游戏进程已退出，PID 已被其他进程复用。"
+            self.control.check()
             proc.terminate()
             try:
-                proc.wait(timeout=5)
+                deadline = time.monotonic() + 5
+                while True:
+                    self.control.check()
+                    try:
+                        proc.wait(timeout=0.1)
+                        break
+                    except psutil.TimeoutExpired:
+                        if time.monotonic() >= deadline:
+                            raise
                 self._game_process = None
                 return True, "游戏进程已终止并退出。"
             except (psutil.NoSuchProcess, psutil.TimeoutExpired):
@@ -158,131 +167,60 @@ class Workflow:
         """Return the Delta Force Paks directory path for given game install directory."""
         return Path(game_install_dir) / "DeltaForce" / "PackContent" / "Paks"
 
-    def rename_pak_files(
-        self,
-        game_install_dir: str,
-        pak_names: tuple[str, ...] | list[str] = (
-            "pak-0-2-pakchunk90-WindowsClient.pak",
-            "pak-0-2-pakchunk90optional-WindowsClient.pak",
-        ),
-    ) -> list[str]:
+    def rename_pak_files(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> list[str]:
+        return self._rename_paks(game_install_dir, pak_names, restore=False)
+
+
+
+    def restore_pak_files(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> list[str]:
+        return self._rename_paks(game_install_dir, pak_names, restore=True)
+
+    def _rename_paks(self, game_install_dir, pak_names, restore):
         pak_dir = self.get_paks_dir(game_install_dir)
-        results: list[str] = []
-
-        for pak_name in pak_names:
-            pak_path = pak_dir / pak_name
-            disabled_path = pak_dir / f"{pak_name}.disabled"
-
-            if not pak_path.exists():
-                if disabled_path.exists():
-                    results.append(f"文件已是重命名状态：{disabled_path.name}")
-                else:
-                    results.append(f"文件不存在：{pak_path.name}")
-                continue
-
-            if disabled_path.exists():
-                results.append(f"已存在同名重命名文件：{disabled_path.name}")
-                continue
-
-            pak_path.rename(disabled_path)
-            results.append(f"已重命名：{pak_name} -> {disabled_path.name}")
-
-        return results
-
-    def rename_pak_file(self, game_install_dir: str) -> str:
-        results = self.rename_pak_files(game_install_dir)
-        return "\n".join(results)
-
-    def restore_pak_files(
-        self,
-        game_install_dir: str,
-        pak_names: tuple[str, ...] | list[str] = (
-            "pak-0-2-pakchunk90-WindowsClient.pak",
-            "pak-0-2-pakchunk90optional-WindowsClient.pak",
-        ),
-    ) -> list[str]:
-        pak_dir = self.get_paks_dir(game_install_dir)
-        results: list[str] = []
-
-        if not pak_dir.is_dir():
+        if restore and not pak_dir.is_dir():
             raise FileNotFoundError(f"Paks 目录不存在：{pak_dir}")
-
-        for pak_name in pak_names:
-            pak_path = pak_dir / pak_name
-            disabled_path = pak_dir / f"{pak_name}.disabled"
-
-            if not disabled_path.exists():
-                if pak_path.exists():
-                    results.append(f"文件已是正常状态：{pak_name}")
-                else:
-                    results.append(f"文件不存在：{pak_name}（及 .disabled）")
+        results = []
+        for name in pak_names:
+            self.control.check()
+            normal, disabled = pak_dir / name, pak_dir / f"{name}.disabled"
+            source, target = (disabled, normal) if restore else (normal, disabled)
+            if not source.exists():
+                state = "正常" if restore else "重命名"
+                results.append(f"文件已是{state}状态：{target.name}" if target.exists()
+                               else f"文件不存在：{name}")
                 continue
-
-            if pak_path.exists():
-                results.append(f"检测到同名正常文件 {pak_name}，正在覆盖恢复...")
+            if target.exists():
+                if not restore:
+                    results.append(f"已存在同名重命名文件：{target.name}")
+                    continue
+                results.append(f"检测到同名正常文件 {name}，正在覆盖恢复...")
                 try:
-                    pak_path.unlink()
+                    self.control.check()
+                    target.unlink()
                 except OSError as exc:
                     results.append(f"删除同名文件失败：{exc}")
                     continue
-
-            disabled_path.rename(pak_path)
-            results.append(f"已恢复正常：{disabled_path.name} -> {pak_name}")
-
+            self.control.check()
+            source.rename(target)
+            action = "恢复正常" if restore else "重命名"
+            results.append(f"已{action}：{source.name} -> {target.name}")
         return results
 
-    def get_pak_status(
-        self,
-        game_install_dir: str,
-        pak_names: tuple[str, ...] | list[str] = (
-            "pak-0-2-pakchunk90-WindowsClient.pak",
-            "pak-0-2-pakchunk90optional-WindowsClient.pak",
-        ),
-    ) -> str:
-        """Return 'disabled' if any target pak has .disabled extension, 'normal' if present without .disabled, or 'missing'."""
-        if not game_install_dir:
-            return "unknown"
+
+    def get_pak_status(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> str:
         pak_dir = self.get_paks_dir(game_install_dir)
-        if not pak_dir.is_dir():
+        if not game_install_dir or not pak_dir.is_dir():
             return "unknown"
-
-        disabled_count = 0
-        normal_count = 0
-        for pak_name in pak_names:
-            disabled_path = pak_dir / f"{pak_name}.disabled"
-            pak_path = pak_dir / pak_name
-            if disabled_path.exists():
-                disabled_count += 1
-            elif pak_path.exists():
-                normal_count += 1
-
-        if disabled_count > 0:
+        if any((pak_dir / f"{name}.disabled").exists() for name in pak_names):
             return "disabled"
-        if normal_count > 0:
-            return "normal"
-        return "missing"
+        return "normal" if any((pak_dir / name).exists() for name in pak_names) else "missing"
 
-    def toggle_pak_files(
-        self,
-        game_install_dir: str,
-        pak_names: tuple[str, ...] | list[str] = (
-            "pak-0-2-pakchunk90-WindowsClient.pak",
-            "pak-0-2-pakchunk90optional-WindowsClient.pak",
-        ),
-    ) -> tuple[str, list[str]]:
-        """Toggle pak files between .disabled and normal .pak.
 
-        Returns:
-            ("disabled", results): if files were renamed to .disabled
-            ("restored", results): if files were restored back to normal .pak
-        """
-        status = self.get_pak_status(game_install_dir, pak_names)
-        if status == "disabled":
-            results = self.restore_pak_files(game_install_dir, pak_names)
-            return "restored", results
-        else:
-            results = self.rename_pak_files(game_install_dir, pak_names)
-            return "disabled", results
+    def toggle_pak_files(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> tuple[str, list[str]]:
+        if self.get_pak_status(game_install_dir, pak_names) == "disabled":
+            return "restored", self.restore_pak_files(game_install_dir, pak_names)
+        return "disabled", self.rename_pak_files(game_install_dir, pak_names)
+
 
     def wait_for_wegame_ready(
         self,
@@ -304,14 +242,17 @@ class Workflow:
         current_bound = bound_window  # may be refreshed inside the loop
 
         while time.monotonic() < deadline:
-            QApplication.processEvents()
+            self.control.check()
             try:
+                self.control.check()
                 current_window = self.window_binder.activate(current_bound)
-                time.sleep(0.3)
+                self.control.wait(0.3)
                 position, template_path = self.find_start_button(
                     current_window, template_names, threshold
                 )
                 return position, template_path
+            except ControlInterrupted:
+                raise
             except Exception as exc:
                 last_error = str(exc)
                 # If handle is stale, try re-locating the WeGame window by process id
@@ -322,9 +263,11 @@ class Workflow:
                         )
                         if refreshed is not None and refreshed.handle != current_bound.handle:
                             current_bound = refreshed
+                    except ControlInterrupted:
+                        raise
                     except Exception:
                         pass
-                time.sleep(poll_interval)
+                self.control.wait(poll_interval)
 
         raise TimeoutError(f"等待 WeGame 启动按钮重新出现超时（{timeout:.0f}秒）：{last_error}")
 
@@ -335,8 +278,9 @@ class Workflow:
         threshold: float = 0.78,
     ) -> ElementPosition:
         """Click the '...' (more) button on the WeGame window."""
+        self.control.check()
         current_window = self.window_binder.activate(bound_window)
-        time.sleep(0.3)
+        self.control.wait(0.3)
         template_path = TEMPLATE_DIR / template_name
         if not template_path.exists():
             raise FileNotFoundError(f"缺少 WeGame 更多按钮模板：{template_name}")
@@ -367,7 +311,7 @@ class Workflow:
         best_confidence = 0.0
 
         while time.monotonic() < deadline:
-            QApplication.processEvents()
+            self.control.check()
             current_window = self.window_binder.activate(bound_window)
             result = self.locator.match_by_image(template_path, current_window, threshold)
             best_confidence = max(best_confidence, result.position.confidence)
@@ -381,7 +325,7 @@ class Workflow:
                 self.clicker.click(screen_result.position)
                 return screen_result.position
 
-            time.sleep(0.5)
+            self.control.wait(0.5)
 
         raise RuntimeError(
             f"未能匹配到“游戏资源包管理”菜单项（{template_name}），"
@@ -415,16 +359,17 @@ class Workflow:
         last_scroll_at = 0.0
 
         while time.monotonic() < deadline:
+            self.control.check()
             # Ensure the resource manager window is active so it renders in focus (better match confidence)
             # and receives the scroll events properly.
             resource_window = self.window_binder.bind_by_title("游戏资源包管理")
             if resource_window:
                 try:
                     self.window_binder.activate(resource_window)
+                except ControlInterrupted:
+                    raise
                 except Exception:
                     pass
-
-            QApplication.processEvents()
             result = self.locator.match_on_screen(template_path, threshold)
             best_confidence = max(best_confidence, result.position.confidence)
             if result.matched:
@@ -451,7 +396,7 @@ class Workflow:
                 hwnd_to_scroll = resource_window.handle if resource_window else None
                 self._scroll_active_window_down(scroll_step, hwnd_to_scroll)
 
-            time.sleep(0.3)
+            self.control.wait(0.3)
 
         raise RuntimeError(
             f"未在资源包管理窗口中找到删除长弓溪谷按钮（{template_name}），"
@@ -459,23 +404,34 @@ class Workflow:
         )
 
     def _scroll_active_window_down(self, clicks: int = 3, hwnd: int | None = None) -> None:
-        """Send WM_MOUSEWHEEL scroll-down messages to the specified window or foreground window."""
-        import win32api as _win32api
+        """Send mouse wheel scroll-down messages to the specified window or foreground window.
+
+        Physically moves the mouse to the center of the window to ensure UI frameworks
+        that require mouse-hover (like WeGame's CEF) process the scroll correctly.
+        """
+        import ctypes
         import win32con as _win32con
         import win32gui as _win32gui
 
         try:
+            self.control.check()
             target_hwnd = hwnd or _win32gui.GetForegroundWindow()
             if not target_hwnd:
                 return
+
+            # Find window center
             rect = _win32gui.GetWindowRect(target_hwnd)
             cx = (rect[0] + rect[2]) // 2
             cy = (rect[1] + rect[3]) // 2
-            lparam = _win32api.MAKELONG(cx, cy)
-            # WHEEL_DELTA = 120; negative = downward scroll
+
+            # Move mouse to center
+            ctypes.windll.user32.SetCursorPos(cx, cy)
+
+            # Perform scroll (-120 per click for downward scroll)
             wheel_delta = -120 * clicks
-            wparam = _win32api.MAKELONG(0, wheel_delta & 0xFFFF)
-            _win32gui.PostMessage(target_hwnd, _win32con.WM_MOUSEWHEEL, wparam, lparam)
+            ctypes.windll.user32.mouse_event(_win32con.MOUSEEVENTF_WHEEL, 0, 0, wheel_delta, 0)
+        except ControlInterrupted:
+            raise
         except Exception:
             pass
 

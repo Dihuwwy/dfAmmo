@@ -9,6 +9,7 @@ from typing import Literal
 import win32con
 import win32gui
 
+from scripts.task_control import TaskControl, ControlInterrupted
 from scripts.clicker import Clicker
 from scripts.element_locator import ElementLocator
 from scripts.keyboard import KeyboardController
@@ -71,7 +72,9 @@ class GameNavigator:
         locator: ElementLocator,
         clicker: Clicker,
         keyboard: KeyboardController,
+        control: TaskControl | None = None,
     ) -> None:
+        self.control = control or TaskControl()
         self.template_dir = template_dir
         self.threshold = threshold
         self.step_timeout_seconds = step_timeout_seconds
@@ -176,6 +179,7 @@ class GameNavigator:
 
     def resync_state(self) -> NavigationEvent | None:
         """Scan current game window across candidate steps and align step_index to actual UI."""
+        self.control.check()
         if self.process_id is None or self.finished:
             return None
 
@@ -184,8 +188,11 @@ class GameNavigator:
             if self.bound_window is None:
                 return None
 
+        self.bound_window = self.window_binder.bind_by_handle(self.bound_window.handle)
         try:
             source = self.locator.grab_window_bgr(self.bound_window)
+        except ControlInterrupted:
+            raise
         except Exception:
             return None
 
@@ -261,6 +268,7 @@ class GameNavigator:
         if self.finished or self.process_id is None or self.is_paused:
             return None
 
+        self.control.check()
         now = time.monotonic()
         need_rebind = False
         if self.bound_window is None or not win32gui.IsWindow(self.bound_window.handle):
@@ -287,6 +295,8 @@ class GameNavigator:
             if self.step_index == 0:
                 resync_event = self.resync_state()
                 if resync_event is not None:
+                    if resync_event.status in (NavigationStatus.COMPLETE, NavigationStatus.PAUSED):
+                        return resync_event
                     resync_msg = f" | {resync_event.message}"
 
             return NavigationEvent(
@@ -298,6 +308,7 @@ class GameNavigator:
         if now < self.next_action_at:
             return None
 
+        self.bound_window = self.window_binder.bind_by_handle(self.bound_window.handle)
         if self.step_index >= len(NAVIGATION_STEPS):
             return self._complete()
 
@@ -316,12 +327,14 @@ class GameNavigator:
             matched_result = None
             best_cand_confidence = 0.0
 
+            source = self.locator.grab_window_bgr(self.bound_window)
             for cand_name in candidate_names:
+                self.control.check()
                 tmpl_path = self.template_dir / cand_name
                 if not tmpl_path.exists():
                     continue
-                cand_res = self.locator.match_by_image(
-                    tmpl_path,
+                cand_res = self.locator.match_in_source(
+                    source, tmpl_path,
                     self.bound_window,
                     self.threshold,
                 )
@@ -346,11 +359,13 @@ class GameNavigator:
                     try:
                         self.bound_window = self.window_binder.activate(self.bound_window)
                         self.keyboard.press(win32con.VK_ESCAPE, repeat=1)
-                        time.sleep(0.3)
+                        self.control.wait(0.3)
                         return NavigationEvent(
                             NavigationStatus.RUNNING,
                             "[提示] 未检测到初始模式选择界面（可能处于黑潮爆破等模式大厅），已按 ESC 调出模式菜单...",
                         )
+                    except ControlInterrupted:
+                        raise
                     except Exception:
                         pass
 
@@ -361,6 +376,8 @@ class GameNavigator:
                     try:
                         self.bound_window = self.window_binder.activate(self.bound_window)
                         self.keyboard.press(win32con.VK_TAB, repeat=1)
+                    except ControlInterrupted:
+                        raise
                     except Exception:
                         pass
 
@@ -379,22 +396,33 @@ class GameNavigator:
                 return None
             position = matched_result.position
 
+        recognized_window = self.bound_window
         # Only activate window when ready to perform an action (click or keypress),
         # so polling doesn't repeatedly steal foreground focus from user
         try:
             self.bound_window = self.window_binder.activate(self.bound_window)
-            time.sleep(0.15)
+            self.control.wait(0.15)
+        except ControlInterrupted:
+            raise
         except Exception as exc:
             rebound = self.window_binder.bind_by_process_id(self.process_id)
             if rebound is not None and rebound.handle != self.bound_window.handle:
                 try:
                     self.bound_window = self.window_binder.activate(rebound)
-                    time.sleep(0.15)
+                    self.control.wait(0.15)
+                except ControlInterrupted:
+                    raise
                 except Exception as inner_exc:
                     return self._fail(f"激活游戏窗口失败：{inner_exc}")
             else:
                 return self._fail(f"激活游戏窗口失败：{exc}")
 
+        self.control.check()
+        if position is not None and self.bound_window != recognized_window:
+            if (self.bound_window.right - self.bound_window.left, self.bound_window.bottom - self.bound_window.top) != (recognized_window.right - recognized_window.left, recognized_window.bottom - recognized_window.top):
+                return None
+            from dataclasses import replace
+            position = replace(position, x=position.x + self.bound_window.left - recognized_window.left, y=position.y + self.bound_window.top - recognized_window.top)
         if step.action == "click" and position is not None:
             self.clicker.click(position, self.bound_window.handle)
         elif step.action == "press_sequence" and step.key_sequence:

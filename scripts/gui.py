@@ -16,6 +16,7 @@ from scripts.gui_builder import BuilderMixin
 from scripts.template_capture import TemplateCaptureOverlay
 from scripts.window_binding import BoundWindow
 from scripts.workflow import Workflow
+from scripts.task_runner import TaskRunner
 
 
 class MainWindow(ActionsMixin, BuilderMixin, QWidget):
@@ -34,6 +35,9 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         self.capture_overlay: TemplateCaptureOverlay | None = None
         self.pending_template_name = ""
         self.game_process_deadline = 0.0
+        self.task_runner = TaskRunner(self.workflow.control, self)
+        self.task_runner.busy_changed.connect(self._on_worker_busy_changed)
+        self.task_runner.failed.connect(self._on_worker_failed)
 
         self.game_process_timer = QTimer(self)
         self.game_process_timer.setInterval(self.config.game_process_poll_interval_ms)
@@ -43,14 +47,16 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         self.navigation_timer.setInterval(self.config.navigation_poll_interval_ms)
         self.navigation_timer.timeout.connect(self.advance_game_navigation)
 
-        self._last_hotkey_time = 0.0
-        self.hotkey_registered = False
-        try:
-            self.hotkey_registered = bool(
-                win32gui.RegisterHotKey(int(self.winId()), 1001, 0, win32con.VK_F12)
-            )
-        except Exception:
-            self.hotkey_registered = False
+        self._hotkey_down = False
+        self._registered_hotkeys = set()
+        user32 = ctypes.windll.user32
+        user32.RegisterHotKey.argtypes = [ctypes.wintypes.HWND, ctypes.c_int,
+                                         ctypes.wintypes.UINT, ctypes.wintypes.UINT]
+        user32.RegisterHotKey.restype = ctypes.wintypes.BOOL
+        for hotkey_id, modifiers in ((1001, 0), (1002, win32con.MOD_SHIFT)):
+            if user32.RegisterHotKey(int(self.winId()), hotkey_id,
+                                    modifiers | 0x4000, win32con.VK_F12):
+                self._registered_hotkeys.add(hotkey_id)
 
         self.hotkey_timer = QTimer(self)
         self.hotkey_timer.setInterval(60)
@@ -63,6 +69,23 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         self._build_ui()
         self._init_window_geometry()
         self.write_log("请先绑定 WeGame 主窗口（如游戏已在运行，可直接点击“开始卡邮件”）。")
+        if len(self._registered_hotkeys) < 2:
+            self.write_log("部分全局快捷键注册失败（可能被占用），已启用按键检测备用方式。")
+
+    def _on_worker_busy_changed(self, busy: bool) -> None:
+        running = self.navigation_timer.isActive() or self.game_process_timer.isActive()
+        self.start_card_mail_button.setEnabled(not (busy or running or self.workflow.is_navigation_paused))
+        self.stop_button.setEnabled(busy or running or self.workflow.is_navigation_paused)
+        if not busy and not running and not self.workflow.is_navigation_paused:
+            self.pause_resume_button.setEnabled(False)
+            self.resync_button.setEnabled(False)
+
+    def _on_worker_failed(self, message: str) -> None:
+        self.game_process_timer.stop()
+        self.navigation_timer.stop()
+        self.workflow.cancel_game_navigation()
+        self._set_running_controls(False)
+        self.write_log(f"后台任务失败：{message}")
 
     def _init_window_geometry(self) -> None:
         """Restore previous window geometry/splitter if saved, or compute true content size and center.
@@ -155,26 +178,21 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
             self.main_splitter.setSizes([req_top_h, max(min_log_h, avail - req_top_h)])
 
     def _check_hotkey(self) -> None:
-        now = time_val = win32api.GetTickCount() / 1000.0
-        try:
-            if win32api.GetAsyncKeyState(win32con.VK_F12) & 0x8000:
-                if time_val - self._last_hotkey_time >= 0.35:
-                    self._last_hotkey_time = time_val
-                    shift_down = bool(win32api.GetAsyncKeyState(win32con.VK_SHIFT) & 0x8000)
-                    if shift_down:
-                        self.emergency_stop()
-                    else:
-                        self.toggle_pause_resume()
-        except Exception:
-            pass
+        down = bool(win32api.GetAsyncKeyState(win32con.VK_F12) & 0x8000)
+        if down and not self._hotkey_down:
+            shift = bool(win32api.GetAsyncKeyState(win32con.VK_SHIFT) & 0x8000)
+            hotkey_id = 1002 if shift else 1001
+            if hotkey_id not in self._registered_hotkeys:
+                self.emergency_stop() if shift else self.toggle_pause_resume()
+        self._hotkey_down = down
 
     def nativeEvent(self, event_type, message):
         try:
             msg = ctypes.wintypes.MSG.from_address(int(message))
-            if msg.message == win32con.WM_HOTKEY and msg.wParam == 1001:
-                now = win32api.GetTickCount() / 1000.0
-                if now - self._last_hotkey_time >= 0.35:
-                    self._last_hotkey_time = now
+            if msg.message == win32con.WM_HOTKEY and msg.wParam in (1001, 1002):
+                if msg.wParam == 1002:
+                    self.emergency_stop()
+                else:
                     self.toggle_pause_resume()
                 return True, 0
         except Exception:
@@ -186,10 +204,14 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         settings.setValue("geometry", self.saveGeometry())
         settings.setValue("splitter", self.main_splitter.saveState())
 
-        if getattr(self, "hotkey_registered", False):
+        self.game_process_timer.stop()
+        self.navigation_timer.stop()
+        self.hotkey_timer.stop()
+        self.task_runner.shutdown()
+        self.workflow.cancel_game_navigation()
+        for hotkey_id in self._registered_hotkeys:
             try:
-                win32gui.UnregisterHotKey(int(self.winId()), 1001)
+                win32gui.UnregisterHotKey(int(self.winId()), hotkey_id)
             except Exception:
                 pass
         super().closeEvent(event)
-

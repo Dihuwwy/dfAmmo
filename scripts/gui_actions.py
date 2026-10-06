@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import subprocess
 import time
-from collections.abc import Callable
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
-from typing import Any
 
 import win32gui
 
@@ -23,10 +22,14 @@ from PySide6.QtWidgets import (
 from scripts.game_navigation import NAVIGATION_STEPS, NavigationStatus
 from scripts.template_capture import TemplateCaptureOverlay
 from scripts.workflow import Workflow
+from scripts.task_runner import background_action
+from scripts.task_control import ControlInterrupted, TaskPaused
 
 
 class ActionsMixin:
     """Action handlers, business workflows, and debug runner mixin for MainWindow."""
+
+    _wegame_step_ids = ("wait_wegame", "click_more", "assets_manage", "delete_map", "restart_game")
 
     # ── UI State Helpers ─────────────────────────────────────────────────────
 
@@ -36,41 +39,74 @@ class ActionsMixin:
         widget.style().polish(widget)
         widget.update()
 
+    def _set_property(self, widget, name, value):
+        if widget.property(name) != value:
+            widget.setProperty(name, value)
+            self._repaint(widget)
+
     def _set_badge(self, badge: QLabel, text: str, state: str) -> None:
         """Update badge text and dynamic state property with instant stylesheet polish."""
         badge.setText(text)
-        badge.setProperty("state", state)
-        self._repaint(badge)
+        self._set_property(badge, "state", state)
 
     def _set_running_controls(self, running: bool) -> None:
         """Update action buttons enable/disable states for start/stop cycles."""
-        self.start_card_mail_button.setEnabled(not running)
+        self.start_card_mail_button.setEnabled(not running and not self.task_runner.busy)
         self.pause_resume_button.setEnabled(running)
         self._set_pause_button_state(is_paused=False)
-        self.stop_button.setEnabled(running)
+        self.stop_button.setEnabled(running or self.task_runner.busy)
         self.resync_button.setEnabled(running)
 
-    def _run_debug_step(
-        self,
-        step_id: str,
-        start_msg: str,
-        action_fn: Callable[[], Any],
-        success_msg: Callable[[Any], str] | str,
-        fail_label: str,
-    ) -> None:
-        """Generic runner for WeGame debug steps, unifying state update and logging."""
+    @background_action
+    def _run_debug_step(self, step_id, start_msg, action_fn, success_msg, fail_label):
         if not self._dbg_require_bound():
-            return
+            return False
+        self.workflow.control.paused.clear()
         self.set_step_state(step_id, "running")
         self.write_log(f"调试：{start_msg}")
         try:
-            result = action_fn()
-            self.set_step_state(step_id, "success")
-            msg = success_msg(result) if callable(success_msg) else success_msg
-            self.write_log(f"调试：{msg}")
+            result = yield action_fn
+        except ControlInterrupted:
+            raise
         except Exception as exc:
             self.set_step_state(step_id, "failed", str(exc))
             self.write_log(f"调试：{fail_label}失败：{exc}")
+            return False
+        self.set_step_state(step_id, "success")
+        self.write_log(f"调试：{success_msg(result) if callable(success_msg) else success_msg}")
+        return True
+
+    def _wegame_steps(self):
+        """Shared actions and messages for single-step and continuous execution."""
+        wf, cfg, window = self.workflow, self.config, self.bound_window
+        threshold = cfg.template_match_threshold
+        return {
+            "wait_wegame": ("等待 WeGame 启动按钮出现...",
+                partial(wf.wait_for_wegame_ready, window, cfg.start_button_templates,
+                        threshold, timeout=cfg.wegame_ready_timeout_seconds),
+                "WeGame 启动按钮已出现。", "等待 WeGame 启动按钮", 0),
+            "click_more": ("点击 WeGame 更多按钮（...）...",
+                partial(wf.click_wegame_more, window, cfg.wegame_more_template, threshold),
+                "已点击更多按钮。", "点击更多按钮", 0),
+            "assets_manage": ("打开游戏资源包管理...",
+                partial(wf.click_assets_manage, window, cfg.wegame_assets_manage_template, threshold),
+                "已打开资源包管理。", "打开资源包管理", 0.5),
+            "delete_map": ("查找并删除长弓溪谷（会自动向下滚动）...",
+                partial(wf.delete_changgong_map, cfg.wegame_delete_map_template,
+                        threshold, timeout=cfg.delete_map_timeout_seconds),
+                lambda pos: f"已点击删除长弓溪谷 (x={pos.x}, y={pos.y})。", "删除长弓溪谷", 1.0),
+            "restart_game": ("重新启动游戏...",
+                partial(wf.click_start_button, window, cfg.start_button_templates, threshold),
+                lambda ret: f"已点击启动按钮 {ret[1].name} (x={ret[0].x}, y={ret[0].y})。",
+                "重新启动游戏", 1.2),
+        }
+
+    def _dbg_wegame(self, step_id):
+        if self.is_continuous_mode:
+            self._run_wegame_post_process(start_step=step_id)
+        else:
+            self._run_debug_step(step_id, *self._wegame_steps()[step_id][:4])
+
 
     # ── Log Management ───────────────────────────────────────────────────────
 
@@ -108,8 +144,7 @@ class ActionsMixin:
 
         self.log_output.setUpdatesEnabled(False)
         try:
-            for line in lines:
-                self.log_output.appendPlainText(line)
+            self.log_output.appendPlainText("\n".join(lines))
         finally:
             self.log_output.setUpdatesEnabled(True)
             self.log_output.update()
@@ -162,6 +197,7 @@ class ActionsMixin:
         """Release current bound window and stop running timers."""
         self.game_process_timer.stop()
         self.navigation_timer.stop()
+        self.task_runner.cancel()
         self.workflow.cancel_game_navigation()
         self._set_running_controls(False)
         self.bound_window = None
@@ -183,53 +219,70 @@ class ActionsMixin:
     # ── Automation Control ───────────────────────────────────────────────────
 
     def _set_pause_button_state(self, is_paused: bool) -> None:
-        if is_paused:
-            self.pause_resume_button.setText("继续 (F12)")
-            self.pause_resume_button.setProperty("paused", "true")
-        else:
-            self.pause_resume_button.setText("暂停 (F12)")
-            self.pause_resume_button.setProperty("paused", "false")
-        self.pause_resume_button.style().unpolish(self.pause_resume_button)
-        self.pause_resume_button.style().polish(self.pause_resume_button)
-        self.pause_resume_button.update()
+        self.pause_resume_button.setText("继续 (F12)" if is_paused else "暂停 (F12)")
+        self._set_property(self.pause_resume_button, "paused", "true" if is_paused else "false")
+
 
     def toggle_pause_resume(self) -> None:
-        """Pause or resume the in-game navigation flow."""
-        if not (self.navigation_timer.isActive() or self.workflow.is_navigation_paused):
+        if not (self.navigation_timer.isActive() or self.workflow.is_navigation_paused
+                or (self.task_runner.busy and not self.workflow.game_navigator.finished)):
             return
-
-        is_now_paused = self.workflow.toggle_navigation_pause()
-        self._set_pause_button_state(is_paused=is_now_paused)
-
-        if is_now_paused:
-            self.write_log("[流程暂停] 自动化已暂停，按 F12 继续，或使用单步调试。")
-            if hasattr(self, "workflow_status_badge"):
-                self._set_badge(self.workflow_status_badge, "流程已暂停 (F12 继续)", "running")
+        if not self.workflow.is_navigation_paused:
+            self.workflow.control.paused.set()
+            self.workflow.game_navigator.pause()
+            self.navigation_timer.stop()
+            self._set_pause_button_state(True)
+            self.write_log("[流程暂停] 按 F12 继续，或使用单步调试。")
+        elif self.task_runner.busy:
+            self.write_log("正在暂停当前操作，请稍候再继续。")
         else:
-            self.write_log("[流程继续] 自动化继续推进...")
-            if hasattr(self, "workflow_status_badge"):
-                self._set_badge(self.workflow_status_badge, "正在执行中...", "running")
-            if not self.navigation_timer.isActive():
-                self.navigation_timer.start()
+            self.workflow.control.paused.clear()
+            self._resume_navigation()
 
-    def manual_resync(self) -> None:
-        """Manually trigger screen recognition and step advance."""
+    @background_action
+    def _resume_navigation(self):
+        try:
+            event = yield self.workflow.resume_game_navigation
+        except TaskPaused:
+            self.workflow.game_navigator.finished = False
+            self.workflow.game_navigator.pause()
+            self._set_pause_button_state(True)
+            return
+        yield from self._advance_game_navigation_result(event)
+        self._set_pause_button_state(self.workflow.is_navigation_paused)
+        if not self.workflow.is_navigation_paused and not self.workflow.game_navigator.finished:
+            self.navigation_timer.start()
+
+    @background_action
+    def manual_resync(self):
         if not self.workflow.game_navigator.bound_window:
             self.write_log("[重同步] 当前没有正在导航的游戏窗口。")
             return
         self.write_log("[重同步] 手动重新对齐画面状态...")
-        self.advance_game_navigation()
+        was_paused = self.workflow.is_navigation_paused
+        self.workflow.control.paused.clear()
+        try:
+            event = yield self.workflow.resync_game_navigation
+            if event is not None:
+                yield from self._advance_game_navigation_result(event)
+        finally:
+            if was_paused and not self.workflow.game_navigator.finished:
+                self.workflow.game_navigator.pause()
+                self.workflow.control.paused.set()
 
     def emergency_stop(self) -> None:
         """Stop all automation tasks and bring tool window to foreground."""
         was_running = (
-            self.navigation_timer.isActive()
+            self.task_runner.busy
+            or self.navigation_timer.isActive()
             or self.game_process_timer.isActive()
             or self.workflow.is_navigation_paused
         )
         self.game_process_timer.stop()
         self.navigation_timer.stop()
+        self.task_runner.cancel()
         self.workflow.cancel_game_navigation()
+        self._continue_after_navigation = False
         self._set_running_controls(False)
 
         self.showNormal()
@@ -359,23 +412,18 @@ class ActionsMixin:
 
     # ── Core Workflow Actions ────────────────────────────────────────────────
 
-    def start_card_mail(self) -> None:
+    @background_action
+    def start_card_mail(self):
         self.reset_all_step_states()
         self._continue_after_navigation = True
-        game_process = self.workflow.find_game_process()
+        self.workflow.control.paused.clear()
+        game_process = (yield lambda: self.workflow.find_game_process())
         if game_process is not None:
             self.write_log(
                 "检测到三角洲行动游戏已在运行中："
                 f"{game_process.name} | pid={game_process.process_id}，直接接管导航！"
             )
-            self._set_running_controls(True)
-
-            self.set_step_state("nav_game", "running")
-            self.update_nav_substep_pills(0)
-            event = self.workflow.start_game_navigation(game_process)
-            self.write_log(event.message)
-            self.navigation_timer.start()
-            self.advance_game_navigation()
+            yield from self._begin_navigation(game_process)
             return
 
         if self.bound_window is None:
@@ -385,18 +433,19 @@ class ActionsMixin:
 
         self.write_log("准备识别并点击启动元素...")
         self.hide()
-        QApplication.processEvents()
 
         try:
-            position, template_path = self.workflow.click_start_button(
+            position, template_path = (yield lambda: self.workflow.click_start_button(
                 self.bound_window,
                 self.config.start_button_templates,
                 self.config.template_match_threshold,
-            )
+            ))
+        except ControlInterrupted:
+            raise
         except Exception as exc:
             self.show()
             self.write_log(f"启动按钮匹配/点击失败：{exc}")
-            QMessageBox.warning(self, "执行失败", str(exc))
+            self._set_badge(self.workflow_status_badge, "启动失败，请查看日志", "failed")
             return
 
         self.show()
@@ -411,22 +460,19 @@ class ActionsMixin:
         if hasattr(self, "workflow_status_badge"):
             self._set_badge(self.workflow_status_badge, "等待游戏启动...", "running")
         self.game_process_timer.start()
-        self.check_game_process()
+        yield from self._check_game_process_tasks()
 
-    def check_game_process(self) -> None:
-        game_process = self.workflow.find_game_process()
+    @background_action
+    def check_game_process(self):
+        self.workflow.control.paused.clear()
+        game_process = (yield lambda: self.workflow.find_game_process())
         if game_process is not None:
             self.game_process_timer.stop()
             self.write_log(
                 "已找到三角洲行动游戏进程："
                 f"{game_process.name} | pid={game_process.process_id}"
             )
-            self.set_step_state("nav_game", "running")
-            self.update_nav_substep_pills(0)
-            event = self.workflow.start_game_navigation(game_process)
-            self.write_log(event.message)
-            self.navigation_timer.start()
-            self.advance_game_navigation()
+            yield from self._begin_navigation(game_process)
             return
 
         if time.monotonic() >= self.game_process_deadline:
@@ -437,16 +483,24 @@ class ActionsMixin:
             )
             self.write_log(message)
             self.set_step_state("nav_game", "failed", "未检测到游戏进程")
-            QMessageBox.warning(self, "超时", message)
             if hasattr(self, "workflow_status_badge"):
                 self._set_badge(self.workflow_status_badge, "等待启动超时", "failed")
 
-    def advance_game_navigation(self) -> None:
+    @background_action
+    def advance_game_navigation(self):
         cur_step_idx = getattr(self.workflow.game_navigator, "step_index", 0)
         self.update_nav_substep_pills(cur_step_idx)
 
         try:
-            event = self.workflow.advance_game_navigation()
+            event = (yield lambda: self.workflow.advance_game_navigation())
+        except TaskPaused:
+            self.navigation_timer.stop()
+            self.workflow.game_navigator.finished = False
+            self.workflow.game_navigator.pause()
+            self._set_pause_button_state(True)
+            return
+        except ControlInterrupted:
+            raise
         except Exception as exc:
             self.navigation_timer.stop()
             self._set_running_controls(False)
@@ -454,11 +508,18 @@ class ActionsMixin:
             self.write_log(f"自动导航失败：{exc}")
             return
 
+        yield from self._advance_game_navigation_result(event)
+
+    def _advance_game_navigation_result(self, event):
+        cur_step_idx = self.workflow.game_navigator.step_index
+        self.update_nav_substep_pills(cur_step_idx)
         if event is None:
             return
 
         self.write_log(event.message)
         if event.status == NavigationStatus.PAUSED:
+            self.navigation_timer.stop()
+            self.workflow.control.paused.set()
             self._set_pause_button_state(is_paused=True)
             if hasattr(self, "workflow_status_badge"):
                 self._set_badge(
@@ -479,12 +540,14 @@ class ActionsMixin:
             if event.status == NavigationStatus.COMPLETE:
                 self.set_step_state("nav_game", "success")
                 self.update_nav_substep_pills(len(self.sub_step_pills))
-                process_exited, process_message = self.workflow.kill_game_process()
+                process_exited, process_message = (yield lambda: self.workflow.kill_game_process())
                 self.write_log(process_message)
 
                 if self.bound_window is not None:
                     try:
-                        self.workflow.window_binder.activate(self.bound_window)
+                        (yield lambda: self.workflow.window_binder.activate(self.bound_window))
+                    except ControlInterrupted:
+                        raise
                     except Exception as exc:
                         self.write_log(f"返回 WeGame 窗口失败：{exc}")
                     else:
@@ -507,10 +570,10 @@ class ActionsMixin:
                     if paks_path is not None:
                         self.set_step_state("rename_pak", "running")
                         try:
-                            results = self.workflow.rename_pak_files(
+                            results = (yield lambda: self.workflow.rename_pak_files(
                                 self.config.game_install_dir,
                                 self.config.pak_file_names,
-                            )
+                            ))
                             self._sync_pak_button_state()
                             self.set_step_state("rename_pak", "success")
                         except OSError as exc:
@@ -523,7 +586,7 @@ class ActionsMixin:
                     self.write_log("未配置游戏安装目录，跳过 pak 文件重命名。")
 
                 if self.bound_window is not None:
-                    self._run_wegame_post_process()
+                    yield from self._run_wegame_post_process_tasks()
 
                 if paks_path is not None:
                     try:
@@ -533,149 +596,45 @@ class ActionsMixin:
                     else:
                         self.write_log(f"已打开 Paks 目录：{paks_path}")
 
-    def _run_wegame_post_process(self, start_step: str = "wait_wegame") -> None:
-        if self.bound_window is None:
-            self.write_log("调试：需要先绑定 WeGame 窗口才能执行后续流程。")
+    @background_action
+    def _run_wegame_post_process(self, start_step: str = "wait_wegame"):
+        if not self._dbg_require_bound():
             return
+        self.workflow.control.paused.clear()
+        steps = self._wegame_steps()
+        order = list(steps)
+        start_index = order.index(start_step) if start_step in steps else 0
+        for step_id in order[start_index:]:
+            start_msg, action, success_msg, fail_label, delay = steps[step_id]
+            if delay:
+                yield partial(self.workflow.control.wait, delay)
+            succeeded = yield from self._run_debug_step_tasks(
+                step_id, start_msg, action, success_msg, fail_label)
+            if not succeeded:
+                return
+        self._set_badge(self.workflow_status_badge, "全流程自动化已顺利完成", "success")
 
-        order = ["wait_wegame", "click_more", "assets_manage", "delete_map", "restart_game"]
-        start_idx = order.index(start_step) if start_step in order else 0
-        current_step = start_step if start_step in order else "wait_wegame"
-
-        try:
-            if start_idx <= 0:
-                current_step = "wait_wegame"
-                self.set_step_state("wait_wegame", "running")
-                self.write_log("正在等待 WeGame 启动按钮重新出现...")
-                QApplication.processEvents()
-
-                self.workflow.wait_for_wegame_ready(
-                    self.bound_window,
-                    self.config.start_button_templates,
-                    self.config.template_match_threshold,
-                    timeout=getattr(self.config, "wegame_ready_timeout_seconds", 60),
-                )
-                self.set_step_state("wait_wegame", "success")
-                self.write_log("WeGame 启动按钮已重新出现。")
-                QApplication.processEvents()
-
-            if start_idx <= 1:
-                current_step = "click_more"
-                self.set_step_state("click_more", "running")
-                self.write_log("正在点击更多选项（...）...")
-                self.workflow.click_wegame_more(
-                    self.bound_window,
-                    getattr(self.config, "wegame_more_template", "wegame_more.png"),
-                    self.config.template_match_threshold,
-                )
-                self.set_step_state("click_more", "success")
-                self.write_log("已点击更多选项。")
-                QApplication.processEvents()
-                time.sleep(0.5)
-
-            if start_idx <= 2:
-                current_step = "assets_manage"
-                self.set_step_state("assets_manage", "running")
-                self.write_log("正在打开游戏资源包管理...")
-                self.workflow.click_assets_manage(
-                    self.bound_window,
-                    getattr(self.config, "wegame_assets_manage_template", "wegame_assets_manage.png"),
-                    self.config.template_match_threshold,
-                )
-                self.set_step_state("assets_manage", "success")
-                self.write_log("已打开游戏资源包管理。")
-                QApplication.processEvents()
-                time.sleep(1.0)
-
-            if start_idx <= 3:
-                current_step = "delete_map"
-                self.set_step_state("delete_map", "running")
-                self.write_log("正在等待资源管理窗口并删除长弓溪谷资源包...")
-                pos = self.workflow.delete_changgong_map(
-                    getattr(self.config, "wegame_delete_map_template", "wegame_delete_map.png"),
-                    self.config.template_match_threshold,
-                    timeout=getattr(self.config, "delete_map_timeout_seconds", 30),
-                )
-                self.set_step_state("delete_map", "success")
-                self.write_log(f"已点击删除长弓溪谷资源包（x={pos.x}, y={pos.y}）。")
-                QApplication.processEvents()
-
-            if start_idx <= 4:
-                time.sleep(1.2)
-                current_step = "restart_game"
-                self.set_step_state("restart_game", "running")
-                self.write_log("切回 WeGame 窗口，准备重新拉起游戏...")
-                position, template_path = self.workflow.click_start_button(
-                    self.bound_window,
-                    self.config.start_button_templates,
-                    self.config.template_match_threshold,
-                )
-                self.set_step_state("restart_game", "success")
-                self.write_log(
-                    f"已重新点击启动按钮，游戏正在拉起：{template_path.name} "
-                    f"(x={position.x}, y={position.y})"
-                )
-                if hasattr(self, "workflow_status_badge"):
-                    self._set_badge(self.workflow_status_badge, "全流程自动化已顺利完成", "success")
-        except Exception as exc:
-            self.set_step_state(current_step, "failed", str(exc))
-            self.write_log(f"WeGame 删包或重开失败：{exc}")
 
     # ── Debug & Step Status Management ───────────────────────────────────────
 
     def set_step_state(self, step_id: str, state: str, detail: str = "") -> None:
-        """Update step button state ('idle' | 'running' | 'success' | 'failed') and global badge."""
-        step_info = getattr(self, "_step_buttons", {}).get(step_id)
-        title = step_info["title"] if step_info else step_id
-        if step_info:
-            btn = step_info["button"]
-            base_text = step_info["base_text"]
+        info = self._step_buttons.get(step_id)
+        title = info["title"] if info else step_id
+        if info:
+            text = {"running": f"{title}...", "success": f"✓ {title}",
+                    "failed": f"! {title}"}.get(state, info["base_text"])
+            info["button"].setText(text)
+            self._set_property(info["button"], "stepState", state)
+        dot = (self.step1_dot if step_id == "nav_game" else self.step2_dot
+               if step_id in ("rename_pak", "open_paks") else self.step3_dot
+               if step_id in self._wegame_step_ids else None)
+        if dot is not None:
+            self._set_property(dot, "state", state)
+        prefix = {"running": "正在执行", "success": "步骤完成", "failed": "步骤失败"}
+        text = f"{prefix[state]}：{title}" if state in prefix else "待命就绪"
+        self._set_badge(self.workflow_status_badge, text, state if state in prefix else "idle")
+        self.workflow_status_badge.setToolTip(f"失败详情：{detail}" if state == "failed" and detail else "")
 
-            btn.setProperty("stepState", state)
-            if state == "running":
-                btn.setText(f"{title}...")
-            elif state == "success":
-                btn.setText(f"✓ {title}")
-            elif state == "failed":
-                btn.setText(f"! {title}")
-            else:
-                btn.setText(base_text)
-
-            self._repaint(btn)
-
-        dot_to_update = None
-        if step_id == "nav_game":
-            dot_to_update = getattr(self, "step1_dot", None)
-        elif step_id in ("rename_pak", "open_paks"):
-            dot_to_update = getattr(self, "step2_dot", None)
-        elif step_id in ("wait_wegame", "click_more", "assets_manage", "delete_map", "restart_game"):
-            dot_to_update = getattr(self, "step3_dot", None)
-
-        if dot_to_update is not None:
-            dot_to_update.setProperty("state", state)
-            self._repaint(dot_to_update)
-
-        if hasattr(self, "workflow_status_badge"):
-            if state == "running":
-                badge_text = f"正在执行：{title}"
-                badge_state = "running"
-            elif state == "success":
-                badge_text = f"步骤完成：{title}"
-                badge_state = "success"
-            elif state == "failed":
-                badge_text = f"步骤失败：{title}"
-                badge_state = "failed"
-            else:
-                badge_text = "待命就绪"
-                badge_state = "idle"
-
-            self._set_badge(self.workflow_status_badge, badge_text, badge_state)
-            if state == "failed" and detail:
-                self.workflow_status_badge.setToolTip(f"失败详情：{detail}")
-            else:
-                self.workflow_status_badge.setToolTip("")
-
-        QApplication.processEvents()
 
     def update_nav_substep_pills(self, active_index: int) -> None:
         """Update navigation sub-step pills: done, active, or idle."""
@@ -688,9 +647,9 @@ class ActionsMixin:
                 pill_state = "active"
             else:
                 pill_state = ""
-            pill.setProperty("pillState", pill_state)
-            self._repaint(pill)
-        QApplication.processEvents()
+            if pill.property("pillState") != pill_state:
+                pill.setProperty("pillState", pill_state)
+                self._repaint(pill)
 
     def reset_all_step_states(self) -> None:
         """Reset all buttons and sub-step pills to idle."""
@@ -710,7 +669,6 @@ class ActionsMixin:
             self._set_badge(self.workflow_status_badge, "● 待命就绪", "idle")
 
         self._sync_pak_button_state()
-        QApplication.processEvents()
 
     @property
     def is_continuous_mode(self) -> bool:
@@ -736,9 +694,11 @@ class ActionsMixin:
             return False
         return True
 
-    def _dbg_takeover_navigation(self) -> None:
+    @background_action
+    def _dbg_takeover_navigation(self):
         """Resume game navigation and auto-align with the current game screen."""
-        game_process = self.workflow.find_game_process()
+        self.workflow.control.paused.clear()
+        game_process = (yield lambda: self.workflow.find_game_process())
         if game_process is None:
             self.write_log("调试：未检测到三角洲行动游戏进程，请先启动游戏再使用此功能。")
             self.set_step_state("nav_game", "failed", "未检测到游戏进程")
@@ -753,15 +713,13 @@ class ActionsMixin:
             self.write_log("调试：已开启【连续模式】，导航完成后将自动衔接后续步骤。")
         else:
             self.write_log("调试：当前为【单步模式】，导航完成后将停在此步。")
-        event = self.workflow.start_game_navigation(game_process)
-        self.write_log(event.message)
-        self.navigation_timer.start()
-        self._set_running_controls(True)
-        self.advance_game_navigation()
+        yield from self._begin_navigation(game_process)
 
-    def _on_step_pill_clicked(self, step_index: int) -> None:
+    @background_action
+    def _on_step_pill_clicked(self, step_index: int):
         """Directly jump to and execute the selected navigation step."""
-        game_process = self.workflow.find_game_process()
+        self.workflow.control.paused.clear()
+        game_process = (yield lambda: self.workflow.find_game_process())
         if game_process is None:
             self.write_log("未检测到三角洲行动游戏进程，请先启动游戏再点击步骤跳转。")
             return
@@ -772,140 +730,64 @@ class ActionsMixin:
         )
         self._continue_after_navigation = self.is_continuous_mode
 
-        self.workflow._game_process = game_process
-        if (
-            self.workflow.game_navigator.process_id != game_process.process_id
-            or self.workflow.game_navigator.bound_window is None
-        ):
-            event = self.workflow.start_game_navigation(
-                game_process, initial_step=step_index
-            )
-            self.write_log(event.message)
-        else:
-            event = self.workflow.jump_to_navigation_step(step_index)
-            self.write_log(event.message)
+        yield from self._begin_navigation(game_process, step_index, jump=True)
 
+    def _begin_navigation(self, game_process, initial_step=0, jump=False):
+        wf = self.workflow
+        wf._game_process = game_process
+        navigator = wf.game_navigator
+        if jump and navigator.process_id == game_process.process_id and navigator.bound_window:
+            action = partial(wf.jump_to_navigation_step, initial_step)
+        else:
+            action = partial(wf.start_game_navigation, game_process, initial_step=initial_step)
         self._set_running_controls(True)
         self.set_step_state("nav_game", "running")
-        self.update_nav_substep_pills(step_index)
-
-        if not self.navigation_timer.isActive():
-            self.navigation_timer.start()
-        self.advance_game_navigation()
+        self.update_nav_substep_pills(initial_step)
+        event = yield action
+        self.write_log(event.message)
+        self.navigation_timer.start()
+        yield from self._advance_game_navigation_tasks()
 
     def _dbg_wait_wegame(self) -> None:
-        if self.is_continuous_mode:
-            self._run_wegame_post_process(start_step="wait_wegame")
-            return
-        self._run_debug_step(
-            step_id="wait_wegame",
-            start_msg="等待 WeGame 启动按钮出现...",
-            action_fn=lambda: self.workflow.wait_for_wegame_ready(
-                self.bound_window,
-                self.config.start_button_templates,
-                self.config.template_match_threshold,
-                timeout=getattr(self.config, "wegame_ready_timeout_seconds", 60),
-            ),
-            success_msg="WeGame 启动按钮已出现。",
-            fail_label="等待 WeGame 启动按钮",
-        )
+        self._dbg_wegame("wait_wegame")
+
 
     def _dbg_click_more(self) -> None:
-        if self.is_continuous_mode:
-            self._run_wegame_post_process(start_step="click_more")
-            return
-        self._run_debug_step(
-            step_id="click_more",
-            start_msg="点击 WeGame 更多按钮（...）...",
-            action_fn=lambda: self.workflow.click_wegame_more(
-                self.bound_window,
-                getattr(self.config, "wegame_more_template", "wegame_more.png"),
-                self.config.template_match_threshold,
-            ),
-            success_msg=lambda pos: f"已点击更多按钮 (x={pos.x}, y={pos.y})。",
-            fail_label="点击更多按钮",
-        )
+        self._dbg_wegame("click_more")
+
 
     def _dbg_assets_manage(self) -> None:
-        if self.is_continuous_mode:
-            self._run_wegame_post_process(start_step="assets_manage")
-            return
-        self._run_debug_step(
-            step_id="assets_manage",
-            start_msg="点击游戏资源包管理...",
-            action_fn=lambda: self.workflow.click_assets_manage(
-                self.bound_window,
-                getattr(self.config, "wegame_assets_manage_template", "wegame_assets_manage.png"),
-                self.config.template_match_threshold,
-            ),
-            success_msg=lambda pos: f"已打开资源包管理 (x={pos.x}, y={pos.y})。",
-            fail_label="打开资源包管理",
-        )
+        self._dbg_wegame("assets_manage")
+
 
     def _dbg_delete_changgong(self) -> None:
-        if self.is_continuous_mode:
-            self._run_wegame_post_process(start_step="delete_map")
-            return
-        self._run_debug_step(
-            step_id="delete_map",
-            start_msg="在资源管理窗口中查找并删除长弓溪谷（会自动向下滚动）...",
-            action_fn=lambda: self.workflow.delete_changgong_map(
-                getattr(self.config, "wegame_delete_map_template", "wegame_delete_map.png"),
-                self.config.template_match_threshold,
-                timeout=getattr(self.config, "delete_map_timeout_seconds", 30),
-            ),
-            success_msg=lambda pos: f"已点击删除长弓溪谷 (x={pos.x}, y={pos.y})。",
-            fail_label="删除长弓溪谷",
-        )
+        self._dbg_wegame("delete_map")
+
 
     def _dbg_restart_game(self) -> None:
-        if self.is_continuous_mode:
-            self._run_wegame_post_process(start_step="restart_game")
-            return
-        self._run_debug_step(
-            step_id="restart_game",
-            start_msg="点击 WeGame 启动按钮重新启动游戏...",
-            action_fn=lambda: self.workflow.click_start_button(
-                self.bound_window,
-                self.config.start_button_templates,
-                self.config.template_match_threshold,
-            ),
-            success_msg=lambda ret: f"已点击启动按钮 {ret[1].name} (x={ret[0].x}, y={ret[0].y})。",
-            fail_label="重新启动游戏",
-        )
+        self._dbg_wegame("restart_game")
+
 
     def _sync_pak_button_state(self) -> None:
-        """Inspect actual disk files and sync the pak button label and tooltip."""
         if not hasattr(self, "dbg_rename_pak_btn"):
-            return
-        status = self.workflow.get_pak_status(
-            self.config.game_install_dir,
-            self.config.pak_file_names,
-        )
-        if status == "disabled":
-            text = "恢复 Pak (移除 .disabled)"
-            tooltip = "当前 Pak 文件已被屏蔽（重命名为 .disabled），点击恢复为正常 .pak 文件"
-            self.dbg_rename_pak_btn.setText(text)
-            self.dbg_rename_pak_btn.setToolTip(tooltip)
-            if hasattr(self, "_step_buttons") and "rename_pak" in self._step_buttons:
-                self._step_buttons["rename_pak"]["base_text"] = text
-                self._step_buttons["rename_pak"]["title"] = "恢复 Pak"
-            self.dbg_rename_pak_btn.setProperty("stepState", "success")
-        else:
-            text = "屏蔽 Pak (重命名 .disabled)"
-            tooltip = "重命名长弓溪谷 Pak 文件为 .disabled 状态以屏蔽加载（再点一次可恢复正常）"
-            self.dbg_rename_pak_btn.setText(text)
-            self.dbg_rename_pak_btn.setToolTip(tooltip)
-            if hasattr(self, "_step_buttons") and "rename_pak" in self._step_buttons:
-                self._step_buttons["rename_pak"]["base_text"] = text
-                self._step_buttons["rename_pak"]["title"] = "屏蔽 Pak"
-            current_state = self.dbg_rename_pak_btn.property("stepState")
-            if current_state not in ("running", "failed"):
-                self.dbg_rename_pak_btn.setProperty("stepState", "idle")
+            return  # Called during UI construction.
+        disabled = self.workflow.get_pak_status(
+            self.config.game_install_dir, self.config.pak_file_names) == "disabled"
+        title = "恢复 Pak" if disabled else "屏蔽 Pak"
+        text = f"{title} (移除 .disabled)" if disabled else f"{title} (重命名 .disabled)"
+        button = self.dbg_rename_pak_btn
+        button.setText(text)
+        button.setToolTip("点击恢复为正常 .pak 文件" if disabled else "点击重命名为 .disabled，再点一次可恢复")
+        if "rename_pak" in getattr(self, "_step_buttons", {}):
+            self._step_buttons["rename_pak"].update(base_text=text, title=title)
+        state = button.property("stepState")
+        if disabled or state not in ("running", "failed"):
+            self._set_property(button, "stepState", "success" if disabled else "idle")
 
-        self._repaint(self.dbg_rename_pak_btn)
 
-    def _dbg_rename_pak(self) -> None:
+    @background_action
+    def _dbg_rename_pak(self):
+        self.workflow.control.paused.clear()
         if not self.config.game_install_dir:
             self.write_log("调试：未配置游戏安装目录，请先填写安装目录。")
             self.set_step_state("rename_pak", "failed", "未配置游戏安装目录")
@@ -913,17 +795,17 @@ class ActionsMixin:
 
         self.set_step_state("rename_pak", "running")
         try:
-            action, results = self.workflow.toggle_pak_files(
+            action, results = (yield lambda: self.workflow.toggle_pak_files(
                 self.config.game_install_dir,
                 self.config.pak_file_names,
-            )
+            ))
             if action == "disabled":
                 self.set_step_state("rename_pak", "success")
                 self.write_log("调试：【已屏蔽 Pak】已重命名为 .disabled 状态（再点一次恢复正常）。")
                 if self.is_continuous_mode:
                     self.write_log("连续模式：已屏蔽 Pak，继续执行阶段 3 WeGame 流程...")
                     if self.bound_window is not None:
-                        self._run_wegame_post_process()
+                        yield from self._run_wegame_post_process_tasks()
                     else:
                         self.write_log("调试：未绑定 WeGame 窗口，无法继续执行阶段 3。")
             else:
@@ -938,6 +820,8 @@ class ActionsMixin:
 
             for msg in results:
                 self.write_log(f"  └─ {msg}")
+        except ControlInterrupted:
+            raise
         except Exception as exc:
             self.set_step_state("rename_pak", "failed", str(exc))
             self.write_log(f"调试：操作 pak 文件失败：{exc}")
@@ -957,3 +841,8 @@ class ActionsMixin:
         except OSError as exc:
             self.set_step_state("open_paks", "failed", str(exc))
             self.write_log(f"调试：打开 Paks 目录失败：{exc}")
+
+    _run_debug_step_tasks = _run_debug_step.__wrapped__
+    _advance_game_navigation_tasks = advance_game_navigation.__wrapped__
+    _check_game_process_tasks = check_game_process.__wrapped__
+    _run_wegame_post_process_tasks = _run_wegame_post_process.__wrapped__
