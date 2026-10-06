@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import psutil
@@ -31,6 +32,7 @@ class Workflow:
         game_window_timeout_seconds: int = 90,
     ) -> None:
         self.control = TaskControl()
+        self.report_progress = lambda message: None
         self.window_binder = WindowBinder()
         self.screenshot = ScreenshotService()
         self.locator = ElementLocator(self.control)
@@ -400,7 +402,9 @@ class Workflow:
                     width=0, height=0,
                 )
                 self.clicker.click(click_pos)
+                self.report_progress(f"已点击垃圾桶：x={click_pos.x}, y={click_pos.y}；等待确认删除弹窗。")
                 self.confirm_resource_delete(confirm_template_name, threshold, confirm_timeout)
+                self.report_progress("确认弹窗已关闭，正在核验资源包文件删除结果。")
                 self.wait_for_resource_deletion(game_install_dir, pak_names, deletion_timeout)
                 return click_pos
 
@@ -455,6 +459,7 @@ class Workflow:
         template_path = TEMPLATE_DIR / template_name
         if not template_path.exists():
             raise FileNotFoundError(f"缺少确认删除资源包模板：{template_name}")
+        self.report_progress(f"确认删除使用模板：{template_path.resolve()}")
         deadline = time.monotonic() + timeout
         best_confidence = 0.0
         window_matches = 0
@@ -468,8 +473,7 @@ class Workflow:
                 best_confidence = max(best_confidence, result.position.confidence)
                 if result.matched:
                     self.control.check()
-                    self.clicker.click(result.position)
-                    return result.position
+                    return self._click_delete_confirmation(result.position, template_path, threshold)
             # Confirmation dialogs may have a different title or extend beyond
             # the resource manager. Do not refocus its parent over the dialog.
             self.control.check()
@@ -478,14 +482,30 @@ class Workflow:
             best_confidence = max(best_confidence, result.position.confidence)
             if result.matched:
                 self.control.check()
-                self.clicker.click(result.position)
-                return result.position
+                return self._click_delete_confirmation(result.position, template_path, threshold)
             self.control.wait(min(0.2, max(0, deadline - time.monotonic())))
         raise TimeoutError(
             f"等待确认删除资源包按钮超时（{timeout:g}秒，{template_name}）；"
             f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}，"
             f"窗口匹配次数={window_matches}，全屏匹配次数={screen_matches}"
         )
+
+    def _click_delete_confirmation(self, position, template_path, threshold):
+        """Click the exact button center and verify the dialog reacts."""
+        for attempt in range(1, 4):
+            self.control.check()
+            self.report_progress(
+                f"点击确认删除（第 {attempt} 次）：x={position.x}, y={position.y}, "
+                f"confidence={position.confidence:.3f}"
+            )
+            self.clicker.click(replace(position, width=0, height=0))
+            self.control.wait(0.6)
+            result = self.locator.match_on_screen(template_path, threshold)
+            if not result.matched:
+                return position
+            position = result.position
+            self.report_progress("确认按钮仍显示，点击尚未确认生效。")
+        raise RuntimeError("确认删除按钮点击 3 次后仍显示，已停止后续操作。")
 
     def _scroll_active_window_down(self, clicks: int = 3, hwnd: int | None = None) -> None:
         """Send mouse wheel scroll-down messages to the specified window or foreground window.

@@ -30,6 +30,7 @@ def background_action(function):
 
 
 class TaskRunner(QObject):
+    progress = Signal(str)
     completed = Signal(object)
     busy_changed = Signal(bool)
     failed = Signal(str)

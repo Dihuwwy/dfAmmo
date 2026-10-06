@@ -36,6 +36,8 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         self.pending_template_name = ""
         self.game_process_deadline = 0.0
         self.task_runner = TaskRunner(self.workflow.control, self)
+        self.task_runner.progress.connect(self.write_log)
+        self.workflow.report_progress = self.task_runner.progress.emit
         self.task_runner.busy_changed.connect(self._on_worker_busy_changed)
         self.task_runner.failed.connect(self._on_worker_failed)
 
