@@ -344,6 +344,9 @@ class Workflow:
         scroll_interval: float = 0.8,
         confirm_template_name: str = "wegame_confirmdelete.png",
         confirm_timeout: float = 10.0,
+        game_install_dir: str = "",
+        pak_names: tuple[str, ...] = DEFAULT_PAK_NAMES,
+        deletion_timeout: float = 30.0,
     ) -> ElementPosition:
         """Find the resource management window and click delete for changgong map.
 
@@ -360,6 +363,9 @@ class Workflow:
             raise FileNotFoundError(f"缺少删除长弓溪谷资源包模板：{template_name}")
         if not (TEMPLATE_DIR / confirm_template_name).exists():
             raise FileNotFoundError(f"缺少确认删除资源包模板：{confirm_template_name}")
+        pak_dir = self.get_paks_dir(game_install_dir)
+        if not game_install_dir or not pak_dir.is_dir():
+            raise ValueError("请先配置正确的游戏安装目录，以核验资源包删除结果。")
 
         deadline = time.monotonic() + timeout
         best_confidence = 0.0
@@ -391,10 +397,11 @@ class Workflow:
                 click_pos = ElementPosition(
                     x=click_x, y=pos.y,
                     confidence=pos.confidence,
-                    width=pos.width, height=pos.height,
+                    width=0, height=0,
                 )
                 self.clicker.click(click_pos)
                 self.confirm_resource_delete(confirm_template_name, threshold, confirm_timeout)
+                self.wait_for_resource_deletion(game_install_dir, pak_names, deletion_timeout)
                 return click_pos
 
             # Scroll the resource-manager window downward every scroll_interval seconds
@@ -410,6 +417,33 @@ class Workflow:
             f"未在资源包管理窗口中找到删除长弓溪谷按钮（{template_name}），"
             f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
         )
+
+    def wait_for_resource_deletion(
+        self,
+        game_install_dir: str,
+        pak_names: tuple[str, ...] = DEFAULT_PAK_NAMES,
+        timeout: float = 30.0,
+    ) -> None:
+        """Confirm actual removal instead of treating mouse input as success."""
+        pak_dir = self.get_paks_dir(game_install_dir)
+        if not game_install_dir or not pak_dir.is_dir() or not pak_names:
+            raise ValueError("无法核验资源包删除：安装目录或目标文件列表无效。")
+        paths = [pak_dir / filename for name in pak_names
+                 for filename in (name, f"{name}.disabled")]
+        deadline = time.monotonic() + timeout
+        while True:
+            self.control.check()
+            if not pak_dir.is_dir():
+                raise RuntimeError("Paks 目录不可访问，无法确认删除完成。")
+            remaining = [path.name for path in paths if path.exists()]
+            if not remaining:
+                return
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"已点击确认，但资源包删除未完成（{timeout:g}秒）；"
+                    f"仍存在：{', '.join(remaining)}。已阻止后续启动游戏。"
+                )
+            self.control.wait(min(0.3, max(0, deadline - time.monotonic())))
 
     def confirm_resource_delete(
         self,

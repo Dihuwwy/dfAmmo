@@ -95,8 +95,10 @@ class ActionsMixin:
                 partial(wf.delete_changgong_map, cfg.wegame_delete_map_template,
                         threshold, timeout=cfg.delete_map_timeout_seconds,
                         confirm_template_name=cfg.wegame_confirm_delete_template,
-                        confirm_timeout=cfg.confirm_delete_timeout_seconds),
-                lambda pos: f"已点击删除长弓溪谷并确认删除 (x={pos.x}, y={pos.y})。", "删除长弓溪谷", 1.0),
+                        confirm_timeout=cfg.confirm_delete_timeout_seconds,
+                        game_install_dir=cfg.game_install_dir,
+                        pak_names=cfg.pak_file_names),
+                lambda pos: f"已确认长弓溪谷资源包文件删除完成 (x={pos.x}, y={pos.y})。", "删除长弓溪谷", 1.0),
             "restart_game": ("重新启动游戏...",
                 partial(wf.click_start_button, window, cfg.start_button_templates, threshold),
                 lambda ret: f"已点击启动按钮 {ret[1].name} (x={ret[0].x}, y={ret[0].y})。",
@@ -602,14 +604,6 @@ class ActionsMixin:
 
                 if self.bound_window is not None:
                     yield from self._run_wegame_post_process_tasks()
-
-                if paks_path is not None:
-                    try:
-                        subprocess.Popen(["explorer", str(paks_path)])
-                    except OSError as exc:
-                        self.write_log(f"打开 Paks 目录失败：{exc}")
-                    else:
-                        self.write_log(f"已打开 Paks 目录：{paks_path}")
 
     @background_action
     def _run_wegame_post_process(self, start_step: str = "wait_wegame"):
