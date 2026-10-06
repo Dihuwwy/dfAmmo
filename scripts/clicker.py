@@ -117,6 +117,12 @@ class Clicker:
                 self._click_with_user32(x, y)
         return True
 
+    def move(self, position: ElementPosition) -> None:
+        """Move without clicking so hover-only controls can appear."""
+        self.control.check()
+        with physical_coordinates():
+            self._move_to_point(position.x, position.y)
+
     def _humanized_point(self, position: ElementPosition) -> tuple[int, int]:
         max_offset_x = max(0, min(8, position.width // 4))
         max_offset_y = max(0, min(6, position.height // 4))

@@ -5,12 +5,21 @@ from pathlib import Path
 
 from PIL import ImageGrab
 
-from scripts.config import TEMPLATE_DIR
+from scripts.config import PROJECT_ROOT, TEMPLATE_DIR
 from scripts.dpi import physical_coordinates
 
 
 class ScreenshotService:
     """Responsible for screenshots."""
+
+    def capture_delete_target(self, left: int, top: int, right: int, bottom: int) -> Path:
+        output_dir = PROJECT_ROOT / "tmp"
+        output_dir.mkdir(exist_ok=True)
+        output_path = output_dir / "wegame_delete_target.png"
+        with physical_coordinates():
+            image = ImageGrab.grab(bbox=(left, top, right, bottom))
+        image.save(output_path)
+        return output_path
 
 
     def capture_region_to_template(

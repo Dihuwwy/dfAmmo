@@ -401,8 +401,25 @@ class Workflow:
                     confidence=pos.confidence,
                     width=0, height=0,
                 )
+                self.report_progress(
+                    f"卡片匹配：中心=({pos.x}, {pos.y}), 尺寸={pos.width}x{pos.height}, "
+                    f"confidence={pos.confidence:.3f}；垃圾桶推算坐标=({click_pos.x}, {click_pos.y})"
+                )
+                self.clicker.move(click_pos)
+                self.control.wait(0.4)
+                try:
+                    screenshot_path = self.screenshot.capture_delete_target(
+                        pos.x - pos.width // 2, pos.y - pos.height // 2,
+                        pos.x - pos.width // 2 + pos.width,
+                        pos.y - pos.height // 2 + pos.height,
+                    )
+                except OSError as exc:
+                    self.report_progress(f"保存删除目标截图失败：{exc}")
+                else:
+                    self.report_progress(f"悬停后的删除目标截图：{screenshot_path}")
+                self.control.check()
                 self.clicker.click(click_pos)
-                self.report_progress(f"已点击垃圾桶：x={click_pos.x}, y={click_pos.y}；等待确认删除弹窗。")
+                self.report_progress(f"已发送删除点击：x={click_pos.x}, y={click_pos.y}；等待确认删除弹窗验证。")
                 self.confirm_resource_delete(confirm_template_name, threshold, confirm_timeout)
                 self.report_progress("确认弹窗已关闭，正在核验资源包文件删除结果。")
                 self.wait_for_resource_deletion(game_install_dir, pak_names, deletion_timeout)
