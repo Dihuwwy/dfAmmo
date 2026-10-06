@@ -349,12 +349,12 @@ class Workflow:
         game_install_dir: str = "",
         pak_names: tuple[str, ...] = DEFAULT_PAK_NAMES,
         deletion_timeout: float = 30.0,
+        bin_template_name: str = "wegame_bin.png",
     ) -> ElementPosition:
         """Find the resource management window and click delete for changgong map.
 
-        The template covers the entire card row (thumbnail + text).  After
-        matching, the click is redirected to the right edge of the card where
-        the trash-can delete icon lives, rather than the card center.
+        Match the card, hover to reveal its controls, then match the trash icon
+        within that card before clicking. No fixed icon offsets are used.
 
         If the delete button is not visible immediately the method scrolls the
         window downward by *scroll_step* wheel-clicks every *scroll_interval*
@@ -365,6 +365,9 @@ class Workflow:
             raise FileNotFoundError(f"缺少删除长弓溪谷资源包模板：{template_name}")
         if not (TEMPLATE_DIR / confirm_template_name).exists():
             raise FileNotFoundError(f"缺少确认删除资源包模板：{confirm_template_name}")
+        bin_path = TEMPLATE_DIR / bin_template_name
+        if not bin_path.exists():
+            raise FileNotFoundError(f"缺少垃圾桶图标模板：{bin_template_name}")
         pak_dir = self.get_paks_dir(game_install_dir)
         if not game_install_dir or not pak_dir.is_dir():
             raise ValueError("请先配置正确的游戏安装目录，以核验资源包删除结果。")
@@ -389,23 +392,11 @@ class Workflow:
             best_confidence = max(best_confidence, result.position.confidence)
             if result.matched:
                 pos = result.position
-                # The template spans the whole row; the trash-can icon sits at
-                # the far-right edge of the card.  Shift the click from the
-                # matched center to (left_edge + card_width - 18px).
-                # pos.x is already the center of the matched region, and
-                # pos.width is the template width, so right_edge = pos.x + pos.width // 2.
-                # We back off ~18 px from the right to land on the icon.
-                click_x = pos.x + pos.width // 2 - 18
-                click_pos = ElementPosition(
-                    x=click_x, y=pos.y,
-                    confidence=pos.confidence,
-                    width=0, height=0,
-                )
                 self.report_progress(
                     f"卡片匹配：中心=({pos.x}, {pos.y}), 尺寸={pos.width}x{pos.height}, "
-                    f"confidence={pos.confidence:.3f}；垃圾桶推算坐标=({click_pos.x}, {click_pos.y})"
+                    f"confidence={pos.confidence:.3f}；悬停后识别 {bin_template_name}"
                 )
-                self.clicker.move(click_pos)
+                self.clicker.move(pos)
                 self.control.wait(0.4)
                 try:
                     screenshot_path = self.screenshot.capture_delete_target(
@@ -417,8 +408,7 @@ class Workflow:
                     self.report_progress(f"保存删除目标截图失败：{exc}")
                 else:
                     self.report_progress(f"悬停后的删除目标截图：{screenshot_path}")
-                self.control.check()
-                self.clicker.click(click_pos)
+                click_pos = self.click_card_bin(pos, bin_path, threshold)
                 self.report_progress(f"已发送删除点击：x={click_pos.x}, y={click_pos.y}；等待确认删除弹窗验证。")
                 self.confirm_resource_delete(confirm_template_name, threshold, confirm_timeout)
                 self.report_progress("确认弹窗已关闭，正在核验资源包文件删除结果。")
@@ -437,6 +427,36 @@ class Workflow:
         raise RuntimeError(
             f"未在资源包管理窗口中找到删除长弓溪谷按钮（{template_name}），"
             f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
+        )
+
+    def click_card_bin(
+        self, card: ElementPosition, template_path: Path,
+        threshold: float = 0.78, timeout: float = 3.0,
+    ) -> ElementPosition:
+        if card.width <= 0 or card.height <= 0:
+            raise ValueError("卡片识别区域无效，无法定位垃圾桶。")
+        left, top = card.x - card.width // 2, card.y - card.height // 2
+        region = BoundWindow(0, left=left, top=top,
+                             right=left + card.width, bottom=top + card.height)
+        deadline = time.monotonic() + timeout
+        best_confidence = 0.0
+        while time.monotonic() < deadline:
+            self.control.check()
+            result = self.locator.match_by_image(template_path, region, threshold)
+            best_confidence = max(best_confidence, result.position.confidence)
+            if result.matched:
+                position = result.position
+                self.report_progress(
+                    f"垃圾桶已匹配：x={position.x}, y={position.y}, "
+                    f"confidence={position.confidence:.3f}, template={template_path.name}"
+                )
+                self.control.check()
+                self.clicker.click(replace(position, width=0, height=0))
+                return position
+            self.control.wait(min(0.2, max(0, deadline - time.monotonic())))
+        raise TimeoutError(
+            f"悬停后未在长弓卡片内匹配到垃圾桶（{template_path.name}）；"
+            f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}。未发送删除点击。"
         )
 
     def wait_for_resource_deletion(
