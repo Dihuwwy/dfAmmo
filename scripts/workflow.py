@@ -4,6 +4,9 @@ import time
 from pathlib import Path
 
 import psutil
+import win32api
+import win32con
+import win32event
 from scripts.task_control import TaskControl, ControlInterrupted
 
 from scripts.clicker import Clicker
@@ -123,11 +126,12 @@ class Workflow:
     def is_navigation_paused(self) -> bool:
         return self.game_navigator.is_paused
 
-    def kill_game_process(self) -> tuple[bool, str]:
+    def kill_game_process(self, timeout: float = 15.0) -> tuple[bool, str]:
         if self._game_process is None:
             return False, "没有已记录的三角洲行动游戏进程。"
 
         game_process = self._game_process
+        handle = None
         try:
             proc = psutil.Process(game_process.process_id)
             same_name = proc.name().casefold() == game_process.name.casefold()
@@ -136,31 +140,41 @@ class Workflow:
                 self._game_process = None
                 return False, "原游戏进程已退出，PID 已被其他进程复用。"
             self.control.check()
+            # Wait on the original kernel object, not a PID that may be reused.
+            handle = win32api.OpenProcess(win32con.SYNCHRONIZE, False, game_process.process_id)
             proc.terminate()
-            try:
-                deadline = time.monotonic() + 5
-                while True:
-                    self.control.check()
-                    try:
-                        proc.wait(timeout=0.1)
-                        break
-                    except psutil.TimeoutExpired:
-                        if time.monotonic() >= deadline:
-                            raise
-                self._game_process = None
-                return True, "游戏进程已终止并退出。"
-            except (psutil.NoSuchProcess, psutil.TimeoutExpired):
-                pass
+            deadline = time.monotonic() + max(0, timeout)
+            while True:
+                self.control.check()
+                remaining = max(0, deadline - time.monotonic())
+                result = win32event.WaitForSingleObject(handle, min(100, int(remaining * 1000)))
+                if result == win32event.WAIT_OBJECT_0:
+                    self._game_process = None
+                    return True, "游戏进程已终止并退出。"
+                if result != win32event.WAIT_TIMEOUT:
+                    raise RuntimeError(f"等待游戏进程退出失败：返回码={result}")
+                if time.monotonic() >= deadline:
+                    # A fresh identity check also covers a disappearing process.
+                    if not proc.is_running():
+                        self._game_process = None
+                        return True, "原游戏进程已退出。"
+                    return False, (
+                        f"等待游戏进程退出超时（{timeout:g}秒，PID={game_process.process_id}）；"
+                        "已保留进程记录，停止后续文件操作。"
+                    )
         except psutil.NoSuchProcess:
             self._game_process = None
             return True, "游戏进程已经退出。"
         except psutil.AccessDenied:
             return False, "没有权限终止游戏进程。"
-
-        self._game_process = None
-        if psutil.pid_exists(game_process.process_id):
-            return False, "已发送终止请求，但尚未确认进程退出；已停止后续文件操作。"
-        return True, "游戏进程已终止并退出。"
+        except win32api.error as exc:
+            if not proc.is_running():
+                self._game_process = None
+                return True, "原游戏进程已退出。"
+            return False, f"无法确认游戏进程退出：{exc}"
+        finally:
+            if handle is not None:
+                handle.Close()
 
     @staticmethod
     def get_paks_dir(game_install_dir: str) -> Path:
@@ -246,6 +260,7 @@ class Workflow:
             try:
                 self.control.check()
                 current_window = self.window_binder.activate(current_bound)
+                current_bound = current_window
                 self.control.wait(0.3)
                 position, template_path = self.find_start_button(
                     current_window, template_names, threshold
@@ -255,19 +270,7 @@ class Workflow:
                 raise
             except Exception as exc:
                 last_error = str(exc)
-                # If handle is stale, try re-locating the WeGame window by process id
-                if current_bound.process_id is not None:
-                    try:
-                        refreshed = self.window_binder.bind_by_process_id(
-                            current_bound.process_id
-                        )
-                        if refreshed is not None and refreshed.handle != current_bound.handle:
-                            current_bound = refreshed
-                    except ControlInterrupted:
-                        raise
-                    except Exception:
-                        pass
-                self.control.wait(poll_interval)
+                self.control.wait(min(poll_interval, max(0, deadline - time.monotonic())))
 
         raise TimeoutError(f"等待 WeGame 启动按钮重新出现超时（{timeout:.0f}秒）：{last_error}")
 

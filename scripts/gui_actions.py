@@ -545,7 +545,7 @@ class ActionsMixin:
 
                 if self.bound_window is not None:
                     try:
-                        (yield lambda: self.workflow.window_binder.activate(self.bound_window))
+                        self.bound_window = (yield lambda: self.workflow.window_binder.activate(self.bound_window))
                     except ControlInterrupted:
                         raise
                     except Exception as exc:
@@ -554,6 +554,8 @@ class ActionsMixin:
                         self.write_log("已返回 WeGame 窗口。")
 
                 if not process_exited:
+                    self.set_step_state("nav_game", "failed", process_message)
+                    self.write_log("流程已停止：游戏退出未确认。界面仍可操作，可停止任务或重新开始。")
                     return
 
                 if not getattr(self, "_continue_after_navigation", True):

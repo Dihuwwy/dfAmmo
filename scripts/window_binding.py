@@ -92,6 +92,7 @@ class WindowBinder:
 
 
     def activate(self, bound_window: BoundWindow) -> BoundWindow:
+        bound_window = self.resolve(bound_window)
         with physical_coordinates():
             if not win32gui.IsWindow(bound_window.handle):
                 raise RuntimeError(f"无效的窗口句柄：{bound_window.handle}")
@@ -130,3 +131,38 @@ class WindowBinder:
                     pass
 
         return self.bind_by_handle(bound_window.handle)
+
+    def resolve(self, bound_window: BoundWindow) -> BoundWindow:
+        """Refresh a binding after a window was destroyed or its handle reused."""
+        def matches(window):
+            return (
+                (not bound_window.process_name or
+                 window.process_name.casefold() == bound_window.process_name.casefold())
+                and (not bound_window.title or window.title == bound_window.title)
+            )
+
+        if win32gui.IsWindow(bound_window.handle):
+            try:
+                current = self.bind_by_handle(bound_window.handle)
+                if (bound_window.process_id is None or
+                        current.process_id == bound_window.process_id) and matches(current):
+                    return current
+            except (psutil.Error, win32gui.error):
+                pass
+
+        if not (bound_window.process_name or bound_window.title):
+            raise RuntimeError(f"窗口句柄已失效且缺少重新绑定信息：{bound_window.handle}")
+
+        candidates = [window for window in self._window_candidates() if matches(window)]
+        if not candidates:
+            raise RuntimeError(
+                f"暂未找到原绑定窗口：{bound_window.title or '<无标题>'} | "
+                f"{bound_window.process_name or '<未知进程>'}；旧句柄={bound_window.handle}"
+            )
+        same_process = [window for window in candidates
+                        if window.process_id == bound_window.process_id]
+        candidates = same_process or candidates
+        if len({window.process_id for window in candidates}) > 1:
+            raise RuntimeError("发现多个同名目标进程，请重新手动绑定窗口。")
+        return max(candidates, key=lambda window:
+                   (window.right - window.left) * (window.bottom - window.top))
