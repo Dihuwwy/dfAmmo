@@ -210,5 +210,60 @@ class TestGameNavigatorModeSwitch(unittest.TestCase):
         self.assertEqual(self.navigator.step_index, 0)
 
 
+class TestResourceDeleteConfirmation(unittest.TestCase):
+    def test_delete_waits_for_confirmation_before_returning(self):
+        from unittest.mock import Mock, patch
+        from scripts.element_locator import ElementPosition, MatchResult
+        from scripts.window_binding import BoundWindow
+
+        workflow = Workflow()
+        window = BoundWindow(123, "游戏资源包管理")
+        position = ElementPosition(100, 100, 0.99, 200, 50)
+        events = []
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            (directory / "wegame_delete_map.png").touch()
+            (directory / "wegame_confirmdelete.png").touch()
+            with patch("scripts.workflow.TEMPLATE_DIR", directory), \
+                    patch.object(workflow.window_binder, "bind_by_title", return_value=window), \
+                    patch.object(workflow.window_binder, "activate", return_value=window), \
+                    patch.object(workflow.locator, "match_on_screen", return_value=MatchResult(position, True)), \
+                    patch.object(workflow.clicker, "click", side_effect=lambda *args: events.append("delete")), \
+                    patch.object(workflow, "confirm_resource_delete", side_effect=lambda *args: events.append("confirm")):
+                workflow.delete_changgong_map()
+        self.assertEqual(events, ["delete", "confirm"])
+
+    def test_confirmation_polls_until_matched(self):
+        from unittest.mock import patch
+        from scripts.element_locator import ElementPosition, MatchResult
+        from scripts.window_binding import BoundWindow
+
+        workflow = Workflow()
+        position = ElementPosition(200, 300, 0.98)
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            (directory / "wegame_confirmdelete.png").touch()
+            with patch("scripts.workflow.TEMPLATE_DIR", directory), \
+                    patch.object(workflow.window_binder, "bind_by_title", return_value=BoundWindow(123)), \
+                    patch.object(workflow.locator, "match_by_image", side_effect=[
+                        MatchResult(position, False), MatchResult(position, True)]), \
+                    patch.object(workflow.control, "wait"), \
+                    patch.object(workflow.clicker, "click") as click:
+                self.assertEqual(workflow.confirm_resource_delete(), position)
+                click.assert_called_once_with(position)
+
+    def test_confirmation_timeout_never_clicks(self):
+        from unittest.mock import patch
+        workflow = Workflow()
+        with tempfile.TemporaryDirectory() as folder:
+            directory = Path(folder)
+            (directory / "wegame_confirmdelete.png").touch()
+            with patch("scripts.workflow.TEMPLATE_DIR", directory), \
+                    patch.object(workflow.clicker, "click") as click:
+                with self.assertRaises(TimeoutError):
+                    workflow.confirm_resource_delete(timeout=0)
+                click.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()

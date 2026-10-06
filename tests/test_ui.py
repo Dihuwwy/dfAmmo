@@ -139,21 +139,22 @@ class TestMainWindowUI(unittest.TestCase):
         """step_mode_toggle should switch between single-step and continuous mode."""
         toggle = self.window.step_mode_toggle
         self.assertIsNotNone(toggle)
-        self.assertFalse(toggle.isChecked())
+        self.assertEqual(toggle.currentData(), "step")
         self.assertFalse(self.window.is_continuous_mode)
-        self.assertEqual(toggle.text(), "单步")
+        self.assertEqual(toggle.currentText(), "单步")
 
         # Click to switch to continuous mode
-        toggle.click()
-        self.assertTrue(toggle.isChecked())
+        toggle.setCurrentIndex(1)
+        self.assertEqual(self.window.execution_mode, "stage")
+        self.assertFalse(self.window.is_continuous_mode)
+        toggle.setCurrentIndex(2)
         self.assertTrue(self.window.is_continuous_mode)
-        self.assertEqual(toggle.text(), "连续")
+        self.assertEqual(toggle.currentText(), "连续")
 
         # Click again to switch back to single-step mode
-        toggle.click()
-        self.assertFalse(toggle.isChecked())
+        toggle.setCurrentIndex(0)
         self.assertFalse(self.window.is_continuous_mode)
-        self.assertEqual(toggle.text(), "单步")
+        self.assertEqual(toggle.currentText(), "单步")
 
     def test_continuous_mode_substep_chain(self) -> None:
         """_run_wegame_post_process starting from assets_manage should skip earlier steps."""
@@ -161,6 +162,7 @@ class TestMainWindowUI(unittest.TestCase):
         from scripts.window_binding import BoundWindow
 
         self.window.bound_window = BoundWindow(handle=12345, title="WeGame")
+        self.window.step_mode_toggle.setCurrentIndex(2)
         self.window.workflow.wait_for_wegame_ready = MagicMock()
         self.window.workflow.click_wegame_more = MagicMock()
         self.window.workflow.click_assets_manage = MagicMock()
@@ -190,7 +192,7 @@ class TestMainWindowUI(unittest.TestCase):
         from unittest.mock import MagicMock
 
         # Single step mode
-        self.window.step_mode_toggle.setChecked(False)
+        self.window.step_mode_toggle.setCurrentIndex(0)
         self.window._run_wegame_post_process = MagicMock()
         self.window._run_debug_step = MagicMock()
 
@@ -199,7 +201,7 @@ class TestMainWindowUI(unittest.TestCase):
         self.window._run_wegame_post_process.assert_not_called()
 
         # Continuous mode
-        self.window.step_mode_toggle.setChecked(True)
+        self.window.step_mode_toggle.setCurrentIndex(2)
         self.window._run_debug_step.reset_mock()
         self.window._run_wegame_post_process.reset_mock()
 

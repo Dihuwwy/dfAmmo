@@ -27,6 +27,7 @@ class NavigationStatus(str, Enum):
 class NavigationEvent:
     status: NavigationStatus
     message: str
+    step_completed: bool = False
 
 
 @dataclass(frozen=True)
@@ -446,6 +447,7 @@ class GameNavigator:
             NavigationStatus.RUNNING,
             f"步骤完成：{step.name}{extra_note}"
             + (f" | confidence={matched_confidence:.3f}" if step.template_name else ""),
+            step_completed=True,
         )
 
     def _complete(self) -> NavigationEvent:

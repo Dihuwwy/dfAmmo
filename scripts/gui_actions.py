@@ -93,8 +93,10 @@ class ActionsMixin:
                 "已打开资源包管理。", "打开资源包管理", 0.5),
             "delete_map": ("查找并删除长弓溪谷（会自动向下滚动）...",
                 partial(wf.delete_changgong_map, cfg.wegame_delete_map_template,
-                        threshold, timeout=cfg.delete_map_timeout_seconds),
-                lambda pos: f"已点击删除长弓溪谷 (x={pos.x}, y={pos.y})。", "删除长弓溪谷", 1.0),
+                        threshold, timeout=cfg.delete_map_timeout_seconds,
+                        confirm_template_name=cfg.wegame_confirm_delete_template,
+                        confirm_timeout=cfg.confirm_delete_timeout_seconds),
+                lambda pos: f"已点击删除长弓溪谷并确认删除 (x={pos.x}, y={pos.y})。", "删除长弓溪谷", 1.0),
             "restart_game": ("重新启动游戏...",
                 partial(wf.click_start_button, window, cfg.start_button_templates, threshold),
                 lambda ret: f"已点击启动按钮 {ret[1].name} (x={ret[0].x}, y={ret[0].y})。",
@@ -102,7 +104,7 @@ class ActionsMixin:
         }
 
     def _dbg_wegame(self, step_id):
-        if self.is_continuous_mode:
+        if self.execution_mode != "step":
             self._run_wegame_post_process(start_step=step_id)
         else:
             self._run_debug_step(step_id, *self._wegame_steps()[step_id][:4])
@@ -415,7 +417,7 @@ class ActionsMixin:
     @background_action
     def start_card_mail(self):
         self.reset_all_step_states()
-        self._continue_after_navigation = True
+        self._continue_after_navigation = self.is_continuous_mode
         self.workflow.control.paused.clear()
         game_process = (yield lambda: self.workflow.find_game_process())
         if game_process is not None:
@@ -517,6 +519,14 @@ class ActionsMixin:
             return
 
         self.write_log(event.message)
+        if (event.status == NavigationStatus.RUNNING and event.step_completed
+                and getattr(self, "_navigation_mode", "continuous") == "step"):
+            self.navigation_timer.stop()
+            self.workflow.game_navigator.pause()
+            self.workflow.control.paused.set()
+            self._set_pause_button_state(True)
+            self.write_log("单步完成，已暂停。按 F12 或点击继续执行下一步。")
+            return
         if event.status == NavigationStatus.PAUSED:
             self.navigation_timer.stop()
             self.workflow.control.paused.set()
@@ -540,6 +550,9 @@ class ActionsMixin:
             if event.status == NavigationStatus.COMPLETE:
                 self.set_step_state("nav_game", "success")
                 self.update_nav_substep_pills(len(self.sub_step_pills))
+                if getattr(self, "_navigation_mode", "continuous") == "step":
+                    self.write_log("单步检测完成，停在选人界面。")
+                    return
                 process_exited, process_message = (yield lambda: self.workflow.kill_game_process())
                 self.write_log(process_message)
 
@@ -559,7 +572,7 @@ class ActionsMixin:
                     return
 
                 if not getattr(self, "_continue_after_navigation", True):
-                    self.write_log("调试：单步导航完成，停在此步。")
+                    self.write_log("阶段完成：游戏导航及退出已完成，停止后续阶段。")
                     return
 
                 paks_path: Path | None = None
@@ -614,7 +627,10 @@ class ActionsMixin:
                 step_id, start_msg, action, success_msg, fail_label)
             if not succeeded:
                 return
-        self._set_badge(self.workflow_status_badge, "全流程自动化已顺利完成", "success")
+            if self.execution_mode == "step":
+                self.write_log("单步完成，停止后续步骤。")
+                return
+        self._set_badge(self.workflow_status_badge, "WeGame 阶段已完成", "success")
 
 
     # ── Debug & Step Status Management ───────────────────────────────────────
@@ -673,21 +689,20 @@ class ActionsMixin:
         self._sync_pak_button_state()
 
     @property
+    def execution_mode(self) -> str:
+        selector = getattr(self, "step_mode_toggle", None)
+        return selector.currentData() if selector is not None else "step"
+
+    @property
     def is_continuous_mode(self) -> bool:
         """Return True if continuous step execution mode is enabled."""
-        toggle = getattr(self, "step_mode_toggle", None)
-        return toggle is not None and toggle.isChecked()
+        return self.execution_mode == "continuous"
 
-    def _on_step_mode_toggled(self, checked: bool) -> None:
+    def _on_step_mode_toggled(self, index: int) -> None:
         """Handle toggle between single-step mode and continuous mode."""
-        if checked:
-            self.step_mode_toggle.setText("连续")
-            self.step_mode_toggle.setToolTip("当前：连续模式（从点击的步骤继续往后执行）\n点击切换为单步模式（点击只执行该步骤）")
-            self.write_log("调试模式已切换为：【连续模式】（从点击的步骤顺序执行到后续完成）")
-        else:
-            self.step_mode_toggle.setText("单步")
-            self.step_mode_toggle.setToolTip("当前：单步模式（点击只执行该步骤）\n点击切换为连续模式（从该步骤继续往后执行）")
-            self.write_log("调试模式已切换为：【单步模式】（点击仅执行单一步骤）")
+        self._navigation_mode = self.execution_mode
+        self._continue_after_navigation = self.is_continuous_mode
+        self.write_log(f"执行模式已切换为：【{self.step_mode_toggle.currentText()}】")
 
     def _dbg_require_bound(self) -> bool:
         """Return True if WeGame window is bound; log an error otherwise."""
@@ -713,8 +728,10 @@ class ActionsMixin:
         )
         if self.is_continuous_mode:
             self.write_log("调试：已开启【连续模式】，导航完成后将自动衔接后续步骤。")
+        elif self.execution_mode == "stage":
+            self.write_log("调试：阶段模式，完成游戏导航及退出后停止。")
         else:
-            self.write_log("调试：当前为【单步模式】，导航完成后将停在此步。")
+            self.write_log("调试：单步模式，完成一个导航动作后暂停。")
         yield from self._begin_navigation(game_process)
 
     @background_action
@@ -735,6 +752,8 @@ class ActionsMixin:
         yield from self._begin_navigation(game_process, step_index, jump=True)
 
     def _begin_navigation(self, game_process, initial_step=0, jump=False):
+        self._navigation_mode = self.execution_mode
+        self._continue_after_navigation = self.is_continuous_mode
         wf = self.workflow
         wf._game_process = game_process
         navigator = wf.game_navigator

@@ -342,6 +342,8 @@ class Workflow:
         timeout: float = 30.0,
         scroll_step: int = 3,
         scroll_interval: float = 0.8,
+        confirm_template_name: str = "wegame_confirmdelete.png",
+        confirm_timeout: float = 10.0,
     ) -> ElementPosition:
         """Find the resource management window and click delete for changgong map.
 
@@ -356,6 +358,8 @@ class Workflow:
         template_path = TEMPLATE_DIR / template_name
         if not template_path.exists():
             raise FileNotFoundError(f"缺少删除长弓溪谷资源包模板：{template_name}")
+        if not (TEMPLATE_DIR / confirm_template_name).exists():
+            raise FileNotFoundError(f"缺少确认删除资源包模板：{confirm_template_name}")
 
         deadline = time.monotonic() + timeout
         best_confidence = 0.0
@@ -390,6 +394,7 @@ class Workflow:
                     width=pos.width, height=pos.height,
                 )
                 self.clicker.click(click_pos)
+                self.confirm_resource_delete(confirm_template_name, threshold, confirm_timeout)
                 return click_pos
 
             # Scroll the resource-manager window downward every scroll_interval seconds
@@ -403,6 +408,34 @@ class Workflow:
 
         raise RuntimeError(
             f"未在资源包管理窗口中找到删除长弓溪谷按钮（{template_name}），"
+            f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
+        )
+
+    def confirm_resource_delete(
+        self,
+        template_name: str = "wegame_confirmdelete.png",
+        threshold: float = 0.78,
+        timeout: float = 10.0,
+    ) -> ElementPosition:
+        """Wait for the resource manager's confirmation button and click it."""
+        template_path = TEMPLATE_DIR / template_name
+        if not template_path.exists():
+            raise FileNotFoundError(f"缺少确认删除资源包模板：{template_name}")
+        deadline = time.monotonic() + timeout
+        best_confidence = 0.0
+        while time.monotonic() < deadline:
+            self.control.check()
+            resource_window = self.window_binder.bind_by_title("游戏资源包管理")
+            if resource_window is not None:
+                result = self.locator.match_by_image(template_path, resource_window, threshold)
+                best_confidence = max(best_confidence, result.position.confidence)
+                if result.matched:
+                    self.control.check()
+                    self.clicker.click(result.position)
+                    return result.position
+            self.control.wait(min(0.2, max(0, deadline - time.monotonic())))
+        raise TimeoutError(
+            f"等待确认删除资源包按钮超时（{timeout:g}秒，{template_name}）；"
             f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
         )
 

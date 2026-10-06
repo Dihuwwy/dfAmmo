@@ -156,9 +156,9 @@ class WindowTests(unittest.TestCase):
         with patch.object(self.window.workflow, "wait_for_wegame_ready", side_effect=lambda *a, **k: time.sleep(0.2)):
             self.window._dbg_wait_wegame()
             self.assertTrue(self.window.stop_button.isEnabled())
-            self.window.step_mode_toggle.click()
+            self.window.step_mode_toggle.setCurrentIndex(2)
             self.assertTrue(self.window.is_continuous_mode)
-            self.assertEqual(self.window.step_mode_toggle.text(), "连续")
+            self.assertEqual(self.window.step_mode_toggle.currentText(), "连续")
             pump_until(lambda: not self.window.task_runner.busy)
 
     def test_shift_f12_native_routes_to_stop(self):
@@ -243,6 +243,7 @@ class WindowTests(unittest.TestCase):
             self.assertTrue(self.window.start_card_mail_button.isEnabled())
 
     def test_full_wegame_chain_runs_in_order(self):
+        self.window.step_mode_toggle.setCurrentIndex(2)
         self.window.bound_window = BoundWindow(123)
         workflow = self.window.workflow
         order = []
@@ -253,6 +254,46 @@ class WindowTests(unittest.TestCase):
             self.window._run_wegame_post_process()
             pump_until(lambda: not self.window.task_runner.busy)
         self.assertEqual(order, ["wait", "more", "assets", "delete", "restart"])
+
+    def test_single_navigation_action_pauses_without_finishing_stage(self):
+        nav = self.window.workflow.game_navigator
+        nav.start(123)
+        self.window._navigation_mode = "step"
+        event = NavigationEvent(NavigationStatus.RUNNING, "step done", step_completed=True)
+        self.window.navigation_timer.start()
+        self.window.task_runner.start(self.window._advance_game_navigation_result(event))
+        pump_until(lambda: not self.window.task_runner.busy)
+        self.assertTrue(nav.is_paused)
+        self.assertFalse(nav.finished)
+        self.assertFalse(self.window.navigation_timer.isActive())
+
+    def test_stage_mode_keeps_navigation_running_between_actions(self):
+        self.window.step_mode_toggle.setCurrentIndex(1)
+        nav = self.window.workflow.game_navigator
+        nav.start(123)
+        event = NavigationEvent(NavigationStatus.RUNNING, "step done", step_completed=True)
+        self.window.navigation_timer.start()
+        self.window.task_runner.start(self.window._advance_game_navigation_result(event))
+        pump_until(lambda: not self.window.task_runner.busy)
+        self.assertFalse(nav.is_paused)
+        self.assertTrue(self.window.navigation_timer.isActive())
+
+    def test_single_detection_does_not_trigger_stage_post_processing(self):
+        self.window._navigation_mode = "step"
+        event = NavigationEvent(NavigationStatus.COMPLETE, "detected")
+        with patch.object(self.window.workflow, "kill_game_process") as kill:
+            self.window.task_runner.start(self.window._advance_game_navigation_result(event))
+            pump_until(lambda: not self.window.task_runner.busy)
+            kill.assert_not_called()
+
+    def test_stage_finishes_without_starting_next_stage(self):
+        self.window.step_mode_toggle.setCurrentIndex(1)
+        event = NavigationEvent(NavigationStatus.COMPLETE, "detected")
+        with patch.object(self.window.workflow, "kill_game_process", return_value=(True, "exited")), \
+                patch.object(self.window.workflow, "rename_pak_files") as rename:
+            self.window.task_runner.start(self.window._advance_game_navigation_result(event))
+            pump_until(lambda: not self.window.task_runner.busy)
+            rename.assert_not_called()
 
 
 class RecognitionTests(unittest.TestCase):
