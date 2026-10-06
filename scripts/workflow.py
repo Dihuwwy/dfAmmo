@@ -423,20 +423,34 @@ class Workflow:
             raise FileNotFoundError(f"缺少确认删除资源包模板：{template_name}")
         deadline = time.monotonic() + timeout
         best_confidence = 0.0
+        window_matches = 0
+        screen_matches = 0
         while time.monotonic() < deadline:
             self.control.check()
             resource_window = self.window_binder.bind_by_title("游戏资源包管理")
             if resource_window is not None:
                 result = self.locator.match_by_image(template_path, resource_window, threshold)
+                window_matches += 1
                 best_confidence = max(best_confidence, result.position.confidence)
                 if result.matched:
                     self.control.check()
                     self.clicker.click(result.position)
                     return result.position
+            # Confirmation dialogs may have a different title or extend beyond
+            # the resource manager. Do not refocus its parent over the dialog.
+            self.control.check()
+            result = self.locator.match_on_screen(template_path, threshold)
+            screen_matches += 1
+            best_confidence = max(best_confidence, result.position.confidence)
+            if result.matched:
+                self.control.check()
+                self.clicker.click(result.position)
+                return result.position
             self.control.wait(min(0.2, max(0, deadline - time.monotonic())))
         raise TimeoutError(
             f"等待确认删除资源包按钮超时（{timeout:g}秒，{template_name}）；"
-            f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
+            f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}，"
+            f"窗口匹配次数={window_matches}，全屏匹配次数={screen_matches}"
         )
 
     def _scroll_active_window_down(self, clicks: int = 3, hwnd: int | None = None) -> None:
