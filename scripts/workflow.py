@@ -527,22 +527,31 @@ class Workflow:
             f"窗口匹配次数={window_matches}，全屏匹配次数={screen_matches}"
         )
 
-    def _click_delete_confirmation(self, position, template_path, threshold):
-        """Click the exact button center and verify the dialog reacts."""
-        for attempt in range(1, 4):
+    def _click_delete_confirmation(self, position, template_path, threshold, timeout=30.0):
+        """Click once, then allow asynchronous processing at the original location."""
+        self.control.check()
+        self.report_progress(
+            f"点击确认删除：x={position.x}, y={position.y}, "
+            f"confidence={position.confidence:.3f}；等待弹窗响应（最多 {timeout:g} 秒）"
+        )
+        self.clicker.click(replace(position, width=0, height=0))
+        width, height = max(1, position.width), max(1, position.height)
+        left, top = position.x - width // 2, position.y - height // 2
+        region = BoundWindow(0, left=left, top=top,
+                             right=left + width, bottom=top + height)
+        deadline = time.monotonic() + timeout
+        self.control.wait(min(1.0, max(0, timeout)))
+        missing_count = 0
+        while time.monotonic() < deadline:
             self.control.check()
-            self.report_progress(
-                f"点击确认删除（第 {attempt} 次）：x={position.x}, y={position.y}, "
-                f"confidence={position.confidence:.3f}"
-            )
-            self.clicker.click(replace(position, width=0, height=0))
-            self.control.wait(0.6)
-            result = self.locator.match_on_screen(template_path, threshold)
-            if not result.matched:
+            result = self.locator.match_by_image(template_path, region, threshold)
+            missing_count = 0 if result.matched else missing_count + 1
+            if missing_count >= 2:
                 return position
-            position = result.position
-            self.report_progress("确认按钮仍显示，点击尚未确认生效。")
-        raise RuntimeError("确认删除按钮点击 3 次后仍显示，已停止后续操作。")
+            self.control.wait(min(0.3, max(0, deadline - time.monotonic())))
+        raise TimeoutError(
+            f"点击确认后原按钮区域在 {timeout:g} 秒内仍未确认消失，已停止后续操作；未重复点击。"
+        )
 
     def _scroll_active_window_down(self, clicks: int = 3, hwnd: int | None = None) -> None:
         """Send mouse wheel scroll-down messages to the specified window or foreground window.
