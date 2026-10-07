@@ -98,8 +98,9 @@ class ActionsMixin:
                         confirm_timeout=cfg.confirm_delete_timeout_seconds,
                         game_install_dir=cfg.game_install_dir,
                         pak_names=cfg.pak_file_names,
-                        bin_template_name=cfg.wegame_bin_template),
-                lambda pos: f"已确认长弓溪谷资源包文件删除完成 (x={pos.x}, y={pos.y})。", "删除长弓溪谷", 1.0),
+                        bin_template_name=cfg.wegame_bin_template,
+                        manager_header_template=cfg.wegame_manager_header_template),
+                lambda pos: f"已确认资源包删除完成并关闭管理器 (x={pos.x}, y={pos.y})。", "删除长弓溪谷", 1.0),
             "restart_game": ("重新启动游戏...",
                 partial(wf.click_start_button, window, cfg.start_button_templates, threshold),
                 lambda ret: f"已点击启动按钮 {ret[1].name} (x={ret[0].x}, y={ret[0].y})。",
@@ -727,7 +728,9 @@ class ActionsMixin:
             self.write_log("调试：阶段模式，完成游戏导航及退出后停止。")
         else:
             self.write_log("调试：单步模式，完成一个导航动作后暂停。")
-        yield from self._begin_navigation(game_process)
+        navigator = self.workflow.game_navigator
+        initial_step = navigator.step_index if navigator.process_id == game_process.process_id else 0
+        yield from self._begin_navigation(game_process, initial_step)
 
     @background_action
     def _on_step_pill_clicked(self, step_index: int):
@@ -755,7 +758,7 @@ class ActionsMixin:
         if jump and navigator.process_id == game_process.process_id and navigator.bound_window:
             action = partial(wf.jump_to_navigation_step, initial_step)
         else:
-            action = partial(wf.start_game_navigation, game_process, initial_step=initial_step)
+            action = partial(wf.start_game_navigation, game_process, initial_step=initial_step, auto_align=not jump)
         self._set_running_controls(True)
         self.set_step_state("nav_game", "running")
         self.update_nav_substep_pills(initial_step)

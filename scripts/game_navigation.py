@@ -46,7 +46,7 @@ NAVIGATION_STEPS = (
     NavigationStep(
         "进入烽火地带大厅",
         "press_sequence",
-        key_sequence=((win32con.VK_SPACE, 5), (win32con.VK_TAB, 2)),
+        key_sequence=((win32con.VK_SPACE, 5),),
         delay_after=2.5,
     ),
     NavigationStep("打开地图选择", "click", "df_map_choose.png", delay_after=1.2),
@@ -96,8 +96,10 @@ class GameNavigator:
         self._last_esc_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
+        self.auto_align = True
 
-    def start(self, process_id: int, initial_step: int = 0) -> NavigationEvent:
+    def start(self, process_id: int, initial_step: int = 0, auto_align: bool = True) -> NavigationEvent:
+        self.auto_align = auto_align
         self.process_id = process_id
         self.bound_window = None
         self.step_index = max(0, min(initial_step, len(NAVIGATION_STEPS) - 1))
@@ -126,6 +128,7 @@ class GameNavigator:
             step_index = len(NAVIGATION_STEPS) - 1
 
         self.step_index = step_index
+        self.auto_align = False
         self.deadline = time.monotonic() + self.step_timeout_seconds
         self.next_action_at = 0.0
         self.finished = False
@@ -214,6 +217,8 @@ class GameNavigator:
 
         # 2. Candidate step indices to inspect, ordered from downstream to upstream
         candidate_indices = [8, 7, 6, 5, 4, 3, 2, 0]
+        if self.step_index <= 2:
+            candidate_indices = [8, 7, 6, 5, 3, 2, 4, 0]
         for idx in candidate_indices:
             if idx >= len(NAVIGATION_STEPS):
                 continue
@@ -221,6 +226,8 @@ class GameNavigator:
             candidate_tmpl_names = [cand_step.template_name]
             if idx == 0:
                 candidate_tmpl_names.extend(["df_change_mode.png", "df_mode_init.png"])
+            elif idx == 2:
+                candidate_tmpl_names.append("df_map_choose_selected.png")
             elif cand_step.template_name == "df_mode_init.png":
                 candidate_tmpl_names.append("df_mode_choose.png")
 
@@ -230,13 +237,20 @@ class GameNavigator:
                 if not tmpl_path.exists():
                     continue
                 res = self.locator.match_in_source(
-                    source, tmpl_path, self.bound_window, self.threshold
+                    source, tmpl_path, self.bound_window, max(self.threshold, 0.90)
                 )
-                if res.matched:
+                if res.matched and res.position.confidence >= max(self.threshold, 0.90):
                     match_res = res
                     break
 
             if match_res is not None and match_res.matched:
+                if idx == 4 and self.step_index <= 2:
+                    self.is_paused = True
+                    return NavigationEvent(
+                        NavigationStatus.PAUSED,
+                        "已识别到烽火大厅，但地图入口未匹配。请采集已选地图卡片为 df_map_choose_selected.png，"
+                        "或手动打开地图选择后继续；未发送 ESC 或 Tab。",
+                    )
                 conf = (
                     float(match_res.position.confidence)
                     if hasattr(match_res.position, "confidence") and isinstance(match_res.position.confidence, (int, float))
@@ -291,9 +305,9 @@ class GameNavigator:
                 return None
 
             self.deadline = now + self.step_timeout_seconds
-            # If starting from step 0, attempt auto-aligning to current game state immediately
+            # Takeovers align from the remembered step; explicit jumps retain their target.
             resync_msg = ""
-            if self.step_index == 0:
+            if self.auto_align:
                 resync_event = self.resync_state()
                 if resync_event is not None:
                     if resync_event.status in (NavigationStatus.COMPLETE, NavigationStatus.PAUSED):
@@ -314,6 +328,10 @@ class GameNavigator:
             return self._complete()
 
         step = NAVIGATION_STEPS[self.step_index]
+        if self.step_index == 1:
+            aligned = self.resync_state()
+            if aligned is not None and (self.step_index != 1 or aligned.status != NavigationStatus.RUNNING):
+                return aligned
         position = None
         matched_cand_name = ""
         if step.template_name:
@@ -324,6 +342,8 @@ class GameNavigator:
                     candidate_names.append("df_mode_init.png")
                 elif step.template_name == "df_mode_init.png":
                     candidate_names.append("df_mode_choose.png")
+            elif self.step_index == 2:
+                candidate_names.append("df_map_choose_selected.png")
 
             matched_result = None
             best_cand_confidence = 0.0
@@ -352,42 +372,33 @@ class GameNavigator:
             if matched_result is None or not matched_result.matched:
                 step_elapsed = now - (self.deadline - self.step_timeout_seconds)
 
-                # If waiting on "选择烽火地带模式" (step 0) for > 3.5s and still not matched
-                # (e.g. game directly entered "黑潮爆破" or another mode's lobby),
-                # press ESC once every 3.0s to open the mode menu where df_change_mode can be matched
-                if self.step_index == 0 and step_elapsed >= 3.5 and (now - self._last_esc_retry >= 3.0):
-                    self._last_esc_retry = now
-                    try:
-                        self.bound_window = self.window_binder.activate(self.bound_window)
-                        self.keyboard.press(win32con.VK_ESCAPE, repeat=1)
-                        self.control.wait(0.3)
-                        return NavigationEvent(
-                            NavigationStatus.RUNNING,
-                            "[提示] 未检测到初始模式选择界面（可能处于黑潮爆破等模式大厅），已按 ESC 调出模式菜单...",
-                        )
-                    except ControlInterrupted:
-                        raise
-                    except Exception:
-                        pass
+                # Align before any recovery key: the user may already be in a lobby.
+                if self.step_index in (0, 2) or (step_elapsed >= 3.0 and now - self._last_resync_check >= 2.5):
+                    self._last_resync_check = now
+                    aligned = self.resync_state()
+                    if aligned is not None:
+                        return aligned
 
-                # If waiting on "打开地图选择" (step 2) for > 3.5s and still not matched,
-                # retry pressing Tab once every 3.0s in case the game lagged on the entrance gate screen
-                if self.step_index == 2 and step_elapsed >= 3.5 and (now - self._last_tab_retry >= 3.0):
+                # Tab is only valid when its entrance prompt is actually visible.
+                entrance_path = self.template_dir / "df_enter_game.png"
+                entrance_visible = (
+                    self.step_index in (0, 2) and entrance_path.exists()
+                    and self.locator.match_in_source(source, entrance_path, self.bound_window, self.threshold).matched
+                )
+                if entrance_visible and now - self._last_tab_retry >= 3.0:
                     self._last_tab_retry = now
                     try:
                         self.bound_window = self.window_binder.activate(self.bound_window)
                         self.keyboard.press(win32con.VK_TAB, repeat=1)
+                        if self.step_index == 0:
+                            self.deadline = now + self.step_timeout_seconds
+                        self.step_index = 2
+                        self.next_action_at = now + 1.0
+                        return NavigationEvent(NavigationStatus.RUNNING, "已识别特勤处入口，按一次 Tab 返回烽火大厅。")
                     except ControlInterrupted:
                         raise
                     except Exception:
                         pass
-
-                # If stuck waiting on ANY step for > 3s, try smart resync to auto-align to current UI
-                if step_elapsed >= 3.0 and (now - self._last_resync_check >= 2.5):
-                    self._last_resync_check = now
-                    resync_event = self.resync_state()
-                    if resync_event is not None:
-                        return resync_event
 
                 if now >= self.deadline:
                     return self._fail(

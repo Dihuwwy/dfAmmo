@@ -103,9 +103,9 @@ class Workflow:
     def find_game_process(self) -> GameProcess | None:
         return self.game_process_finder.find()
 
-    def start_game_navigation(self, game_process: GameProcess, initial_step: int = 0) -> NavigationEvent:
+    def start_game_navigation(self, game_process: GameProcess, initial_step: int = 0, auto_align: bool = True) -> NavigationEvent:
         self._game_process = game_process
-        return self.game_navigator.start(game_process.process_id, initial_step=initial_step)
+        return self.game_navigator.start(game_process.process_id, initial_step=initial_step, auto_align=auto_align)
 
     def jump_to_navigation_step(self, step_index: int) -> NavigationEvent:
         return self.game_navigator.jump_to_step(step_index)
@@ -350,6 +350,7 @@ class Workflow:
         pak_names: tuple[str, ...] = DEFAULT_PAK_NAMES,
         deletion_timeout: float = 30.0,
         bin_template_name: str = "wegame_bin.png",
+        manager_header_template: str = "wegame_assests_manage.png",
     ) -> ElementPosition:
         """Find the resource management window and click delete for changgong map.
 
@@ -368,6 +369,8 @@ class Workflow:
         bin_path = TEMPLATE_DIR / bin_template_name
         if not bin_path.exists():
             raise FileNotFoundError(f"缺少垃圾桶图标模板：{bin_template_name}")
+        if not (TEMPLATE_DIR / manager_header_template).exists():
+            raise FileNotFoundError(f"缺少资源管理器顶部模板：{manager_header_template}")
         pak_dir = self.get_paks_dir(game_install_dir)
         if not game_install_dir or not pak_dir.is_dir():
             raise ValueError("请先配置正确的游戏安装目录，以核验资源包删除结果。")
@@ -413,6 +416,8 @@ class Workflow:
                 self.confirm_resource_delete(confirm_template_name, threshold, confirm_timeout)
                 self.report_progress("确认弹窗已关闭，正在核验资源包文件删除结果。")
                 self.wait_for_resource_deletion(game_install_dir, pak_names, deletion_timeout)
+                self.report_progress("资源包删除已核验，正在关闭资源管理器。")
+                self.close_resource_manager(manager_header_template, threshold)
                 return click_pos
 
             # Scroll the resource-manager window downward every scroll_interval seconds
@@ -503,14 +508,14 @@ class Workflow:
         screen_matches = 0
         while time.monotonic() < deadline:
             self.control.check()
+            candidates = []
             resource_window = self.window_binder.bind_by_title("游戏资源包管理")
             if resource_window is not None:
                 result = self.locator.match_by_image(template_path, resource_window, threshold)
                 window_matches += 1
                 best_confidence = max(best_confidence, result.position.confidence)
                 if result.matched:
-                    self.control.check()
-                    return self._click_delete_confirmation(result.position, template_path, threshold)
+                    candidates.append(result.position)
             # Confirmation dialogs may have a different title or extend beyond
             # the resource manager. Do not refocus its parent over the dialog.
             self.control.check()
@@ -518,8 +523,11 @@ class Workflow:
             screen_matches += 1
             best_confidence = max(best_confidence, result.position.confidence)
             if result.matched:
+                candidates.append(result.position)
+            if candidates:
                 self.control.check()
-                return self._click_delete_confirmation(result.position, template_path, threshold)
+                position = max(candidates, key=lambda item: item.confidence)
+                return self._click_delete_confirmation(position, template_path, threshold)
             self.control.wait(min(0.2, max(0, deadline - time.monotonic())))
         raise TimeoutError(
             f"等待确认删除资源包按钮超时（{timeout:g}秒，{template_name}）；"
@@ -528,7 +536,7 @@ class Workflow:
         )
 
     def _click_delete_confirmation(self, position, template_path, threshold, timeout=30.0):
-        """Click once, then allow asynchronous processing at the original location."""
+        """Retry at the selected dialog only, allowing time between clicks."""
         self.control.check()
         self.report_progress(
             f"点击确认删除：x={position.x}, y={position.y}, "
@@ -542,16 +550,57 @@ class Workflow:
         deadline = time.monotonic() + timeout
         self.control.wait(min(1.0, max(0, timeout)))
         missing_count = 0
+        next_click_at = time.monotonic() + 2.0
+        clicks = 1
         while time.monotonic() < deadline:
             self.control.check()
             result = self.locator.match_by_image(template_path, region, threshold)
             missing_count = 0 if result.matched else missing_count + 1
             if missing_count >= 2:
                 return position
+            if result.matched and time.monotonic() >= next_click_at:
+                self.control.check()
+                clicks += 1
+                self.report_progress(f"确认按钮仍显示，在原位置重试第 {clicks} 次：x={position.x}, y={position.y}")
+                self.clicker.click(replace(position, width=0, height=0))
+                next_click_at = time.monotonic() + 2.0
             self.control.wait(min(0.3, max(0, deadline - time.monotonic())))
         raise TimeoutError(
-            f"点击确认后原按钮区域在 {timeout:g} 秒内仍未确认消失，已停止后续操作；未重复点击。"
+            f"确认按钮在 {timeout:g} 秒内仍未消失，共点击 {clicks} 次；已停止后续操作。"
         )
+
+    def close_resource_manager(self, template_name="wegame_assests_manage.png", threshold=0.78, timeout=10.0):
+        template_path = TEMPLATE_DIR / template_name
+        if not template_path.exists():
+            raise FileNotFoundError(f"缺少资源管理器顶部模板：{template_name}")
+        deadline = time.monotonic() + timeout
+        clicked = False
+        missing_count = 0
+        next_click_at = 0.0
+        while time.monotonic() < deadline:
+            self.control.check()
+            result = self.locator.match_on_screen(template_path, threshold)
+            if result.matched:
+                missing_count = 0
+                if time.monotonic() >= next_click_at:
+                    header = result.position
+                    # The supplied 895x120 header has its close icon at (865, 30).
+                    position = ElementPosition(
+                        x=header.x - header.width // 2 + round(header.width * 865 / 895),
+                        y=header.y - header.height // 2 + round(header.height * 30 / 120),
+                        confidence=header.confidence,
+                    )
+                    self.clicker.click(position)
+                    clicked = True
+                    next_click_at = time.monotonic() + 2.0
+                    self.report_progress(f"点击资源管理器关闭叉号：x={position.x}, y={position.y}")
+            elif clicked:
+                missing_count += 1
+                if missing_count >= 2:
+                    self.report_progress("资源管理器已关闭。")
+                    return
+            self.control.wait(min(0.3, max(0, deadline - time.monotonic())))
+        raise TimeoutError("资源管理器关闭未确认，已停止后续启动。")
 
     def _scroll_active_window_down(self, clicks: int = 3, hwnd: int | None = None) -> None:
         """Send mouse wheel scroll-down messages to the specified window or foreground window.

@@ -42,6 +42,7 @@ class AppConfig:
     wegame_assets_manage_template: str = "wegame_assets_manage.png"
     wegame_delete_map_template: str = "wegame_delete_map.png"
     wegame_bin_template: str = "wegame_bin.png"
+    wegame_manager_header_template: str = "wegame_assests_manage.png"
     wegame_confirm_delete_template: str = "wegame_confirmdelete.png"
     confirm_delete_timeout_seconds: int = 10
     wegame_ready_timeout_seconds: int = 60
