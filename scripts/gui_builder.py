@@ -302,6 +302,7 @@ class BuilderMixin:
         self.step_mode_toggle.setObjectName("stepModeToggle")
         for label, mode in (("单步", "step"), ("阶段", "stage"), ("连续", "continuous")):
             self.step_mode_toggle.addItem(label, mode)
+        self.step_mode_toggle.setCurrentIndex(self.step_mode_toggle.findData("continuous"))
         self.step_mode_toggle.setFixedWidth(100)
         self.step_mode_toggle.setToolTip("单步：完成一个动作后暂停；阶段：完成当前阶段后停止；连续：衔接后续阶段")
         self.step_mode_toggle.currentIndexChanged.connect(self._on_step_mode_toggled)
