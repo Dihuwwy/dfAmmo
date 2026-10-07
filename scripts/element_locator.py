@@ -126,3 +126,23 @@ class ElementLocator:
     ) -> MatchResult:
         source = self.grab_window_bgr(bound_window)
         return self.match_in_source(source, template_path, bound_window, threshold)
+
+    def delete_confirmation_offset(self, template_path: str | Path) -> tuple[float, float]:
+        """Locate the orange confirm button inside the complete dialog template."""
+        template = self.get_template(template_path)
+        height, width = template.shape[:2]
+        if height < 150 or width < 300:
+            raise ValueError("确认删除模板必须包含整个弹窗，不能只截按钮。")
+        hsv = cv2.cvtColor(template, cv2.COLOR_BGR2HSV)
+        mask = cv2.inRange(hsv, np.array([5, 120, 150]), np.array([40, 255, 255]))
+        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        buttons = []
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            # Exclude the top border and warning icon; the orange command is below.
+            if y > height / 2 and w > width * 0.15 and height * 0.05 < h < height * 0.25:
+                buttons.append((x, y, w, h))
+        if len(buttons) != 1:
+            raise ValueError("无法在弹窗模板中唯一定位橙色确定按钮，请重新采集完整弹窗。")
+        x, y, w, h = buttons[0]
+        return (x + w / 2) / width, (y + h / 2) / height

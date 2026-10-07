@@ -497,11 +497,12 @@ class Workflow:
         threshold: float = 0.78,
         timeout: float = 10.0,
     ) -> ElementPosition:
-        """Wait for the resource manager's confirmation button and click it."""
+        """Match the complete dialog before clicking its orange confirmation button."""
         template_path = TEMPLATE_DIR / template_name
         if not template_path.exists():
             raise FileNotFoundError(f"缺少确认删除资源包模板：{template_name}")
         self.report_progress(f"确认删除使用模板：{template_path.resolve()}")
+        button_offset = self.locator.delete_confirmation_offset(template_path)
         deadline = time.monotonic() + timeout
         best_confidence = 0.0
         window_matches = 0
@@ -527,7 +528,20 @@ class Workflow:
             if candidates:
                 self.control.check()
                 position = max(candidates, key=lambda item: item.confidence)
-                return self._click_delete_confirmation(position, template_path, threshold)
+                left = position.x - position.width // 2
+                top = position.y - position.height // 2
+                click_position = ElementPosition(
+                    left + round(position.width * button_offset[0]),
+                    top + round(position.height * button_offset[1]),
+                    position.confidence,
+                )
+                self.report_progress(
+                    f"已匹配完整删除弹窗：区域=({left}, {top}, {position.width}, {position.height})；"
+                    f"确定按钮=({click_position.x}, {click_position.y})"
+                )
+                return self._click_delete_confirmation(
+                    position, template_path, threshold, click_position=click_position,
+                )
             self.control.wait(min(0.2, max(0, deadline - time.monotonic())))
         raise TimeoutError(
             f"等待确认删除资源包按钮超时（{timeout:g}秒，{template_name}）；"
@@ -535,14 +549,15 @@ class Workflow:
             f"窗口匹配次数={window_matches}，全屏匹配次数={screen_matches}"
         )
 
-    def _click_delete_confirmation(self, position, template_path, threshold, timeout=30.0):
+    def _click_delete_confirmation(self, position, template_path, threshold, timeout=30.0, click_position=None):
         """Retry at the selected dialog only, allowing time between clicks."""
+        click_position = click_position or replace(position, width=0, height=0)
         self.control.check()
         self.report_progress(
-            f"点击确认删除：x={position.x}, y={position.y}, "
+            f"点击确认删除：x={click_position.x}, y={click_position.y}, "
             f"confidence={position.confidence:.3f}；等待弹窗响应（最多 {timeout:g} 秒）"
         )
-        self.clicker.click(replace(position, width=0, height=0))
+        self.clicker.click(click_position)
         width, height = max(1, position.width), max(1, position.height)
         left, top = position.x - width // 2, position.y - height // 2
         region = BoundWindow(0, left=left, top=top,
@@ -561,8 +576,8 @@ class Workflow:
             if result.matched and time.monotonic() >= next_click_at:
                 self.control.check()
                 clicks += 1
-                self.report_progress(f"确认按钮仍显示，在原位置重试第 {clicks} 次：x={position.x}, y={position.y}")
-                self.clicker.click(replace(position, width=0, height=0))
+                self.report_progress(f"确认弹窗仍显示，重试第 {clicks} 次：x={click_position.x}, y={click_position.y}")
+                self.clicker.click(click_position)
                 next_click_at = time.monotonic() + 2.0
             self.control.wait(min(0.3, max(0, deadline - time.monotonic())))
         raise TimeoutError(
