@@ -1,5 +1,6 @@
 # ── Virtual environment ────────────────────────────────────────────────────
 .venv/
+.build-venv/
 venv/
 env/
 ENV/
@@ -16,6 +17,7 @@ build/
 dist/
 *.egg-info/
 *.spec
+!release_tools/dfammo.spec
 
 # ── IDE ─────────────────────────────────────────────────────────────────────
 .idea/

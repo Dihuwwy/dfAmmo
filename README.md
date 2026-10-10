@@ -4,13 +4,14 @@
 
 项目使用 Python、PySide6、OpenCV 与 Win32 API 实现桌面交互。当前半自动流程在进入仓库并确认提示后结束，后续穿戴装备、等待地图恢复、切换模式和重连由用户完成。
 
-> 项目仍在开发中。全自动模式的后续步骤仅有禁用的占位按钮，尚未实现；EXE 打包与 GitHub Actions 构建也尚未配置。模板可能随游戏或 WeGame 更新失效，不保证所有分辨率和缩放设置均可用。
+> 项目仍在开发中。全自动模式的后续步骤仅有禁用的占位按钮，尚未实现。Windows EXE 通过 GitHub Actions 构建并执行启动自检；这不等同于真实游戏流程验收。模板可能随游戏或 WeGame 更新失效，不保证所有分辨率和缩放设置均可用。
 
 ## 目录
 
 - [功能与状态](#功能与状态)
 - [环境要求](#环境要求)
 - [快速开始](#快速开始)
+- [构建与发布](#构建与发布)
 - [使用方式](#使用方式)
 - [配置](#配置)
 - [模板采集](#模板采集)
@@ -57,10 +58,18 @@
 
 ## 快速开始
 
-下载仓库源码，或使用实际仓库地址克隆：
+### Windows 便携版本
+
+在 [Releases](https://github.com/Dihuwwy/dfAmmo/releases) 下载 Windows x64 ZIP 包，将整个文件夹解压到可写目录，再双击 `dfAmmo.exe`。此方式无需安装 Python 或 uv。
+
+不要只复制 EXE：需要保留 `_internal/`、`assets/` 和许可文件。包内不包含个人配置，首次启动会在 EXE 旁生成 `config.json`。程序未签名，系统可能显示发布者未知；请核对下载来源与 `.sha256` 校验文件，不要关闭安全软件。
+
+### 从源码运行
+
+下载仓库源码，或克隆：
 
 ```powershell
-git clone <仓库地址>
+git clone https://github.com/Dihuwwy/dfAmmo.git
 cd dfAmmo
 uv sync --frozen --python 3.11
 uv run --frozen main.py
@@ -73,6 +82,22 @@ uv run --frozen main.py
 - 没有可用环境或依赖同步失败时，会显示错误并退出。
 
 首次同步需要下载依赖，耗时取决于网络和环境。依赖声明见 [pyproject.toml](pyproject.toml)，锁定版本见 [uv.lock](uv.lock)。
+
+## 构建与发布
+
+使用独立的精简环境构建 Windows x64 版本，不会改变开发用 `.venv`：
+
+```powershell
+uv venv .build-venv --python 3.11
+uv pip install --python .build-venv/Scripts/python.exe --require-hashes -r release_tools/build-requirements.lock
+.build-venv/Scripts/python.exe release_tools/build_windows.py
+```
+
+构建脚本使用 PyInstaller 文件夹模式，并执行无交互启动自检。自检不申请管理员授权、不发送键鼠输入、不操作游戏、不写入个人配置。构建产物位于 `dist/`，包含 ZIP、SHA-256 和构建报告；ZIP 内附项目源码与第三方许可声明。
+
+[GitHub Actions](https://github.com/Dihuwwy/dfAmmo/actions) 会在推送 `main` 时构建，也可手动触发。推送与 `pyproject.toml` 版本一致的 `v*` 标签后，会在构建和启动自检成功时发布 Release；不一致的版本会被阻止。
+
+工作流见 [.github/workflows/windows-release.yml](.github/workflows/windows-release.yml)。构建依赖采用 [release_tools/build-requirements.lock](release_tools/build-requirements.lock) 固定版本和哈希，仅安装当前使用的运行库、PySide6 Essentials 和构建工具，不包含历史 OCR、Airtest 或 Qt Addons 依赖。
 
 ## 使用方式
 
@@ -100,7 +125,7 @@ uv run --frozen main.py
 
 ## 配置
 
-首次启动时，如果项目根目录没有 `config.json`，程序会尝试生成默认配置。个人配置已加入 `.gitignore`，不随仓库分发；游戏目录和运行模式可以在界面中设置。
+首次启动时，如果项目根目录（EXE 版为可执行文件所在目录）没有 `config.json`，程序会尝试生成默认配置。个人配置已加入 `.gitignore`，不随仓库分发；游戏目录和运行模式可以在界面中设置。
 
 主要配置项如下，完整字段与默认值见 [scripts/config.py](scripts/config.py)：
 
@@ -202,8 +227,8 @@ dfAmmo/
 
 ## 许可与使用注意
 
-当前仓库尚未添加 `LICENSE` 文件，开源许可待确认；此前讨论的 GPL-3.0 仍为建议，正式许可应以之后提交的许可证文件为准。
+项目原创代码采用 **GPL-3.0-only**，完整条款见 [LICENSE](LICENSE)，版权及素材范围见 [NOTICE](NOTICE)。分发修改版或 EXE 时，请遵守对应源码提供等许可要求。
 
-游戏截图模板和界面素材可能涉及第三方权利，不应视为项目原创素材。第三方依赖遵循各自许可证，发布可执行文件时需检查其分发要求并保留必要声明。
+游戏截图模板和界面素材可能涉及第三方权利，不应视为项目原创素材。第三方依赖遵循各自许可证，说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)；可执行包附带依赖版本清单与许可文本。
 
 本工具会模拟键鼠输入、终止游戏进程及重命名本地游戏资源文件。使用前请备份重要文件，了解实际操作，并确认符合游戏与平台的适用规则。项目不保证操作成功、账号安全或资源完整性。

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
+                else Path(__file__).resolve().parent.parent)
 TEMPLATE_DIR = PROJECT_ROOT / "assets" / "templates"
 CONFIG_FILE = PROJECT_ROOT / "config.json"
 DEFAULT_PAK_NAMES = (

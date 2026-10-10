@@ -38,9 +38,14 @@ def relaunch_as_admin() -> bool:
     )
     shell_execute.restype = ctypes.c_void_p
 
-    pythonw = Path(sys.executable).with_name("pythonw.exe")
-    executable = pythonw if pythonw.exists() else Path(sys.executable)
-    parameters = subprocess.list2cmdline(sys.argv)
+    if getattr(sys, "frozen", False):
+        executable = Path(sys.executable)
+        arguments = sys.argv[1:]
+    else:
+        pythonw = Path(sys.executable).with_name("pythonw.exe")
+        executable = pythonw if pythonw.exists() else Path(sys.executable)
+        arguments = sys.argv
+    parameters = subprocess.list2cmdline(arguments)
     result = shell_execute(
         None,
         "runas",

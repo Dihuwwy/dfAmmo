@@ -1,10 +1,16 @@
 import ctypes
+import sys
 
 from scripts.dpi import enable_dpi_awareness
 from scripts.privileges import hide_console_window, is_elevated, relaunch_as_admin
 
 
 def main() -> int:
+    if sys.argv[1:2] == ["--self-test"]:
+        from release_tools.smoke_test import run
+
+        return run(sys.argv[2:])
+
     enable_dpi_awareness()
 
     if not is_elevated():
