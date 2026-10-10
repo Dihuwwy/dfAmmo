@@ -68,14 +68,13 @@ def wait_for_reconnect_notice(workflow, template_path: Path, confirm_path: Path,
     return False
 
 
-def _wait_for_game_ui(workflow, template_paths, threshold, timeout, entrance_path=None):
-    """Wait for a known screen; Tab is allowed once, only at the entrance prompt."""
+def _wait_for_game_ui(workflow, template_paths, threshold, timeout):
+    """Wait for a known screen without sending recovery keys."""
     paths = [path for path in template_paths if path.is_file()]
     if not paths:
         raise FileNotFoundError("缺少第四阶段界面模板：" + ", ".join(p.name for p in template_paths))
     deadline = time.monotonic() + timeout
     active_handle = None
-    tab_sent = False
     best_confidence = 0.0
     while time.monotonic() < deadline:
         workflow.control.check()
@@ -91,14 +90,6 @@ def _wait_for_game_ui(workflow, template_paths, threshold, timeout, entrance_pat
                 best_confidence = max(best_confidence, result.position.confidence)
                 if result.matched:
                     return window, result.position, path.name
-            if not tab_sent and entrance_path is not None and entrance_path.is_file():
-                entrance = workflow.locator.match_in_source(source, entrance_path, window, threshold)
-                if entrance.matched:
-                    workflow.window_binder.activate(window)
-                    workflow.keyboard.press(win32con.VK_TAB, repeat=1)
-                    tab_sent = True
-                    workflow.report_progress("第四阶段：已识别特勤处入口，按一次 Tab 进入烽火大厅。")
-                    workflow.control.wait(1.0)
         workflow.control.wait(min(0.7, max(0, deadline - time.monotonic())))
     raise TimeoutError(
         f"第四阶段等待界面超时（{timeout:g}秒，{', '.join(p.name for p in paths)}）；"
@@ -128,11 +119,43 @@ def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, thres
     workflow.window_binder.activate(window)
     workflow.control.wait(0.5)
     workflow.keyboard.press_sequence(NAVIGATION_STEPS[1].key_sequence)
-    workflow.report_progress("第四阶段：已按五次空格跳过活动，等待大厅或特勤处入口。")
+    workflow.report_progress("第四阶段：已按两次空格跳过活动并按一次 Tab，等待大厅画面。")
     workflow.control.wait(NAVIGATION_STEPS[1].delay_after)
     _, position, name = _wait_for_game_ui(
         workflow, [directory / "df_map_choose.png", directory / "df_map_choose_selected.png",
                    directory / "df_start_manoeuver.png"],
-        threshold, step_timeout, entrance_path=directory / "df_enter_game.png")
+        threshold, step_timeout)
     workflow.report_progress(f"第四阶段已进入烽火大厅：{name}，相似度={position.confidence:.3f}；本步完成。")
     return True
+
+
+def request_map_redownload(workflow, directory, choice_name, panel_name, download_name, threshold, timeout):
+    """Request the map in-game, then leave verification to the game's own loader."""
+    choice, panel, download = [directory / name for name in (choice_name, panel_name, download_name)]
+    for path in (choice, panel, download):
+        if not path.is_file():
+            raise FileNotFoundError(f"缺少第四阶段地图恢复模板：{path.name}")
+    steps = [([directory / "df_map_choose.png", directory / "df_map_choose_selected.png"], "打开地图选择"),
+             ([choice], "选择待恢复的长弓溪谷")]
+    for paths, label in steps:
+        window, position, name = _wait_for_game_ui(workflow, paths, threshold, timeout)
+        workflow.control.check()
+        workflow.clicker.click(replace(position, width=0, height=0), window.handle)
+        workflow.report_progress(f"第四阶段：{label} | template={name}, confidence={position.confidence:.3f}")
+        workflow.control.wait(0.5)
+    window, position, _ = _wait_for_game_ui(workflow, [panel], threshold, timeout)
+    left, top = position.x - position.width // 2, position.y - position.height // 2
+    # The panel anchor excludes the download row (615px of the original 702px).
+    region = BoundWindow(0, left=max(window.left, left), top=top + position.height,
+                         right=min(window.right, left + position.width),
+                         bottom=min(window.bottom, top + round(position.height * 702 / 615)))
+    result = workflow.locator.match_by_image(download, region, threshold)
+    if not result.matched:
+        raise RuntimeError(f"下载按钮未在长弓面板底部匹配：最高相似度={result.position.confidence:.3f}。未发送下载点击。")
+    workflow.control.check()
+    workflow.clicker.click(replace(result.position, width=0, height=0), window.handle)
+    workflow.report_progress(f"第四阶段：已点击长弓下载按钮：x={result.position.x}, y={result.position.y}")
+    workflow.control.wait(0.5)
+    workflow.control.check()
+    workflow.keyboard.press(win32con.VK_ESCAPE, repeat=2, interval=0.35)
+    workflow.report_progress("第四阶段：已按两次 ESC 返回大厅，地图恢复请求已发送；由游戏自行校验文件。")

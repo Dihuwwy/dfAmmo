@@ -629,7 +629,7 @@ class ActionsMixin:
             yield from self._run_stage_four_tasks()
 
     @background_action
-    def _run_stage_four(self, detect_only: bool = False):
+    def _run_stage_four(self, start_step: str = "restore_pak"):
         self.workflow.control.paused.clear()
         self.set_step_state("restore_pak", "running")
         try:
@@ -644,31 +644,55 @@ class ActionsMixin:
         self._sync_pak_button_state()
         self.set_step_state("restore_pak", "success")
         self.write_log("第四阶段：地图已恢复，后续识别结果不会影响恢复操作。")
-        if self.execution_mode == "step" and not detect_only:
+        if self.execution_mode == "step" and start_step == "restore_pak":
             self.write_log("单步完成：地图已恢复，点击“确认并进大厅”执行下一步。")
             return
-        self.set_step_state("detect_result", "running")
-        self.write_log("第四阶段：确认提示、选择模式、再次确认并进入大厅（合并为一步）...")
+        if start_step != "redownload_map":
+            self.set_step_state("detect_result", "running")
+            self.write_log("第四阶段第 1 步：确认提示、选择模式、再次确认并进入大厅...")
+            try:
+                matched = yield lambda: self.workflow.detect_stage_four_result(
+                    self.config.reconnect_notice_template, self.config.reconnect_confirm_template,
+                    self.config.reconnect_notice_threshold,
+                    self.config.reconnect_notice_timeout_seconds)
+            except ControlInterrupted:
+                raise
+            except Exception as exc:
+                self.set_step_state("detect_result", "failed", str(exc))
+                self.write_log(f"第四阶段进入大厅失败：{exc}；Pak 已经恢复。")
+                return
+            self.set_step_state("detect_result", "success" if matched else "failed", "" if matched else "结果未确认")
+            self._set_badge(self.workflow_status_badge, "已返回烽火大厅" if matched else "Pak 已恢复，结果未确认",
+                            "success" if matched else "failed")
+            if not matched:
+                return
+            if self.execution_mode == "step":
+                self.write_log("单步完成：已进入大厅，点击“恢复地图下载”执行第 2 步。")
+                return
+        self.set_step_state("redownload_map", "running")
+        self.write_log("第四阶段第 2 步：选择长弓、点击下载，再按两次 ESC...")
         try:
-            matched = yield lambda: self.workflow.detect_stage_four_result(
-                self.config.reconnect_notice_template, self.config.reconnect_confirm_template,
-                self.config.reconnect_notice_threshold,
-                self.config.reconnect_notice_timeout_seconds)
+            yield lambda: self.workflow.redownload_stage_four_map(
+                self.config.redownload_map_choice_template, self.config.redownload_map_panel_template,
+                self.config.redownload_map_button_template, self.config.template_match_threshold,
+                self.config.navigation_step_timeout_seconds)
         except ControlInterrupted:
             raise
         except Exception as exc:
-            self.set_step_state("detect_result", "failed", str(exc))
-            self.write_log(f"第四阶段识别失败：{exc}；地图已经恢复。")
+            self.set_step_state("redownload_map", "failed", str(exc))
+            self.write_log(f"第四阶段地图下载请求失败：{exc}；Pak 已经恢复。")
             return
-        self.set_step_state("detect_result", "success" if matched else "failed", "" if matched else "结果未确认")
-        self._set_badge(self.workflow_status_badge, "已返回烽火大厅" if matched else "地图已恢复，结果未确认",
-                        "success" if matched else "failed")
+        self.set_step_state("redownload_map", "success")
+        self._set_badge(self.workflow_status_badge, "地图恢复请求已发送", "success")
 
     def _dbg_stage_four(self):
         self._run_stage_four()
 
     def _dbg_stage_four_detect(self):
-        self._run_stage_four(detect_only=True)
+        self._run_stage_four(start_step="detect_result")
+
+    def _dbg_stage_four_redownload(self):
+        self._run_stage_four(start_step="redownload_map")
 
 
     # ── Debug & Step Status Management ───────────────────────────────────────
@@ -684,7 +708,7 @@ class ActionsMixin:
         dot = (self.step1_dot if step_id == "nav_game" else self.step2_dot
                if step_id in ("rename_pak", "open_paks") else self.step3_dot
                if step_id in self._wegame_step_ids else self.step4_dot
-               if step_id in ("restore_pak", "detect_result") else None)
+               if step_id in ("restore_pak", "detect_result", "redownload_map") else None)
         if dot is not None:
             self._set_property(dot, "state", state)
         prefix = {"running": "正在执行", "success": "步骤完成", "failed": "步骤失败"}

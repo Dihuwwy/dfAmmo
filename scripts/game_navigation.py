@@ -46,7 +46,7 @@ NAVIGATION_STEPS = (
     NavigationStep(
         "进入烽火地带大厅",
         "press_sequence",
-        key_sequence=((win32con.VK_SPACE, 5),),
+        key_sequence=((win32con.VK_SPACE, 2), (win32con.VK_TAB, 1)),
         delay_after=2.5,
     ),
     NavigationStep("打开地图选择", "click", "df_map_choose.png", delay_after=1.2),
@@ -92,7 +92,6 @@ class GameNavigator:
         self.finished = True
         self.is_paused = False
         self._last_resync_check = 0.0
-        self._last_tab_retry = 0.0
         self._last_esc_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
@@ -108,7 +107,6 @@ class GameNavigator:
         self.finished = False
         self.is_paused = False
         self._last_resync_check = 0.0
-        self._last_tab_retry = 0.0
         self._last_esc_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
@@ -133,7 +131,6 @@ class GameNavigator:
         self.next_action_at = 0.0
         self.finished = False
         self.is_paused = False
-        self._last_tab_retry = 0.0
         self._last_esc_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
@@ -378,27 +375,6 @@ class GameNavigator:
                     aligned = self.resync_state()
                     if aligned is not None:
                         return aligned
-
-                # Tab is only valid when its entrance prompt is actually visible.
-                entrance_path = self.template_dir / "df_enter_game.png"
-                entrance_visible = (
-                    self.step_index in (0, 2) and entrance_path.exists()
-                    and self.locator.match_in_source(source, entrance_path, self.bound_window, self.threshold).matched
-                )
-                if entrance_visible and now - self._last_tab_retry >= 3.0:
-                    self._last_tab_retry = now
-                    try:
-                        self.bound_window = self.window_binder.activate(self.bound_window)
-                        self.keyboard.press(win32con.VK_TAB, repeat=1)
-                        if self.step_index == 0:
-                            self.deadline = now + self.step_timeout_seconds
-                        self.step_index = 2
-                        self.next_action_at = now + 1.0
-                        return NavigationEvent(NavigationStatus.RUNNING, "已识别特勤处入口，按一次 Tab 返回烽火大厅。")
-                    except ControlInterrupted:
-                        raise
-                    except Exception:
-                        pass
 
                 if now >= self.deadline:
                     return self._fail(
