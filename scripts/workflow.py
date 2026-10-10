@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 
@@ -260,6 +261,22 @@ class Workflow:
             return "restored", self.restore_pak_files(game_install_dir, pak_names)
         return "disabled", self.rename_pak_files(game_install_dir, pak_names)
 
+    def require_paks_disabled(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> None:
+        """Never send a WeGame deletion click while any original Pak remains exposed."""
+        self.control.check()
+        pak_dir = self.get_paks_dir(game_install_dir)
+        if not game_install_dir or not pak_names or not pak_dir.is_dir():
+            raise RuntimeError("已阻止 WeGame 删地图：安装目录或 Pak 文件列表无效，无法确认屏蔽状态。")
+        unsafe = []
+        for name in pak_names:
+            normal, disabled = pak_dir / name, pak_dir / f"{name}.disabled"
+            if normal.exists():
+                unsafe.append(f"{name} 原文件仍存在")
+            elif not disabled.is_file():
+                unsafe.append(f"{name}.disabled 不存在或不是文件")
+        if unsafe:
+            raise RuntimeError("已阻止 WeGame 删地图：目标 Pak 未全部屏蔽；" + "；".join(unsafe))
+
 
     def wait_for_wegame_ready(
         self,
@@ -371,6 +388,8 @@ class Workflow:
         confirm_timeout: float = 10.0,
         bin_template_name: str = "wegame_bin.png",
         manager_header_template: str = "wegame_assests_manage.png",
+        game_install_dir: str = "",
+        pak_names: tuple[str, ...] = DEFAULT_PAK_NAMES,
     ) -> ElementPosition:
         """Find the resource management window and click delete for changgong map.
 
@@ -381,6 +400,9 @@ class Workflow:
         window downward by *scroll_step* wheel-clicks every *scroll_interval*
         seconds until the button appears or *timeout* is reached.
         """
+        guard = lambda: self.require_paks_disabled(game_install_dir, pak_names)
+        guard()
+        self.report_progress("Pak 屏蔽检查通过：所有目标 .disabled 文件存在，原名文件不存在。")
         template_path = TEMPLATE_DIR / template_name
         if not template_path.exists():
             raise FileNotFoundError(f"缺少删除长弓溪谷资源包模板：{template_name}")
@@ -428,9 +450,9 @@ class Workflow:
                     self.report_progress(f"保存删除目标截图失败：{exc}")
                 else:
                     self.report_progress(f"悬停后的删除目标截图：{screenshot_path}")
-                click_pos = self.click_card_bin(pos, bin_path, threshold)
+                click_pos = self.click_card_bin(pos, bin_path, threshold, before_click=guard)
                 self.report_progress(f"已发送删除点击：x={click_pos.x}, y={click_pos.y}；等待确认删除弹窗验证。")
-                self.confirm_resource_delete(confirm_template_name, threshold, confirm_timeout)
+                self.confirm_resource_delete(confirm_template_name, threshold, confirm_timeout, before_click=guard)
                 # WeGame's resource state is separate from retained .disabled files.
                 self.report_progress("已发送确定点击，正在关闭资源管理器；保留本地重命名文件。")
                 self.close_resource_manager(manager_header_template, threshold)
@@ -453,6 +475,7 @@ class Workflow:
     def click_card_bin(
         self, card: ElementPosition, template_path: Path,
         threshold: float = 0.78, timeout: float = 3.0,
+        before_click: Callable[[], None] | None = None,
     ) -> ElementPosition:
         if card.width <= 0 or card.height <= 0:
             raise ValueError("卡片识别区域无效，无法定位垃圾桶。")
@@ -472,6 +495,8 @@ class Workflow:
                     f"confidence={position.confidence:.3f}, template={template_path.name}"
                 )
                 self.control.check()
+                if before_click is not None:
+                    before_click()
                 self.clicker.click(replace(position, width=0, height=0))
                 return position
             self.control.wait(min(0.2, max(0, deadline - time.monotonic())))
@@ -485,6 +510,7 @@ class Workflow:
         template_name: str = "wegame_confirmdelete.png",
         threshold: float = 0.78,
         timeout: float = 10.0,
+        before_click: Callable[[], None] | None = None,
     ) -> ElementPosition:
         """Match the complete dialog before clicking its orange confirmation button."""
         template_path = TEMPLATE_DIR / template_name
@@ -528,6 +554,8 @@ class Workflow:
                     f"已匹配完整删除弹窗：区域=({left}, {top}, {position.width}, {position.height})；"
                     f"确定按钮=({click_position.x}, {click_position.y})"
                 )
+                if before_click is not None:
+                    before_click()
                 return self._click_delete_confirmation(
                     position, click_position=click_position,
                 )

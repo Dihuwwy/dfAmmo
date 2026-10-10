@@ -96,6 +96,8 @@ class ActionsMixin:
                         threshold, timeout=cfg.delete_map_timeout_seconds,
                         confirm_template_name=cfg.wegame_confirm_delete_template,
                         confirm_timeout=cfg.confirm_delete_timeout_seconds,
+                        game_install_dir=cfg.game_install_dir,
+                        pak_names=cfg.pak_file_names,
                         bin_template_name=cfg.wegame_bin_template,
                         manager_header_template=cfg.wegame_manager_header_template),
                 lambda pos: f"已发送 WeGame 确定及关闭点击，保留本地重命名文件 (x={pos.x}, y={pos.y})。", "删除长弓溪谷", 1.0),

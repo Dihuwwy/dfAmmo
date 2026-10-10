@@ -405,21 +405,26 @@ class BuilderMixin:
         s3_vbox.addLayout(sec3_row)
         body_layout.addWidget(s3_w)
         body_layout.addWidget(self._make_divider())
-        s4_w, s4_header, self.step4_dot, self.dbg_restore_pak_btn = self._create_step_section(
+        s4_w, _, self.step4_dot, _ = self._create_step_section(
             dot_char="○", title="阶段 4 · 重返大厅与恢复地图",
-            subtitle="", btn_text="恢复 Pak", btn_tooltip="恢复 Pak 后执行第四阶段",
-            btn_slot=self._dbg_stage_four,
+            subtitle="",
         )
-        self.dbg_result_btn = QPushButton("确认并进大厅")
-        self.dbg_result_btn.setProperty("class", "stepBtn")
-        self.dbg_result_btn.setProperty("stepState", "idle")
-        self.dbg_result_btn.clicked.connect(self._dbg_stage_four_detect)
-        s4_header.addWidget(self.dbg_result_btn, alignment=Qt.AlignVCenter)
-        self.dbg_redownload_btn = QPushButton("恢复地图下载")
-        self.dbg_redownload_btn.setProperty("class", "stepBtn")
-        self.dbg_redownload_btn.setProperty("stepState", "idle")
-        self.dbg_redownload_btn.clicked.connect(self._dbg_stage_four_redownload)
-        s4_header.addWidget(self.dbg_redownload_btn, alignment=Qt.AlignVCenter)
+        s4_row = QHBoxLayout()
+        s4_row.setSpacing(6)
+        s4_row.setContentsMargins(18, 0, 0, 0)
+        for attr_name, text, slot in (
+            ("dbg_restore_pak_btn", "恢复 Pak", self._dbg_stage_four),
+            ("dbg_result_btn", "确认并进大厅", self._dbg_stage_four_detect),
+            ("dbg_redownload_btn", "恢复地图下载", self._dbg_stage_four_redownload),
+        ):
+            btn = QPushButton(text)
+            btn.setProperty("class", "stepBtn")
+            btn.setProperty("stepState", "idle")
+            btn.clicked.connect(slot)
+            setattr(self, attr_name, btn)
+            s4_row.addWidget(btn)
+        s4_row.addStretch(1)
+        s4_w.layout().addLayout(s4_row)
         body_layout.addWidget(s4_w)
 
         outer.addWidget(self.debug_body)
