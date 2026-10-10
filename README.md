@@ -51,13 +51,13 @@
 - 运行期间保持桌面未锁定，目标界面可见且未被遮挡。
 - 管理员权限：程序启动时会检查权限，必要时通过标准 UAC 确认框请求授权。
 
-目前仅支持 Windows。
-
 ## 快速开始
 
 ### Windows 便携版本
 
-在 [Releases](https://github.com/Dihuwwy/dfAmmo/releases) 下载 Windows x64 ZIP 包，将整个文件夹解压到可写目录，再双击 `dfAmmo.exe`。此方式无需安装 Python 或 uv。
+在 [Releases](https://github.com/Dihuwwy/dfAmmo/releases) 下载 Windows x64 ZIP 包，将整个文件夹解压到可写目录。此方式无需安装 Python 或 uv。
+
+**必须以管理员身份运行：右键 `dfAmmo.exe`，选择“以管理员身份运行”，并确认 UAC 授权。否则程序可能无法启动或执行操作。**
 
 不要只复制 EXE：需要保留 `_internal/`、`assets/` 和许可文件。包内不包含个人配置，首次启动会在 EXE 旁生成 `config.json`。程序未签名，系统可能显示发布者未知；请核对下载来源与 `.sha256` 校验文件，不要关闭安全软件。
 
@@ -83,7 +83,7 @@ uv run --frozen main.py
 ## 使用方式
 
 1. 打开 WeGame，进入《三角洲行动》的游戏页面。
-2. 启动 dfAmmo，在系统 UAC 提示中确认授权。
+2. 以管理员身份启动 dfAmmo；EXE 版需右键 `dfAmmo.exe`，选择“以管理员身份运行”，并确认 UAC 授权。
 3. 填写游戏安装目录，应选择包含 `DeltaForce` 子目录的目录。程序据此定位 `DeltaForce/PackContent/Paks`。
 4. 按住窗口绑定按钮，拖到 WeGame 主窗口后释放。
 5. 选择半自动运行模式，以及所需的执行方式。执行方式默认是连续。

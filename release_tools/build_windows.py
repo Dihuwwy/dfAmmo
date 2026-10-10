@@ -62,12 +62,23 @@ def main() -> int:
                     str(ROOT / "release_tools" / "dfammo.spec")], cwd=ROOT, env=build_env, check=True)
     output = dist / "dfAmmo"
     shutil.copytree(ROOT / "assets" / "templates", output / "assets" / "templates", dirs_exist_ok=True)
+    shutil.copy2(ROOT / "assets" / "app-icon.ico", output / "assets" / "app-icon.ico")
     for name in ("README.md", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
         shutil.copy2(ROOT / name, output / name)
     collect_notices(output)
-    # Ship the exact application source next to the binary for inspection and rebuilding.
-    subprocess.run(["git", "archive", "--format=zip", f"--output={output / 'dfAmmo-source.zip'}", "HEAD"],
-                   cwd=ROOT, check=True)
+    source_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                                   capture_output=True, text=True, check=True).stdout.strip()
+    source_url = f"https://github.com/Dihuwwy/dfAmmo/archive/{source_commit}.zip"
+    (output / "SOURCE.md").write_text(
+        f"# Corresponding Source\n\nApplication version: {version}\n\n"
+        f"Commit: {source_commit}\n\n[Download the corresponding source]({source_url})\n\n"
+        "The application is licensed under GPL-3.0-only. Source is available separately, "
+        "not embedded in the portable ZIP. See LICENSE and THIRD_PARTY_NOTICES.md.\n\n"
+        "To rebuild on Windows x64 with Python 3.11, create a fresh virtual environment, "
+        "install release_tools/build-requirements.lock using "
+        "`python -m pip install --require-hashes -r release_tools/build-requirements.lock`, "
+        "then run `python release_tools/build_windows.py` from a Git checkout.\n",
+        encoding="utf-8")
     subprocess.run([str(output / "dfAmmo.exe"), "--self-test", str(dist / "smoke-test.json")],
                    cwd=dist, env=build_env, check=True, timeout=90)
     report = json.loads((dist / "smoke-test.json").read_text(encoding="utf-8"))
@@ -76,6 +87,8 @@ def main() -> int:
     if (output / "config.json").exists():
         raise RuntimeError("Personal config must not be included in the release")
     files = sorted(path for path in output.rglob("*") if path.is_file())
+    if (output / "dfAmmo-source.zip").exists() or (output / "scripts").exists():
+        raise RuntimeError("Application source must not be embedded in the portable release")
     stem = f"dfAmmo-v{version}-windows-x64"
     archive = dist / f"{stem}.zip"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as bundle:
@@ -84,7 +97,7 @@ def main() -> int:
     with archive.open("rb") as stream:
         checksum = hashlib.file_digest(stream, "sha256").hexdigest()
     (dist / f"{stem}.sha256").write_text(f"{checksum}  {archive.name}\n", encoding="ascii")
-    stats = {"version": version, "archive": archive.name, "zip_bytes": archive.stat().st_size,
+    stats = {"version": version, "source_commit": source_commit, "archive": archive.name, "zip_bytes": archive.stat().st_size,
              "unpacked_bytes": sum(path.stat().st_size for path in files), "sha256": checksum}
     (dist / "build-report.json").write_text(json.dumps(stats, indent=2), encoding="utf-8")
     print(json.dumps(stats, indent=2))

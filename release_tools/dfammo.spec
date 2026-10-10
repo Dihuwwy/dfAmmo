@@ -22,6 +22,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
+    icon=str(root / "assets" / "app-icon.ico"),
     # The application requests UAC itself; the non-interactive self-test needs no elevation.
     uac_admin=False,
 )

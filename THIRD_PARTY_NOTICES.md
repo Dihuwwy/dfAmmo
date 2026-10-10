@@ -21,9 +21,9 @@ versions and upstream project links in `DEPENDENCIES.json`.
 | PyInstaller bootloader | https://github.com/pyinstaller/pyinstaller |
 
 Qt/PySide are dynamically bundled, not statically linked into the application.
-Keep their DLLs and license notices when redistributing. The application source
-is included as `dfAmmo-source.zip`; the build requirements lock is inside that
-archive. Qt/PySide source is available separately from the upstream locations
+Keep their DLLs and license notices when redistributing. `SOURCE.md` provides
+a download link to the exact application source and build requirements lock
+corresponding to the executable. Qt/PySide source is available separately from the upstream locations
 above, including its license texts. Wheel license notices also cover embedded
 third-party components such as numerical libraries and image codecs.
 

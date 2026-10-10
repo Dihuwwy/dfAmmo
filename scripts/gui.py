@@ -8,9 +8,10 @@ import win32con
 import win32gui
 
 from PySide6.QtCore import QSettings, QTimer
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QWidget
 
-from scripts.config import AppConfig
+from scripts.config import APP_ICON_PATH, AppConfig
 from scripts.gui_actions import ActionsMixin
 from scripts.gui_builder import BuilderMixin
 from scripts.template_capture import TemplateCaptureOverlay
@@ -71,6 +72,7 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         self.hotkey_timer.start()
 
         self.setWindowTitle(self.config.window_title)
+        self.setWindowIcon(QIcon(str(APP_ICON_PATH)))
         self.setObjectName("mainWindow")
         self.setMinimumSize(820, 560)
         self._build_ui()

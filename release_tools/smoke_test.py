@@ -17,6 +17,7 @@ def run(arguments: list[str]) -> int:
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report = {"ok": False, "frozen": bool(getattr(sys, "frozen", False))}
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
+    os.environ.setdefault("QT_QPA_FONTDIR", str(Path(os.environ["SystemRoot"]) / "Fonts"))
     window = None
     try:
         import cv2
@@ -27,7 +28,7 @@ def run(arguments: list[str]) -> int:
         import win32process
         import win32security
         from PySide6.QtWidgets import QApplication
-        from scripts.config import AppConfig, PROJECT_ROOT, TEMPLATE_DIR
+        from scripts.config import APP_ICON_PATH, AppConfig, PROJECT_ROOT, TEMPLATE_DIR
         from scripts.element_locator import ElementLocator
         from scripts.gui import MainWindow
         from scripts.privileges import is_elevated
@@ -35,6 +36,7 @@ def run(arguments: list[str]) -> int:
 
         if report["frozen"]:
             assert PROJECT_ROOT == Path(sys.executable).resolve().parent
+        assert APP_ICON_PATH.is_file(), "Missing application icon"
         templates = list(TEMPLATE_DIR.glob("*.png"))
         assert templates, "Missing external templates"
         for template in templates:
@@ -53,6 +55,8 @@ def run(arguments: list[str]) -> int:
              patch("scripts.gui.ctypes.windll.user32.RegisterHotKey", return_value=0), \
              patch("scripts.gui.win32gui.UnregisterHotKey"):
             window = MainWindow(config=AppConfig())
+            assert not window.windowIcon().isNull(), "Application icon failed to load"
+            assert not window.windowIcon().pixmap(32, 32).isNull(), "Application icon failed to render"
             window.hotkey_timer.stop()
             window.show()
             app.processEvents()
@@ -66,7 +70,7 @@ def run(arguments: list[str]) -> int:
             assert window.grab().save(str(report_path.with_suffix(".png")))
             window.close()
             window = None
-        report.update(ok=True, template_count=len(templates), project_root=str(PROJECT_ROOT),
+        report.update(ok=True, icon_loaded=True, template_count=len(templates), project_root=str(PROJECT_ROOT),
                       python=sys.version, opencv=cv2.__version__, psutil=psutil.__version__)
     except Exception:
         report["error"] = traceback.format_exc()

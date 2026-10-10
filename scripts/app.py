@@ -3,7 +3,9 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QIcon
 
+from scripts.config import APP_ICON_PATH
 from scripts.gui import MainWindow
 from scripts.logger import get_logger
 
@@ -19,6 +21,7 @@ class App:
     def run(self) -> int:
         self.logger.info("Application started.")
         self.qt_app = QApplication.instance() or QApplication(sys.argv)
+        self.qt_app.setWindowIcon(QIcon(str(APP_ICON_PATH)))
         self.window = MainWindow()
         self.window.show()
         return self.qt_app.exec()

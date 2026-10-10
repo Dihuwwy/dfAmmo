@@ -10,6 +10,7 @@ from pathlib import Path
 PROJECT_ROOT = (Path(sys.executable).resolve().parent if getattr(sys, "frozen", False)
                 else Path(__file__).resolve().parent.parent)
 TEMPLATE_DIR = PROJECT_ROOT / "assets" / "templates"
+APP_ICON_PATH = PROJECT_ROOT / "assets" / "app-icon.ico"
 CONFIG_FILE = PROJECT_ROOT / "config.json"
 DEFAULT_PAK_NAMES = (
     "pak-0-2-pakchunk90-WindowsClient.pak",
