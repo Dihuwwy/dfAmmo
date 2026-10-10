@@ -47,6 +47,10 @@ class AppConfig:
     confirm_delete_timeout_seconds: int = 10
     wegame_ready_timeout_seconds: int = 60
     delete_map_timeout_seconds: int = 30
+    reconnect_notice_template: str = "df_reconnect_unavailable.png"
+    reconnect_confirm_template: str = "df_reconnect_confirm.png"
+    reconnect_notice_threshold: float = 0.90
+    reconnect_notice_timeout_seconds: int = 120
 
     def save_to_file(self, path: Path | None = None) -> None:
         path = path or CONFIG_FILE

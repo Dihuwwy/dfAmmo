@@ -625,6 +625,50 @@ class ActionsMixin:
                 self.write_log("单步完成，停止后续步骤。")
                 return
         self._set_badge(self.workflow_status_badge, "WeGame 阶段已完成", "success")
+        if self.is_continuous_mode:
+            yield from self._run_stage_four_tasks()
+
+    @background_action
+    def _run_stage_four(self, detect_only: bool = False):
+        self.workflow.control.paused.clear()
+        self.set_step_state("restore_pak", "running")
+        try:
+            yield lambda: self.workflow.restore_stage_four_paks(
+                self.config.game_install_dir, self.config.pak_file_names)
+        except ControlInterrupted:
+            raise
+        except Exception as exc:
+            self.set_step_state("restore_pak", "failed", str(exc))
+            self.write_log(f"第四阶段地图恢复失败：{exc}")
+            return
+        self._sync_pak_button_state()
+        self.set_step_state("restore_pak", "success")
+        self.write_log("第四阶段：地图已恢复，后续识别结果不会影响恢复操作。")
+        if self.execution_mode == "step" and not detect_only:
+            self.write_log("单步完成：地图已恢复，点击“识别结果”执行下一步。")
+            return
+        self.set_step_state("detect_result", "running")
+        self.write_log("第四阶段：等待游戏画面，识别成功大退提示...")
+        try:
+            matched = yield lambda: self.workflow.detect_stage_four_result(
+                self.config.reconnect_notice_template, self.config.reconnect_confirm_template,
+                self.config.reconnect_notice_threshold,
+                self.config.reconnect_notice_timeout_seconds)
+        except ControlInterrupted:
+            raise
+        except Exception as exc:
+            self.set_step_state("detect_result", "failed", str(exc))
+            self.write_log(f"第四阶段识别失败：{exc}；地图已经恢复。")
+            return
+        self.set_step_state("detect_result", "success" if matched else "failed", "" if matched else "结果未确认")
+        self._set_badge(self.workflow_status_badge, "成功大退标志已识别" if matched else "地图已恢复，结果未确认",
+                        "success" if matched else "failed")
+
+    def _dbg_stage_four(self):
+        self._run_stage_four()
+
+    def _dbg_stage_four_detect(self):
+        self._run_stage_four(detect_only=True)
 
 
     # ── Debug & Step Status Management ───────────────────────────────────────
@@ -639,7 +683,8 @@ class ActionsMixin:
             self._set_property(info["button"], "stepState", state)
         dot = (self.step1_dot if step_id == "nav_game" else self.step2_dot
                if step_id in ("rename_pak", "open_paks") else self.step3_dot
-               if step_id in self._wegame_step_ids else None)
+               if step_id in self._wegame_step_ids else self.step4_dot
+               if step_id in ("restore_pak", "detect_result") else None)
         if dot is not None:
             self._set_property(dot, "state", state)
         prefix = {"running": "正在执行", "success": "步骤完成", "failed": "步骤失败"}
@@ -863,3 +908,4 @@ class ActionsMixin:
     _advance_game_navigation_tasks = advance_game_navigation.__wrapped__
     _check_game_process_tasks = check_game_process.__wrapped__
     _run_wegame_post_process_tasks = _run_wegame_post_process.__wrapped__
+    _run_stage_four_tasks = _run_stage_four.__wrapped__

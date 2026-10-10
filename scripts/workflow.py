@@ -15,6 +15,7 @@ from scripts.config import TEMPLATE_DIR, DEFAULT_PAK_NAMES
 from scripts.element_locator import ElementLocator, ElementPosition, MatchResult
 from scripts.game_process import GameProcess, GameProcessFinder
 from scripts.game_navigation import GameNavigator, NavigationEvent
+from scripts.game_result import wait_for_reconnect_notice
 from scripts.keyboard import KeyboardController
 from scripts.privileges import ensure_can_control_process
 from scripts.screenshot import ScreenshotService
@@ -190,6 +191,24 @@ class Workflow:
 
     def restore_pak_files(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> list[str]:
         return self._rename_paks(game_install_dir, pak_names, restore=True)
+
+    def restore_stage_four_paks(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> list[str]:
+        if not game_install_dir or not pak_names:
+            raise ValueError("请先配置游戏安装目录及 Pak 文件列表。")
+        messages = self.restore_pak_files(game_install_dir, pak_names)
+        for message in messages:
+            self.report_progress(message)
+        pak_dir = self.get_paks_dir(game_install_dir)
+        incomplete = [name for name in pak_names
+                      if not (pak_dir / name).is_file() or (pak_dir / f"{name}.disabled").exists()]
+        if incomplete:
+            raise RuntimeError(f"地图恢复未完成：{', '.join(incomplete)}；尚未开始结果识别。")
+        return messages
+
+    def detect_stage_four_result(self, template_name: str, confirm_template_name: str,
+                                 threshold: float, timeout: float) -> bool:
+        return wait_for_reconnect_notice(self, TEMPLATE_DIR / template_name,
+                                        TEMPLATE_DIR / confirm_template_name, threshold, timeout)
 
     def _rename_paks(self, game_install_dir, pak_names, restore):
         pak_dir = self.get_paks_dir(game_install_dir)
