@@ -349,6 +349,7 @@ class ActionsMixin:
         for button in self.full_auto_placeholder_buttons:
             button.setVisible(not semi_auto)
         self.stage_four_actions.invalidate()
+        self._controls_fit_timer.start()
 
     def _choose_game_dir(self) -> None:
         initial_dir = self.game_dir_input.text().strip() or str(Path.home())

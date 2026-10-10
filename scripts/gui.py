@@ -49,6 +49,11 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         self.navigation_timer.setInterval(self.config.navigation_poll_interval_ms)
         self.navigation_timer.timeout.connect(self.advance_game_navigation)
 
+        self._controls_fit_timer = QTimer(self)
+        self._controls_fit_timer.setSingleShot(True)
+        self._controls_fit_timer.setInterval(0)
+        self._controls_fit_timer.timeout.connect(self._ensure_controls_expanded)
+
         self._hotkey_down = False
         self._registered_hotkeys = set()
         user32 = ctypes.windll.user32
@@ -90,38 +95,19 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         self.write_log(f"后台任务失败：{message}")
 
     def _init_window_geometry(self) -> None:
-        """Restore previous window geometry/splitter if saved, or compute true content size and center.
-        Guarantees that the upper controls card is never clipped or truncated by old saved splitter ratios.
-        """
+        """Restore window geometry while fitting the controls to the current mode."""
         settings = QSettings("dfAmmo", "Assistant")
         saved_geo = settings.value("geometry")
         saved_splitter = settings.value("splitter")
 
         # Dynamic computation of required upper panel height
         req_top_h = self.left_column.sizeHint().height() + 10
-        min_log_h = 160
-        overhead_h = self.bind_panel.sizeHint().height() + 48
 
         if saved_geo and self.restoreGeometry(saved_geo):
             if saved_splitter:
                 self.main_splitter.restoreState(saved_splitter)
 
-            # Ensure window is tall enough for full top controls + minimum log panel
-            needed_window_h = req_top_h + min_log_h + overhead_h
-            if self.height() < needed_window_h:
-                self.resize(self.width(), needed_window_h)
-
-            # Activate layout so main_splitter receives updated geometry before adjusting sizes
-            if self.layout() is not None:
-                self.layout().activate()
-
-            avail_splitter_h = self.main_splitter.height()
-            sizes = self.main_splitter.sizes()
-            if len(sizes) == 2:
-                top_h, bottom_h = sizes[0], sizes[1]
-                if top_h < req_top_h or bottom_h < min_log_h:
-                    target_top = min(req_top_h, max(280, avail_splitter_h - min_log_h))
-                    self.main_splitter.setSizes([target_top, max(min_log_h, avail_splitter_h - target_top)])
+            self._ensure_controls_expanded()
             return
 
         # Optimal initial size derived from actual content cards (avoiding QScrollArea dummy sizeHint)
@@ -149,8 +135,7 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         if self.layout() is not None:
             self.layout().activate()
 
-        avail_splitter_h = self.main_splitter.height()
-        self.main_splitter.setSizes([req_top_h, max(min_log_h, avail_splitter_h - req_top_h)])
+        self._ensure_controls_expanded()
 
         if screen is not None:
             geo = self.geometry()
@@ -159,25 +144,26 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        QTimer.singleShot(0, self._ensure_controls_expanded)
+        self._controls_fit_timer.start()
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        if hasattr(self, "_controls_fit_timer"):
+            self._controls_fit_timer.start()
 
     def _ensure_controls_expanded(self) -> None:
-        """Guarantee that the upper controls card is never clipped or truncated after DPI/font rendering."""
-        req_top_h = self.left_column.sizeHint().height() + 8
-        min_log_h = 160
-        overhead_h = self.bind_panel.height() + 48
-
-        needed_window_h = req_top_h + min_log_h + overhead_h
-        if self.height() < needed_window_h:
-            self.resize(self.width(), needed_window_h)
-
+        """Give unused control space back to the log, without resizing the window."""
         if self.layout() is not None:
             self.layout().activate()
-
-        sizes = self.main_splitter.sizes()
-        if len(sizes) == 2 and sizes[0] < req_top_h:
-            avail = self.main_splitter.height()
-            self.main_splitter.setSizes([req_top_h, max(min_log_h, avail - req_top_h)])
+        layout = self.left_column.layout()
+        layout.activate()
+        width = self.left_column.width()
+        required = layout.totalHeightForWidth(width) if layout.hasHeightForWidth() else layout.sizeHint().height()
+        available = self.main_splitter.height() - self.main_splitter.handleWidth()
+        min_top = self.left_scroll.minimumHeight()
+        min_log = self.log_panel.minimumHeight()
+        top = min(max(min_top, required + 8), max(min_top, available - min_log))
+        self.main_splitter.setSizes([top, max(min_log, available - top)])
 
     def _check_hotkey(self) -> None:
         down = bool(win32api.GetAsyncKeyState(win32con.VK_F12) & 0x8000)
@@ -209,6 +195,7 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         self.game_process_timer.stop()
         self.navigation_timer.stop()
         self.hotkey_timer.stop()
+        self._controls_fit_timer.stop()
         self.task_runner.shutdown()
         self.workflow.cancel_game_navigation()
         for hotkey_id in self._registered_hotkeys:
