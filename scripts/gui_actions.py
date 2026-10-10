@@ -346,7 +346,9 @@ class ActionsMixin:
     def _sync_operation_mode_controls(self) -> None:
         semi_auto = self.config.operation_mode == "semi_auto"
         self.dbg_warehouse_btn.setVisible(semi_auto)
-        self.full_auto_placeholders.setVisible(not semi_auto)
+        for button in self.full_auto_placeholder_buttons:
+            button.setVisible(not semi_auto)
+        self.stage_four_actions.invalidate()
 
     def _choose_game_dir(self) -> None:
         initial_dir = self.game_dir_input.text().strip() or str(Path.home())
@@ -746,6 +748,8 @@ class ActionsMixin:
         if info:
             text = {"running": f"{title}...", "success": f"✓ {title}",
                     "failed": f"! {title}"}.get(state, info["base_text"])
+            if "number" in info and state in ("running", "success", "failed"):
+                text = f"{info['number']}.{text}"
             info["button"].setText(text)
             self._set_property(info["button"], "stepState", state)
         dot = (self.step1_dot if step_id == "nav_game" else self.step2_dot

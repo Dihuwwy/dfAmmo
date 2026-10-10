@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 
 from scripts.bind_button import BindButton
 from scripts.game_navigation import NAVIGATION_STEPS
+from scripts.flow_layout import FlowLayout
 from scripts.styles import MAIN_WINDOW_STYLE
 
 
@@ -383,8 +384,7 @@ class BuilderMixin:
         )
         s3_vbox = s3_w.layout()
 
-        sec3_row = QHBoxLayout()
-        sec3_row.setSpacing(6)
+        sec3_row = FlowLayout()
         sec3_row.setContentsMargins(18, 0, 0, 0)
 
         step3_btns_def = [
@@ -402,16 +402,15 @@ class BuilderMixin:
             btn.clicked.connect(slot)
             setattr(self, attr_name, btn)
             sec3_row.addWidget(btn)
-        sec3_row.addStretch(1)
         s3_vbox.addLayout(sec3_row)
+        self.stage_three_actions = sec3_row
         body_layout.addWidget(s3_w)
         body_layout.addWidget(self._make_divider())
         s4_w, _, self.step4_dot, _ = self._create_step_section(
             dot_char="○", title="阶段四",
             subtitle="重返大厅与恢复地图",
         )
-        s4_row = QHBoxLayout()
-        s4_row.setSpacing(6)
+        s4_row = FlowLayout()
         s4_row.setContentsMargins(18, 0, 0, 0)
         for attr_name, text, slot in (
             ("dbg_restore_pak_btn", "恢复 Pak", self._dbg_stage_four),
@@ -425,29 +424,19 @@ class BuilderMixin:
             btn.clicked.connect(slot)
             setattr(self, attr_name, btn)
             s4_row.addWidget(btn)
-        s4_row.addStretch(1)
         s4_w.layout().addLayout(s4_row)
+        self.stage_four_actions = s4_row
 
-        self.full_auto_placeholders = QWidget()
-        placeholder_layout = QVBoxLayout(self.full_auto_placeholders)
-        placeholder_layout.setContentsMargins(18, 0, 0, 0)
-        placeholder_layout.setSpacing(6)
         self.full_auto_placeholder_buttons = []
-        for commands in (("自定义配装", "等待地图恢复", "切换模式重连"),
-                         ("游戏内自杀并退出", "循环至第一阶段")):
-            row = QHBoxLayout()
-            row.setSpacing(6)
-            for command in commands:
-                button = QPushButton(command)
-                button.setProperty("class", "stepBtn")
-                button.setProperty("placeholder", "true")
-                button.setToolTip("全自动模式占位，尚未实现")
-                button.setEnabled(False)
-                self.full_auto_placeholder_buttons.append(button)
-                row.addWidget(button)
-            row.addStretch(1)
-            placeholder_layout.addLayout(row)
-        s4_w.layout().addWidget(self.full_auto_placeholders)
+        for number, command in enumerate(("自定义配装", "等待地图恢复", "切换模式重连",
+                                          "游戏内自杀并退出", "循环至第一阶段"), start=4):
+            button = QPushButton(f"{number}.{command}")
+            button.setProperty("class", "stepBtn")
+            button.setProperty("placeholder", "true")
+            button.setToolTip("全自动模式占位，尚未实现")
+            button.setEnabled(False)
+            self.full_auto_placeholder_buttons.append(button)
+            s4_row.addWidget(button)
         body_layout.addWidget(s4_w)
 
         outer.addWidget(self.debug_body)
@@ -467,6 +456,13 @@ class BuilderMixin:
             "redownload_map": {"button": self.dbg_redownload_btn, "base_text": "恢复地图下载", "title": "恢复地图下载"},
             "warehouse": {"button": self.dbg_warehouse_btn, "base_text": "进入仓库并确认", "title": "进入仓库并确认"},
         }
+        for step_ids in (("wait_wegame", "click_more", "assets_manage", "delete_map", "restart_game"),
+                         ("restore_pak", "detect_result", "redownload_map", "warehouse")):
+            for number, step_id in enumerate(step_ids, start=1):
+                info = self._step_buttons[step_id]
+                info["number"] = number
+                info["base_text"] = f"{number}.{info['base_text']}"
+                info["button"].setText(info["base_text"])
         return panel
 
     def _build_log_panel(self) -> QFrame:
