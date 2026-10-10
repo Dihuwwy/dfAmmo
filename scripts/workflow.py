@@ -15,7 +15,7 @@ from scripts.config import TEMPLATE_DIR, DEFAULT_PAK_NAMES
 from scripts.element_locator import ElementLocator, ElementPosition, MatchResult
 from scripts.game_process import GameProcess, GameProcessFinder
 from scripts.game_navigation import GameNavigator, NavigationEvent
-from scripts.game_result import wait_for_reconnect_notice
+from scripts.game_result import confirm_notices_and_enter_lobby
 from scripts.keyboard import KeyboardController
 from scripts.privileges import ensure_can_control_process
 from scripts.screenshot import ScreenshotService
@@ -207,8 +207,8 @@ class Workflow:
 
     def detect_stage_four_result(self, template_name: str, confirm_template_name: str,
                                  threshold: float, timeout: float) -> bool:
-        return wait_for_reconnect_notice(self, TEMPLATE_DIR / template_name,
-                                        TEMPLATE_DIR / confirm_template_name, threshold, timeout)
+        return confirm_notices_and_enter_lobby(self, TEMPLATE_DIR / template_name,
+                                               TEMPLATE_DIR / confirm_template_name, threshold, timeout)
 
     def _rename_paks(self, game_install_dir, pak_names, restore):
         pak_dir = self.get_paks_dir(game_install_dir)

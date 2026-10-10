@@ -645,10 +645,10 @@ class ActionsMixin:
         self.set_step_state("restore_pak", "success")
         self.write_log("第四阶段：地图已恢复，后续识别结果不会影响恢复操作。")
         if self.execution_mode == "step" and not detect_only:
-            self.write_log("单步完成：地图已恢复，点击“识别结果”执行下一步。")
+            self.write_log("单步完成：地图已恢复，点击“确认并进大厅”执行下一步。")
             return
         self.set_step_state("detect_result", "running")
-        self.write_log("第四阶段：等待游戏画面，识别成功大退提示...")
+        self.write_log("第四阶段：确认提示、选择模式、再次确认并进入大厅（合并为一步）...")
         try:
             matched = yield lambda: self.workflow.detect_stage_four_result(
                 self.config.reconnect_notice_template, self.config.reconnect_confirm_template,
@@ -661,7 +661,7 @@ class ActionsMixin:
             self.write_log(f"第四阶段识别失败：{exc}；地图已经恢复。")
             return
         self.set_step_state("detect_result", "success" if matched else "failed", "" if matched else "结果未确认")
-        self._set_badge(self.workflow_status_badge, "成功大退标志已识别" if matched else "地图已恢复，结果未确认",
+        self._set_badge(self.workflow_status_badge, "已返回烽火大厅" if matched else "地图已恢复，结果未确认",
                         "success" if matched else "failed")
 
     def _dbg_stage_four(self):

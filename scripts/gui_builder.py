@@ -410,7 +410,7 @@ class BuilderMixin:
             subtitle="", btn_text="恢复地图", btn_tooltip="恢复 Pak 后识别重新进入游戏的结果",
             btn_slot=self._dbg_stage_four,
         )
-        self.dbg_result_btn = QPushButton("识别结果")
+        self.dbg_result_btn = QPushButton("确认并进大厅")
         self.dbg_result_btn.setProperty("class", "stepBtn")
         self.dbg_result_btn.setProperty("stepState", "idle")
         self.dbg_result_btn.clicked.connect(self._dbg_stage_four_detect)
@@ -430,7 +430,7 @@ class BuilderMixin:
             "delete_map": {"button": self.dbg_delete_btn, "base_text": "删除长弓溪谷", "title": "删除长弓溪谷"},
             "restart_game": {"button": self.dbg_restart_btn, "base_text": "重新启动游戏", "title": "重新启动游戏"},
             "restore_pak": {"button": self.dbg_restore_pak_btn, "base_text": "恢复地图", "title": "恢复地图"},
-            "detect_result": {"button": self.dbg_result_btn, "base_text": "识别结果", "title": "识别结果"},
+            "detect_result": {"button": self.dbg_result_btn, "base_text": "确认并进大厅", "title": "确认并进大厅"},
         }
         return panel
 
