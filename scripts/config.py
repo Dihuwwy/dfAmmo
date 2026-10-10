@@ -48,14 +48,13 @@ class AppConfig:
     wegame_ready_timeout_seconds: int = 60
     delete_map_timeout_seconds: int = 30
     reconnect_notice_template: str = "df_reconnect_unavailable.png"
-    reconnect_confirm_template: str = "df_reconnect_confirm.png"
+    game_confirm_template: str = "df_confirm.png"
     reconnect_notice_threshold: float = 0.90
     reconnect_notice_timeout_seconds: int = 120
     redownload_map_choice_template: str = "df_changgong_choose_2.png"
     redownload_map_panel_template: str = "df_redownload_panel.png"
     redownload_map_button_template: str = "df_redownload_button.png"
     warehouse_notice_template: str = "df_warehouse_notice.png"
-    warehouse_confirm_template: str = "df_warehouse_confirm.png"
     warehouse_notice_threshold: float = 0.90
 
     def save_to_file(self, path: Path | None = None) -> None:

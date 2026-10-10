@@ -477,14 +477,16 @@ QPushButton.stepBtn[stepState="idle"] {{
     color: {COLOR_TEXT_MAIN};
 }}
 
-QPushButton.stepBtn[stepState="running"] {{
+QPushButton.stepBtn[stepState="running"],
+QPushButton.stepBtn[pillState="active"] {{
     background-color: #EFF6FF;
     border: 1px solid {COLOR_PRIMARY};
     color: {COLOR_PRIMARY};
     font-weight: 600;
 }}
 
-QPushButton.stepBtn[stepState="success"] {{
+QPushButton.stepBtn[stepState="success"],
+QPushButton.stepBtn[pillState="done"] {{
     background-color: {COLOR_SUCCESS_BG};
     border: 1px solid {COLOR_SUCCESS_BORDER};
     color: #15803D;
@@ -512,39 +514,6 @@ QPushButton.stepAuxBtn:hover {{
     background-color: {COLOR_SURFACE_HOVER};
     border-color: #94A3B8;
     color: {COLOR_TEXT_MAIN};
-}}
-
-/* Navigation Sub-step Pills */
-QPushButton.subStepBtn {{
-    background-color: {COLOR_SURFACE_SECONDARY};
-    border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CONTROL};
-    color: {COLOR_TEXT_SECONDARY};
-    padding: 2px 8px;
-    font-size: 11px;
-    font-weight: 500;
-    min-height: 24px;
-    max-height: 24px;
-}}
-
-QPushButton.subStepBtn:hover {{
-    background-color: {COLOR_SURFACE_HOVER};
-    border-color: #94A3B8;
-    color: {COLOR_TEXT_MAIN};
-}}
-
-QPushButton.subStepBtn[pillState="active"] {{
-    background-color: {COLOR_PRIMARY};
-    border: 1px solid {COLOR_PRIMARY_HOVER};
-    color: #FFFFFF;
-    font-weight: 600;
-}}
-
-QPushButton.subStepBtn[pillState="done"] {{
-    background-color: {COLOR_SUCCESS_BG};
-    border: 1px solid {COLOR_SUCCESS_BORDER};
-    color: #15803D;
-    font-weight: 500;
 }}
 
 /* ── Log Console Area ─────────────────────────────────────────────────────── */

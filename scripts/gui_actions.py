@@ -663,7 +663,7 @@ class ActionsMixin:
             self.write_log("第四阶段第 1 步：确认提示、选择模式、再次确认并进入大厅...")
             try:
                 matched = yield lambda: self.workflow.detect_stage_four_result(
-                    self.config.reconnect_notice_template, self.config.reconnect_confirm_template,
+                    self.config.reconnect_notice_template, self.config.game_confirm_template,
                     self.config.reconnect_notice_threshold,
                     self.config.reconnect_notice_timeout_seconds)
             except ControlInterrupted:
@@ -695,7 +695,7 @@ class ActionsMixin:
         self.write_log("第四阶段第 3 步：进入仓库并确认提示...")
         try:
             yield lambda: self.workflow.enter_stage_four_warehouse(
-                self.config.warehouse_notice_template, self.config.warehouse_confirm_template,
+                self.config.warehouse_notice_template, self.config.game_confirm_template,
                 self.config.warehouse_notice_threshold, self.config.navigation_step_timeout_seconds)
         except ControlInterrupted:
             raise

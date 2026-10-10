@@ -336,7 +336,7 @@ class BuilderMixin:
         s1_vbox = s1_w.layout()
 
         pills_row = QHBoxLayout()
-        pills_row.setSpacing(4)
+        pills_row.setSpacing(6)
         pills_row.setContentsMargins(18, 0, 0, 0)
         self.sub_step_names = [
             "1.模式", "2.进大厅", "3.选地图", "4.选长弓", "5.行动",
@@ -345,7 +345,7 @@ class BuilderMixin:
         self.sub_step_pills = []
         for idx, sname in enumerate(self.sub_step_names):
             pill = QPushButton(sname)
-            pill.setProperty("class", "subStepBtn")
+            pill.setProperty("class", "stepBtn")
             pill.setProperty("pillState", "")
             pill.setCursor(Qt.PointingHandCursor)
             step_desc = NAVIGATION_STEPS[idx].name if idx < len(NAVIGATION_STEPS) else sname
