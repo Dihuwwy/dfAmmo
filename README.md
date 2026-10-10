@@ -2,16 +2,15 @@
 
 面向 Windows 的《三角洲行动》半自动卡邮件助手，提供视觉模板识别、窗口绑定、分阶段执行和运行日志。
 
-项目使用 Python、PySide6、OpenCV 与 Win32 API 实现桌面交互。当前半自动流程在进入仓库并确认提示后结束，后续穿戴装备、等待地图恢复、切换模式和重连由用户完成。
+半自动流程在进入仓库并确认提示后结束，后续穿戴装备、等待地图恢复、切换模式和重连由用户完成。
 
-> 项目仍在开发中。全自动模式的后续步骤仅有禁用的占位按钮，尚未实现。Windows EXE 通过 GitHub Actions 构建并执行启动自检；这不等同于真实游戏流程验收。模板可能随游戏或 WeGame 更新失效，不保证所有分辨率和缩放设置均可用。
+> 当前支持半自动模式，全自动模式尚在开发。游戏或 WeGame 更新、分辨率或缩放设置变化后，可能需要重新采集模板。
 
 ## 目录
 
 - [功能与状态](#功能与状态)
 - [环境要求](#环境要求)
 - [快速开始](#快速开始)
-- [构建与发布](#构建与发布)
 - [使用方式](#使用方式)
 - [配置](#配置)
 - [模板采集](#模板采集)
@@ -24,7 +23,7 @@
 ## 功能与状态
 
 - 拖拽绑定 WeGame 主窗口，检测游戏进程并接管导航。
-- 基于 OpenCV 模板匹配定位元素，调用 Windows API 模拟键鼠输入。
+- 通过图像识别定位界面元素，模拟键鼠完成操作。
 - 提供单步、阶段、连续三种执行方式，以及步骤状态和底部日志。
 - 支持导航暂停、继续、停止和画面重同步。
 - 提供 Pak 文件屏蔽与恢复操作，在发送 WeGame 删除操作前检查屏蔽状态。
@@ -43,18 +42,16 @@
 
 ### 全自动模式
 
-目前仅复用已实现的公共步骤。自定义配装、等待地图恢复、切换模式重连、游戏内退出和循环等后续按钮仅作占位，不能执行。全自动模式不会执行半自动模式的仓库收尾步骤。
+全自动模式尚在开发，自动配装、重连和循环功能暂不可用。当前请使用半自动模式。
 
 ## 环境要求
 
-- Windows 10 / 11，建议使用 64 位系统。
-- Python 3.11 或以上；建议优先使用 Python 3.11 环境。
-- 推荐使用 `uv` 管理依赖。
+- Windows 10 / 11，64 位系统。
 - 已安装 WeGame 和《三角洲行动》，且能够手动启动游戏。
-- 可交互的桌面会话，以及可见、未被遮挡的目标界面。
+- 运行期间保持桌面未锁定，目标界面可见且未被遮挡。
 - 管理员权限：程序启动时会检查权限，必要时通过标准 UAC 确认框请求授权。
 
-当前代码依赖 Windows API，不支持在 Linux 或 macOS 上运行。跨电脑使用时应重新创建虚拟环境，不要直接复制已有的 `.venv`。
+目前仅支持 Windows。
 
 ## 快速开始
 
@@ -66,7 +63,7 @@
 
 ### 从源码运行
 
-下载仓库源码，或克隆：
+需要 Python 3.11 或以上，推荐 Python 3.11，并使用 `uv` 管理依赖。下载仓库源码，或克隆：
 
 ```powershell
 git clone https://github.com/Dihuwwy/dfAmmo.git
@@ -81,23 +78,7 @@ uv run --frozen main.py
 - 未检测到 `uv` 时，尝试使用项目内已有的 `.venv`。
 - 没有可用环境或依赖同步失败时，会显示错误并退出。
 
-首次同步需要下载依赖，耗时取决于网络和环境。依赖声明见 [pyproject.toml](pyproject.toml)，锁定版本见 [uv.lock](uv.lock)。
-
-## 构建与发布
-
-使用独立的精简环境构建 Windows x64 版本，不会改变开发用 `.venv`：
-
-```powershell
-uv venv .build-venv --python 3.11
-uv pip install --python .build-venv/Scripts/python.exe --require-hashes -r release_tools/build-requirements.lock
-.build-venv/Scripts/python.exe release_tools/build_windows.py
-```
-
-构建脚本使用 PyInstaller 文件夹模式，并执行无交互启动自检。自检不申请管理员授权、不发送键鼠输入、不操作游戏、不写入个人配置。构建产物位于 `dist/`，包含 ZIP、SHA-256 和构建报告；ZIP 内附项目源码与第三方许可声明。
-
-[GitHub Actions](https://github.com/Dihuwwy/dfAmmo/actions) 会在推送 `main` 时构建，也可手动触发。推送与 `pyproject.toml` 版本一致的 `v*` 标签后，会在构建和启动自检成功时发布 Release；不一致的版本会被阻止。
-
-工作流见 [.github/workflows/windows-release.yml](.github/workflows/windows-release.yml)。构建依赖采用 [release_tools/build-requirements.lock](release_tools/build-requirements.lock) 固定版本和哈希，仅安装当前使用的运行库、PySide6 Essentials 和构建工具，不包含历史 OCR、Airtest 或 Qt Addons 依赖。
+首次同步需要下载依赖，耗时取决于网络和环境。更换电脑时，请重新创建运行环境，不要直接复制已有的 `.venv`。
 
 ## 使用方式
 
@@ -118,14 +99,14 @@ uv pip install --python .build-venv/Scripts/python.exe --require-hashes -r relea
 | 连续 | 自动衔接已实现的后续阶段；不等同于循环 |
 | `F12` / 暂停按钮 | 暂停或继续游戏导航；并非所有后处理阶段都支持暂停 |
 | `Shift+F12` / 停止按钮 | 请求停止当前自动化任务 |
-| 重同步 | 在已有导航上下文中重新识别画面并对齐进度 |
+| 重同步 | 重新识别当前游戏画面并对齐导航进度 |
 | 接管导航 | 检测运行中的游戏并尝试对齐当前步骤 |
 
-停止是协作式取消：正在执行的单次系统调用或图像计算需要先返回，已经完成的点击、进程终止和文件操作不会撤销。中途停止后，请检查 Pak 状态；必要时使用恢复操作，不能将停止视为自动恢复。
+点击停止后，当前操作可能需要短暂时间才能结束。停止不会撤销已完成的操作，也不会自动恢复 Pak；中途停止后请检查 Pak 状态，必要时使用恢复操作。
 
 ## 配置
 
-首次启动时，如果项目根目录（EXE 版为可执行文件所在目录）没有 `config.json`，程序会尝试生成默认配置。个人配置已加入 `.gitignore`，不随仓库分发；游戏目录和运行模式可以在界面中设置。
+首次启动会自动生成 `config.json`，用于保存个人设置。EXE 版将配置保存在可执行文件所在目录；游戏目录和运行模式可以直接在界面中设置。
 
 主要配置项如下，完整字段与默认值见 [scripts/config.py](scripts/config.py)：
 
@@ -141,11 +122,11 @@ uv pip install --python .build-venv/Scripts/python.exe --require-hashes -r relea
 | `game_confirm_template` | `df_confirm.png`；部分游戏提示共用的绿色确认模板 |
 | `wegame_confirm_delete_template` | `wegame_confirmdelete.png`；完整的 WeGame 删除确认弹窗 |
 
-手动修改配置前请退出程序。不要提交本机安装路径、个人日志或含账号信息的截图。
+手动修改配置前请退出程序。
 
 ## 模板采集
 
-模板位于 [assets/templates](assets/templates)，目前使用 OpenCV 模板匹配，而不是 Airtest 或 OCR。依赖列表中仍保留部分历史依赖，不代表当前识别逻辑使用它们。
+模板位于 [assets/templates](assets/templates)。遇到界面更新或识别不准确时，可通过内置截图工具更新模板。
 
 1. 暂停或停止任务，将目标界面放在前台。
 2. 点击“采集模板”，输入模板名称，不包含 `.png` 后缀。
@@ -156,9 +137,9 @@ uv pip install --python .build-venv/Scripts/python.exe --require-hashes -r relea
 
 特别注意：
 
-- `wegame_confirmdelete.png` 必须包含完整删除确认弹窗，代码会在模板内定位橙色确定按钮，不能只截文字。
+- `wegame_confirmdelete.png` 必须包含完整删除确认弹窗，不能只截确定按钮或文字。
 - `wegame_bin.png` 是悬停资源条目后显示的垃圾桶图标。
-- `wegame_assets_manage.png` 是菜单项；`wegame_assests_manage.png` 是管理器顶部区域，拼写不同是现有文件名约定。
+- `wegame_assets_manage.png` 对应菜单项；`wegame_assests_manage.png` 对应管理器顶部区域，请按原文件名分别采集。
 - `df_confirm.png` 用于部分游戏提示的绿色确认；配装确认、继续和 WeGame 橙色确定仍使用各自的模板。
 
 ## 项目结构
@@ -191,8 +172,6 @@ dfAmmo/
     └── styles.py            # 界面样式
 ```
 
-`config.json`、`.venv/`、`tmp/`、构建产物和本地 `tests/` 不受版本控制。
-
 ## 故障排查
 
 | 问题 | 建议 |
@@ -204,7 +183,7 @@ dfAmmo/
 | 全局快捷键冲突 | 使用界面按钮，并检查其他程序是否占用快捷键 |
 | 配置未生成或无法保存 | 检查目录写权限；创建失败时程序会使用内存默认配置并记录警告 |
 
-程序发送的点击不等于服务端状态已经更新。异常情况下请停止任务、查看日志和实际界面，不要在未确认状态时反复执行文件或删除操作。
+遇到异常时，请先停止任务，结合日志检查实际界面和 Pak 状态，再决定是否继续。
 
 ## 参与贡献
 
@@ -213,8 +192,6 @@ dfAmmo/
 提交 Issue 时请提供：问题描述、复现步骤、预期与实际结果、Windows 版本、分辨率与缩放比例，以及脱敏后的相关日志。涉及模板时附上目标界面截图，并遮挡账号和 UID。
 
 提交 Pull Request 时请保持改动范围明确，说明行为变化和验证方式。不要提交个人配置、虚拟环境、临时截图或构建产物。
-
-当前回归测试保留在本地 `tests/`，该目录未纳入版本控制，因此新克隆的仓库不包含测试套件。不要将本地测试通过视为发布版本已在所有环境验证。
 
 ## 致谢
 
