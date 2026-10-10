@@ -43,3 +43,5 @@ temp/
 htmlcov/
 /tests/
 
+# Local user settings (generated on first launch)
+/config.json

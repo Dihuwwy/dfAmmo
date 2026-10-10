@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
@@ -57,18 +58,29 @@ class AppConfig:
     warehouse_notice_template: str = "df_warehouse_notice.png"
     warehouse_notice_threshold: float = 0.90
 
-    def save_to_file(self, path: Path | None = None) -> None:
+    def save_to_file(self, path: Path | None = None, *, overwrite: bool = True) -> None:
         path = path or CONFIG_FILE
         data = asdict(self)
-        path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        with path.open("w" if overwrite else "x", encoding="utf-8") as stream:
+            json.dump(data, stream, ensure_ascii=False, indent=2)
 
     @classmethod
     def load_from_file(cls, path: Path | None = None) -> AppConfig:
         path = path or CONFIG_FILE
-        if not path.exists():
-            return cls()
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                return cls()
             return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        except FileNotFoundError:
+            config = cls()
+            try:
+                config.save_to_file(path, overwrite=False)
+            except FileExistsError:
+                # Another instance may have created user settings while we were loading.
+                return cls.load_from_file(path)
+            except OSError as exc:
+                logging.getLogger(__name__).warning("无法创建默认配置 %s，使用内存默认配置：%s", path, exc)
+            return config
         except (json.JSONDecodeError, OSError, TypeError, UnicodeDecodeError):
             return cls()
