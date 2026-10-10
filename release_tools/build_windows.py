@@ -4,6 +4,7 @@ import argparse
 import hashlib
 from importlib import metadata
 import json
+import os
 from pathlib import Path
 import platform
 import shutil
@@ -51,9 +52,14 @@ def main() -> int:
     if args.version and args.version.removeprefix("v") != version:
         parser.error(f"Tag/version mismatch: {args.version} != {version}")
     dist = ROOT / "dist"
+    # Do not let DLLs from unrelated applications on PATH leak into the bundle.
+    build_env = os.environ.copy()
+    windows = Path(os.environ["SystemRoot"])
+    build_env["PATH"] = os.pathsep.join(map(str, (Path(sys.executable).parent,
+                                                   Path(sys.base_prefix), windows / "System32", windows)))
     subprocess.run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
                     "--distpath", str(dist), "--workpath", str(ROOT / "build"),
-                    str(ROOT / "release_tools" / "dfammo.spec")], cwd=ROOT, check=True)
+                    str(ROOT / "release_tools" / "dfammo.spec")], cwd=ROOT, env=build_env, check=True)
     output = dist / "dfAmmo"
     shutil.copytree(ROOT / "assets" / "templates", output / "assets" / "templates", dirs_exist_ok=True)
     for name in ("README.md", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
@@ -63,7 +69,7 @@ def main() -> int:
     subprocess.run(["git", "archive", "--format=zip", f"--output={output / 'dfAmmo-source.zip'}", "HEAD"],
                    cwd=ROOT, check=True)
     subprocess.run([str(output / "dfAmmo.exe"), "--self-test", str(dist / "smoke-test.json")],
-                   cwd=dist, check=True, timeout=90)
+                   cwd=dist, env=build_env, check=True, timeout=90)
     report = json.loads((dist / "smoke-test.json").read_text(encoding="utf-8"))
     if not report.get("ok") or not report.get("frozen"):
         raise RuntimeError(f"Frozen startup check failed: {report}")
