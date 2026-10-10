@@ -134,6 +134,7 @@ class BuilderMixin:
         root.addWidget(self.main_splitter, stretch=1)
         self.setStyleSheet(MAIN_WINDOW_STYLE)
         self._sync_pak_button_state()
+        self._sync_operation_mode_controls()
 
     def _build_connection_bar(self) -> QFrame:
         panel = QFrame()
@@ -326,8 +327,8 @@ class BuilderMixin:
         # ── Step 1: In-game Navigation ──
         s1_w, _, self.step1_dot, self.dbg_nav_start_btn = self._create_step_section(
             dot_char="●",
-            title="阶段 1 · 游戏内自动导航",
-            subtitle="识别游戏画面并逐级推进 9 步菜单与模式流程，选人界面触发时自动退出",
+            title="阶段一",
+            subtitle="游戏内自动导航",
             btn_text="接管导航",
             btn_tooltip="检测游戏窗口并自动推进游戏菜单与模式步骤",
             btn_slot=self._dbg_takeover_navigation,
@@ -360,8 +361,8 @@ class BuilderMixin:
         # ── Step 2: Pak File Isolation ──
         s2_w, s2_header, self.step2_dot, self.dbg_rename_pak_btn = self._create_step_section(
             dot_char="○",
-            title="阶段 2 · 隔离 Pak 补丁文件",
-            subtitle="重命名长弓溪谷 Pak 补丁为 .disabled 状态以屏蔽加载（启动前隔离，重启时生效）",
+            title="阶段二",
+            subtitle="隔离 Pak 补丁文件",
             btn_text="屏蔽 Pak",
             btn_tooltip="重命名长弓溪谷 Pak 文件为 .disabled 状态以屏蔽加载",
             btn_slot=self._dbg_rename_pak,
@@ -377,8 +378,8 @@ class BuilderMixin:
         # ── Step 3: WeGame Post-process & Restart ──
         s3_w, _, self.step3_dot, _ = self._create_step_section(
             dot_char="○",
-            title="阶段 3 · WeGame 修复重置与拉起",
-            subtitle="等待启动按钮可用，在资源包管理中删除长弓溪谷地图资源，并重新拉起游戏",
+            title="阶段三",
+            subtitle="WeGame 修复重置与拉起",
         )
         s3_vbox = s3_w.layout()
 
@@ -406,8 +407,8 @@ class BuilderMixin:
         body_layout.addWidget(s3_w)
         body_layout.addWidget(self._make_divider())
         s4_w, _, self.step4_dot, _ = self._create_step_section(
-            dot_char="○", title="阶段 4 · 重返大厅与恢复地图",
-            subtitle="",
+            dot_char="○", title="阶段四",
+            subtitle="重返大厅与恢复地图",
         )
         s4_row = QHBoxLayout()
         s4_row.setSpacing(6)
@@ -416,6 +417,7 @@ class BuilderMixin:
             ("dbg_restore_pak_btn", "恢复 Pak", self._dbg_stage_four),
             ("dbg_result_btn", "确认并进大厅", self._dbg_stage_four_detect),
             ("dbg_redownload_btn", "恢复地图下载", self._dbg_stage_four_redownload),
+            ("dbg_warehouse_btn", "进入仓库并确认", self._dbg_stage_four_warehouse),
         ):
             btn = QPushButton(text)
             btn.setProperty("class", "stepBtn")
@@ -425,6 +427,27 @@ class BuilderMixin:
             s4_row.addWidget(btn)
         s4_row.addStretch(1)
         s4_w.layout().addLayout(s4_row)
+
+        self.full_auto_placeholders = QWidget()
+        placeholder_layout = QVBoxLayout(self.full_auto_placeholders)
+        placeholder_layout.setContentsMargins(18, 0, 0, 0)
+        placeholder_layout.setSpacing(6)
+        self.full_auto_placeholder_buttons = []
+        for commands in (("自定义配装", "等待地图恢复", "切换模式重连"),
+                         ("游戏内自杀并退出", "循环至第一阶段")):
+            row = QHBoxLayout()
+            row.setSpacing(6)
+            for command in commands:
+                button = QPushButton(command)
+                button.setProperty("class", "stepBtn")
+                button.setProperty("placeholder", "true")
+                button.setToolTip("全自动模式占位，尚未实现")
+                button.setEnabled(False)
+                self.full_auto_placeholder_buttons.append(button)
+                row.addWidget(button)
+            row.addStretch(1)
+            placeholder_layout.addLayout(row)
+        s4_w.layout().addWidget(self.full_auto_placeholders)
         body_layout.addWidget(s4_w)
 
         outer.addWidget(self.debug_body)
@@ -442,6 +465,7 @@ class BuilderMixin:
             "restore_pak": {"button": self.dbg_restore_pak_btn, "base_text": "恢复 Pak", "title": "恢复 Pak"},
             "detect_result": {"button": self.dbg_result_btn, "base_text": "确认并进大厅", "title": "确认并进大厅"},
             "redownload_map": {"button": self.dbg_redownload_btn, "base_text": "恢复地图下载", "title": "恢复地图下载"},
+            "warehouse": {"button": self.dbg_warehouse_btn, "base_text": "进入仓库并确认", "title": "进入仓库并确认"},
         }
         return panel
 

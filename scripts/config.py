@@ -54,6 +54,9 @@ class AppConfig:
     redownload_map_choice_template: str = "df_changgong_choose_2.png"
     redownload_map_panel_template: str = "df_redownload_panel.png"
     redownload_map_button_template: str = "df_redownload_button.png"
+    warehouse_notice_template: str = "df_warehouse_notice.png"
+    warehouse_confirm_template: str = "df_warehouse_confirm.png"
+    warehouse_notice_threshold: float = 0.90
 
     def save_to_file(self, path: Path | None = None) -> None:
         path = path or CONFIG_FILE

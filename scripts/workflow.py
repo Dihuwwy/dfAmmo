@@ -16,7 +16,7 @@ from scripts.config import TEMPLATE_DIR, DEFAULT_PAK_NAMES
 from scripts.element_locator import ElementLocator, ElementPosition, MatchResult
 from scripts.game_process import GameProcess, GameProcessFinder
 from scripts.game_navigation import GameNavigator, NavigationEvent
-from scripts.game_result import confirm_notices_and_enter_lobby, request_map_redownload
+from scripts.game_result import confirm_notices_and_enter_lobby, request_map_redownload, enter_warehouse_and_confirm
 from scripts.keyboard import KeyboardController
 from scripts.privileges import ensure_can_control_process
 from scripts.screenshot import ScreenshotService
@@ -214,6 +214,11 @@ class Workflow:
     def redownload_stage_four_map(self, choice_name: str, panel_name: str, download_name: str,
                                   threshold: float, timeout: float) -> None:
         request_map_redownload(self, TEMPLATE_DIR, choice_name, panel_name, download_name, threshold, timeout)
+
+    def enter_stage_four_warehouse(self, notice_name: str, confirm_name: str,
+                                   threshold: float, timeout: float) -> None:
+        enter_warehouse_and_confirm(self, TEMPLATE_DIR / notice_name, TEMPLATE_DIR / confirm_name,
+                                    threshold, timeout)
 
     def _rename_paks(self, game_install_dir, pak_names, restore):
         pak_dir = self.get_paks_dir(game_install_dir)

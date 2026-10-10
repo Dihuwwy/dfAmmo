@@ -465,6 +465,12 @@ QPushButton.stepBtn:hover {{
     border-color: #94A3B8;
 }}
 
+QPushButton.stepBtn[placeholder="true"]:disabled {{
+    background-color: {COLOR_SURFACE_SECONDARY};
+    color: {COLOR_TEXT_DISABLED};
+    border-color: {COLOR_BORDER_SUBTLE};
+}}
+
 QPushButton.stepBtn[stepState="idle"] {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_BORDER};

@@ -334,6 +334,7 @@ class ActionsMixin:
         if new_mode == getattr(self.config, "operation_mode", "semi_auto"):
             return
         self.config = replace(self.config, operation_mode=new_mode)
+        self._sync_operation_mode_controls()
         try:
             self.config.save_to_file()
         except OSError as exc:
@@ -341,6 +342,11 @@ class ActionsMixin:
         else:
             mode_name = "半自动模式" if new_mode == "semi_auto" else "全自动模式"
             self.write_log(f"已切换运行模式为：{mode_name}")
+
+    def _sync_operation_mode_controls(self) -> None:
+        semi_auto = self.config.operation_mode == "semi_auto"
+        self.dbg_warehouse_btn.setVisible(semi_auto)
+        self.full_auto_placeholders.setVisible(not semi_auto)
 
     def _choose_game_dir(self) -> None:
         initial_dir = self.game_dir_input.text().strip() or str(Path.home())
@@ -633,6 +639,9 @@ class ActionsMixin:
     @background_action
     def _run_stage_four(self, start_step: str = "restore_pak"):
         self.workflow.control.paused.clear()
+        if start_step == "warehouse" and self.config.operation_mode != "semi_auto":
+            self.write_log("全自动模式不进入仓库；后续操作尚未实现，未执行或循环。")
+            return
         self.set_step_state("restore_pak", "running")
         try:
             yield lambda: self.workflow.restore_stage_four_paks(
@@ -649,7 +658,7 @@ class ActionsMixin:
         if self.execution_mode == "step" and start_step == "restore_pak":
             self.write_log("单步完成：地图已恢复，点击“确认并进大厅”执行下一步。")
             return
-        if start_step != "redownload_map":
+        if start_step not in ("redownload_map", "warehouse"):
             self.set_step_state("detect_result", "running")
             self.write_log("第四阶段第 1 步：确认提示、选择模式、再次确认并进入大厅...")
             try:
@@ -671,6 +680,34 @@ class ActionsMixin:
             if self.execution_mode == "step":
                 self.write_log("单步完成：已进入大厅，点击“恢复地图下载”执行第 2 步。")
                 return
+        if start_step != "warehouse":
+            downloaded = yield from self._run_stage_four_redownload_tasks()
+            if not downloaded:
+                return
+            if self.config.operation_mode == "semi_auto" and self.execution_mode == "step":
+                self.write_log("单步完成：地图恢复请求已发送，点击“进入仓库并确认”执行最后一步。")
+                return
+        if self.config.operation_mode != "semi_auto":
+            self.write_log("第四阶段公共步骤完成；全自动后续按钮仅占位，未进仓库，未执行后续操作或循环。")
+            self._set_badge(self.workflow_status_badge, "全自动后续待实现", "idle")
+            return
+        self.set_step_state("warehouse", "running")
+        self.write_log("第四阶段第 3 步：进入仓库并确认提示...")
+        try:
+            yield lambda: self.workflow.enter_stage_four_warehouse(
+                self.config.warehouse_notice_template, self.config.warehouse_confirm_template,
+                self.config.warehouse_notice_threshold, self.config.navigation_step_timeout_seconds)
+        except ControlInterrupted:
+            raise
+        except Exception as exc:
+            self.set_step_state("warehouse", "failed", str(exc))
+            self.write_log(f"第四阶段仓库确认失败：{exc}")
+            return
+        self.set_step_state("warehouse", "success")
+        self._set_badge(self.workflow_status_badge, "半自动已完成", "success")
+        self.write_log("半自动流程已结束，不再执行后续步骤或循环。请手动穿戴装备，等待地图恢复后切换全面战场并重连。")
+
+    def _run_stage_four_redownload_tasks(self):
         self.set_step_state("redownload_map", "running")
         self.write_log("第四阶段第 2 步：选择长弓、点击下载，再按两次 ESC...")
         try:
@@ -683,9 +720,10 @@ class ActionsMixin:
         except Exception as exc:
             self.set_step_state("redownload_map", "failed", str(exc))
             self.write_log(f"第四阶段地图下载请求失败：{exc}；Pak 已经恢复。")
-            return
+            return False
         self.set_step_state("redownload_map", "success")
         self._set_badge(self.workflow_status_badge, "地图恢复请求已发送", "success")
+        return True
 
     def _dbg_stage_four(self):
         self._run_stage_four()
@@ -695,6 +733,9 @@ class ActionsMixin:
 
     def _dbg_stage_four_redownload(self):
         self._run_stage_four(start_step="redownload_map")
+
+    def _dbg_stage_four_warehouse(self):
+        self._run_stage_four(start_step="warehouse")
 
 
     # ── Debug & Step Status Management ───────────────────────────────────────
@@ -710,7 +751,7 @@ class ActionsMixin:
         dot = (self.step1_dot if step_id == "nav_game" else self.step2_dot
                if step_id in ("rename_pak", "open_paks") else self.step3_dot
                if step_id in self._wegame_step_ids else self.step4_dot
-               if step_id in ("restore_pak", "detect_result", "redownload_map") else None)
+               if step_id in ("restore_pak", "detect_result", "redownload_map", "warehouse") else None)
         if dot is not None:
             self._set_property(dot, "state", state)
         prefix = {"running": "正在执行", "success": "步骤完成", "failed": "步骤失败"}

@@ -159,3 +159,44 @@ def request_map_redownload(workflow, directory, choice_name, panel_name, downloa
     workflow.control.check()
     workflow.keyboard.press(win32con.VK_ESCAPE, repeat=2, interval=0.35)
     workflow.report_progress("第四阶段：已按两次 ESC 返回大厅，地图恢复请求已发送；由游戏自行校验文件。")
+
+
+def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, timeout):
+    """Finish semi-auto mode without equipping, reconnecting or looping."""
+    for path in (notice_path, confirm_path):
+        if not path.is_file():
+            raise FileNotFoundError(f"缺少仓库提示模板：{path.name}")
+    directory = notice_path.parent
+    # A retry may already be at the notice; never toggle E on an unknown screen.
+    window, _, name = _wait_for_game_ui(
+        workflow, [notice_path, directory / "df_map_choose.png",
+                   directory / "df_map_choose_selected.png", directory / "df_start_manoeuver.png"],
+        threshold, timeout)
+    if name != notice_path.name:
+        workflow.control.check()
+        workflow.window_binder.activate(window)
+        workflow.keyboard.press(ord("E"))
+        workflow.report_progress("第四阶段：已在大厅按 E，等待仓库提示...")
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        workflow.control.check()
+        process = workflow.find_game_process()
+        window = workflow.window_binder.bind_by_process_id(process.process_id) if process else None
+        if window is not None:
+            source = workflow.locator.grab_window_bgr(window)
+            notice = workflow.locator.match_in_source(source, notice_path, window, threshold)
+            if notice.matched:
+                region = notice_confirmation_region(notice.position, window)
+                if region.right > region.left and region.bottom > region.top:
+                    cropped = source[region.top - window.top:region.bottom - window.top,
+                                     region.left - window.left:region.right - window.left]
+                    confirmation = workflow.locator.match_in_source(cropped, confirm_path, region, threshold)
+                    if confirmation.matched:
+                        workflow.control.check()
+                        workflow.clicker.click(replace(confirmation.position, width=0, height=0), window.handle)
+                        workflow.report_progress(
+                            f"已识别仓库提示并点击确认：x={confirmation.position.x}, "
+                            f"y={confirmation.position.y}, confidence={confirmation.position.confidence:.3f}")
+                        return
+        workflow.control.wait(min(0.7, max(0, deadline - time.monotonic())))
+    raise TimeoutError(f"等待仓库提示及其确认按钮超时（{timeout:g}秒），未点击其他位置。")
