@@ -178,7 +178,7 @@ class GameNavigator:
             f"[已继续] 自动化已恢复运行，正在推进步骤：【{step_name}】。",
         )
 
-    def resync_state(self) -> NavigationEvent | None:
+    def resync_state(self, *, allow_backtrack: bool = True) -> NavigationEvent | None:
         """Scan current game window across candidate steps and align step_index to actual UI."""
         self.control.check()
         if self.process_id is None or self.finished:
@@ -217,13 +217,15 @@ class GameNavigator:
         if self.step_index <= 2:
             candidate_indices = [8, 7, 6, 5, 3, 2, 4, 0]
         for idx in candidate_indices:
+            if not allow_backtrack and idx < self.step_index:
+                continue
             if idx >= len(NAVIGATION_STEPS):
                 continue
             cand_step = NAVIGATION_STEPS[idx]
             candidate_tmpl_names = [cand_step.template_name]
             if idx == 0:
                 candidate_tmpl_names.extend(["df_change_mode.png", "df_mode_init.png"])
-            elif idx == 2:
+            elif idx == 7:
                 candidate_tmpl_names.append("df_map_choose_selected.png")
             elif cand_step.template_name == "df_mode_init.png":
                 candidate_tmpl_names.append("df_mode_choose.png")
@@ -253,28 +255,32 @@ class GameNavigator:
                     if hasattr(match_res.position, "confidence") and isinstance(match_res.position.confidence, (int, float))
                     else 0.0
                 )
-                old_index = self.step_index
-                self.step_index = idx
-                self.deadline = time.monotonic() + self.step_timeout_seconds
-                self.next_action_at = 0.0
-                self.last_confidence = conf
-                self.best_confidence = conf
-
-                if cand_step.action == "detect":
-                    return self._complete()
-
-                if old_index != idx:
-                    return NavigationEvent(
-                        NavigationStatus.RUNNING,
-                        f"[对齐] 识别到游戏画面处于【{cand_step.name}】"
-                        f"（相似度={conf:.3f}），已同步执行进度！",
-                    )
-                return NavigationEvent(
-                    NavigationStatus.RUNNING,
-                    f"[对齐] 当前画面对齐【{cand_step.name}】（相似度={conf:.3f}），继续执行...",
-                )
+                return self._align_to_step(idx, conf)
 
         return None
+
+    def _align_to_step(self, index: int, confidence: float) -> NavigationEvent:
+        old_index = self.step_index
+        self.step_index = index
+        # Repeated recognition of one screen must not extend its timeout forever.
+        if old_index != index:
+            self.deadline = time.monotonic() + self.step_timeout_seconds
+            self.next_action_at = 0.0
+        self.last_confidence = confidence
+        self.best_confidence = max(self.best_confidence, confidence) if old_index == index else confidence
+        step = NAVIGATION_STEPS[index]
+        if step.action == "detect":
+            return self._complete()
+        if old_index != index:
+            return NavigationEvent(
+                NavigationStatus.RUNNING,
+                f"[对齐] 识别到游戏画面处于【{step.name}】"
+                f"（相似度={confidence:.3f}），已同步执行进度！",
+            )
+        return NavigationEvent(
+            NavigationStatus.RUNNING,
+            f"[对齐] 当前画面对齐【{step.name}】（相似度={confidence:.3f}），继续执行...",
+        )
 
     def tick(self) -> NavigationEvent | None:
         if self.finished or self.process_id is None or self.is_paused:
@@ -305,7 +311,7 @@ class GameNavigator:
             # Takeovers align from the remembered step; explicit jumps retain their target.
             resync_msg = ""
             if self.auto_align:
-                resync_event = self.resync_state()
+                resync_event = self.resync_state(allow_backtrack=False)
                 if resync_event is not None:
                     if resync_event.status in (NavigationStatus.COMPLETE, NavigationStatus.PAUSED):
                         return resync_event
@@ -326,7 +332,7 @@ class GameNavigator:
 
         step = NAVIGATION_STEPS[self.step_index]
         if self.step_index == 1:
-            aligned = self.resync_state()
+            aligned = self.resync_state(allow_backtrack=False)
             if aligned is not None and (self.step_index != 1 or aligned.status != NavigationStatus.RUNNING):
                 return aligned
         position = None
@@ -339,13 +345,20 @@ class GameNavigator:
                     candidate_names.append("df_mode_init.png")
                 elif step.template_name == "df_mode_init.png":
                     candidate_names.append("df_mode_choose.png")
-            elif self.step_index == 2:
-                candidate_names.append("df_map_choose_selected.png")
 
             matched_result = None
             best_cand_confidence = 0.0
 
             source = self.locator.grab_window_bgr(self.bound_window)
+            if self.step_index == 2:
+                # The selected-map template includes the loadout/departure controls.
+                selected_path = self.template_dir / "df_map_choose_selected.png"
+                if selected_path.exists():
+                    selected = self.locator.match_in_source(
+                        source, selected_path, self.bound_window, max(self.threshold, 0.90)
+                    )
+                    if selected.matched and selected.position.confidence >= max(self.threshold, 0.90):
+                        return self._align_to_step(7, selected.position.confidence)
             for cand_name in candidate_names:
                 self.control.check()
                 tmpl_path = self.template_dir / cand_name
@@ -372,8 +385,11 @@ class GameNavigator:
                 # Align before any recovery key: the user may already be in a lobby.
                 if self.step_index in (0, 2) or (step_elapsed >= 3.0 and now - self._last_resync_check >= 2.5):
                     self._last_resync_check = now
-                    aligned = self.resync_state()
-                    if aligned is not None:
+                    previous_index = self.step_index
+                    aligned = self.resync_state(allow_backtrack=False)
+                    if aligned is not None and (
+                        self.step_index != previous_index or aligned.status != NavigationStatus.RUNNING
+                    ):
                         return aligned
 
                 if now >= self.deadline:
