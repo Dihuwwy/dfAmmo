@@ -18,9 +18,10 @@ from scripts.template_capture import TemplateCaptureOverlay
 from scripts.window_binding import BoundWindow
 from scripts.workflow import Workflow
 from scripts.task_runner import TaskRunner
+from scripts.update_ui import UpdateMixin
 
 
-class MainWindow(ActionsMixin, BuilderMixin, QWidget):
+class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
     """Main GUI window combining UI construction, event handling, and workflows."""
 
     def __init__(self, config: AppConfig | None = None) -> None:
@@ -76,6 +77,7 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         self.setObjectName("mainWindow")
         self.setMinimumSize(820, 560)
         self._build_ui()
+        self._init_updates()
         self._init_window_geometry()
         self.write_log("请先绑定 WeGame 主窗口（如游戏已在运行，可直接点击“开始卡邮件”）。")
         if len(self._registered_hotkeys) < 2:
@@ -190,6 +192,9 @@ class MainWindow(ActionsMixin, BuilderMixin, QWidget):
         return super().nativeEvent(event_type, message)
 
     def closeEvent(self, event) -> None:
+        self._shutdown_updates()
+        if self.about_dialog is not None:
+            self.about_dialog.close()
         settings = QSettings("dfAmmo", "Assistant")
         settings.setValue("geometry", self.saveGeometry())
         settings.setValue("splitter", self.main_splitter.saveState())

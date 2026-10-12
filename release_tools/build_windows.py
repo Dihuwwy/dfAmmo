@@ -66,6 +66,12 @@ def main() -> int:
     for name in ("README.md", "LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"):
         shutil.copy2(ROOT / name, output / name)
     collect_notices(output)
+    template_hashes = {path.relative_to(output).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+                       for path in (output / "assets" / "templates").glob("*.png")}
+    managed_files = [path.relative_to(output).as_posix() for path in output.rglob("*") if path.is_file()]
+    managed_files.extend(["release_info.json", "SOURCE.md"])
+    (output / "release_info.json").write_text(json.dumps({"version": version, "files": sorted(set(managed_files)),
+                                                          "template_hashes": template_hashes}), encoding="utf-8")
     source_commit = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
                                    capture_output=True, text=True, check=True).stdout.strip()
     source_url = f"https://github.com/Dihuwwy/dfAmmo/archive/{source_commit}.zip"

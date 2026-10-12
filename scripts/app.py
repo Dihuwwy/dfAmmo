@@ -24,4 +24,5 @@ class App:
         self.qt_app.setWindowIcon(QIcon(str(APP_ICON_PATH)))
         self.window = MainWindow()
         self.window.show()
+        self.window.startup_updates()
         return self.qt_app.exec()

@@ -6,6 +6,10 @@ from scripts.privileges import hide_console_window, is_elevated, relaunch_as_adm
 
 
 def main() -> int:
+    if sys.argv[1:2] == ["--apply-update"]:
+        from scripts.update_apply import run
+
+        return run(sys.argv[2]) if len(sys.argv) == 3 else 2
     if sys.argv[1:2] == ["--self-test"]:
         from release_tools.smoke_test import run
 

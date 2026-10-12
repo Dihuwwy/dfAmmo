@@ -31,6 +31,8 @@ def run(arguments: list[str]) -> int:
         from scripts.config import APP_ICON_PATH, AppConfig, PROJECT_ROOT, TEMPLATE_DIR
         from scripts.element_locator import ElementLocator
         from scripts.gui import MainWindow
+        from scripts.update_apply import apply_files
+        from scripts.version import current_version
         from scripts.privileges import is_elevated
         from pywinauto import mouse
 
@@ -62,6 +64,13 @@ def run(arguments: list[str]) -> int:
             app.processEvents()
             assert window.width() >= 820
             assert window.execution_mode == "continuous"
+            assert window.app_version == current_version()
+            window.show_about()
+            app.processEvents()
+            assert window.check_update_button.parentWidget() is window.about_dialog
+            assert not window.install_update_button.isEnabled()
+            assert window.about_dialog.grab().save(str(report_path.with_name(report_path.stem + "-about.png")))
+            window.about_dialog.close()
             window.full_auto_radio.setChecked(True)
             app.processEvents()
             assert all(not button.isEnabled() for button in window.full_auto_placeholder_buttons)
@@ -70,7 +79,8 @@ def run(arguments: list[str]) -> int:
             assert window.grab().save(str(report_path.with_suffix(".png")))
             window.close()
             window = None
-        report.update(ok=True, icon_loaded=True, template_count=len(templates), project_root=str(PROJECT_ROOT),
+        report.update(ok=True, icon_loaded=True, update_support=True, version=current_version(),
+                      template_count=len(templates), project_root=str(PROJECT_ROOT),
                       python=sys.version, opencv=cv2.__version__, psutil=psutil.__version__)
     except Exception:
         report["error"] = traceback.format_exc()

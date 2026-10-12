@@ -13,6 +13,7 @@
 - [快速开始](#快速开始)
 - [使用方式](#使用方式)
 - [配置](#配置)
+- [软件更新](#软件更新)
 - [模板采集](#模板采集)
 - [项目结构](#项目结构)
 - [故障排查](#故障排查)
@@ -114,6 +115,8 @@ uv run --frozen main.py
 | --- | --- |
 | `game_install_dir` | 空字符串；填写包含 `DeltaForce` 子目录的安装目录 |
 | `operation_mode` | `semi_auto`；另有 `full_auto`，其后续功能尚未实现 |
+| `check_updates_on_startup` | `true`；启动时检查 GitHub 正式版本 |
+| `auto_update` | `false`；可在“关于”中开启空闲时自动安装 |
 | `template_match_threshold` | `0.78`；部分专用识别使用单独阈值 |
 | `game_process_names` | 游戏进程名候选列表 |
 | `game_process_timeout_seconds` | `120`；等待游戏进程的超时时间 |
@@ -123,6 +126,17 @@ uv run --frozen main.py
 | `wegame_confirm_delete_template` | `wegame_confirmdelete.png`；完整的 WeGame 删除确认弹窗 |
 
 手动修改配置前请退出程序。
+
+## 软件更新
+
+点击主界面右上角的信息图标，进入“关于”窗口，可查看当前版本、检查更新和更新并重启。更新提示、下载进度及错误均输出到运行日志。
+
+默认启动时检查 GitHub 最新正式 Release；自动安装默认关闭，可在“关于”中开启。自动安装会等待当前任务结束，准备完成后倒计时 5 秒退出并安装，可在“关于”中取消。
+
+- EXE 版下载 Windows ZIP 并校验 SHA-256，退出后替换程序文件，再自动重启。个人配置、自采或修改过的模板会保留，替换失败时尝试恢复旧文件。
+- 源码版通过 Git 获取对应版本。已有仓库只执行快进更新；有本地修改或提交分叉时停止更新并记录原因。直接下载的源码目录会克隆对应版本后更新；检测到 `uv` 时同步依赖。
+
+更新功能从 v0.1.3 开始提供，旧版 EXE 需先手动下载一次带更新功能的版本。
 
 ## 模板采集
 
@@ -169,6 +183,10 @@ dfAmmo/
     ├── template_capture.py  # 框选采集
     ├── screenshot.py        # 截图保存
     ├── config.py            # 配置读写
+    ├── update_ui.py         # 关于窗口与后台更新控制
+    ├── update_service.py    # 版本检查、下载校验与源码获取
+    ├── update_apply.py      # 退出后的安装、回滚与重启
+    ├── version.py           # 当前版本读取
     └── styles.py            # 界面样式
 ```
 

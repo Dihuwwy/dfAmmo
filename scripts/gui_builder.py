@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QScrollArea,
     QSizePolicy,
+    QStyle,
     QSplitter,
     QVBoxLayout,
     QWidget,
@@ -179,6 +180,15 @@ class BuilderMixin:
 
         layout.addLayout(info_box, stretch=1)
         layout.addWidget(self.bind_button)
+        self.about_button = QPushButton()
+        self.about_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
+        self.about_button.setFixedSize(32, 32)
+        self.about_button.setToolTip("关于 / 更新")
+        self.about_button.setAccessibleName("关于 / 更新")
+        self.about_button.setObjectName("secondaryButton")
+        self.about_button.setStyleSheet("padding: 0;")
+        self.about_button.clicked.connect(self.show_about)
+        layout.addWidget(self.about_button)
         return panel
 
     def _build_settings_card(self) -> QFrame:

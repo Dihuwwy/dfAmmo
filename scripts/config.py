@@ -24,6 +24,8 @@ class AppConfig:
 
     app_name: str = "dfAmmo"
     window_title: str = "dfAmmo Assistant"
+    check_updates_on_startup: bool = True
+    auto_update: bool = False
     start_button_templates: tuple[str, ...] = (
         "wegame_start_button.png",
         "wegame_start_deltaforce.png",
