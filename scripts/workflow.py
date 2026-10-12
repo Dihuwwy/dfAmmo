@@ -203,7 +203,7 @@ class Workflow:
         incomplete = [name for name in pak_names
                       if not (pak_dir / name).is_file() or (pak_dir / f"{name}.disabled").exists()]
         if incomplete:
-            raise RuntimeError(f"地图恢复未完成：{', '.join(incomplete)}；尚未开始结果识别。")
+            raise RuntimeError(f"地图恢复未完成：{', '.join(incomplete)}；未发送地图下载请求。")
         return messages
 
     def detect_stage_four_result(self, template_name: str, confirm_template_name: str,

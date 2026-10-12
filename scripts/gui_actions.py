@@ -640,28 +640,12 @@ class ActionsMixin:
             yield from self._run_stage_four_tasks()
 
     @background_action
-    def _run_stage_four(self, start_step: str = "restore_pak"):
+    def _run_stage_four(self, start_step: str = "detect_result"):
         self.workflow.control.paused.clear()
         if start_step == "warehouse" and self.config.operation_mode != "semi_auto":
             self.write_log("全自动模式不进入仓库；后续操作尚未实现，未执行或循环。")
             return
-        self.set_step_state("restore_pak", "running")
-        try:
-            yield lambda: self.workflow.restore_stage_four_paks(
-                self.config.game_install_dir, self.config.pak_file_names)
-        except ControlInterrupted:
-            raise
-        except Exception as exc:
-            self.set_step_state("restore_pak", "failed", str(exc))
-            self.write_log(f"第四阶段地图恢复失败：{exc}")
-            return
-        self._sync_pak_button_state()
-        self.set_step_state("restore_pak", "success")
-        self.write_log("第四阶段：地图已恢复，后续识别结果不会影响恢复操作。")
-        if self.execution_mode == "step" and start_step == "restore_pak":
-            self.write_log("单步完成：地图已恢复，点击“确认并进大厅”执行下一步。")
-            return
-        if start_step not in ("redownload_map", "warehouse"):
+        if start_step == "detect_result":
             self.set_step_state("detect_result", "running")
             self.write_log("第四阶段第 1 步：确认提示、选择模式、再次确认并进入大厅...")
             try:
@@ -673,17 +657,33 @@ class ActionsMixin:
                 raise
             except Exception as exc:
                 self.set_step_state("detect_result", "failed", str(exc))
-                self.write_log(f"第四阶段进入大厅失败：{exc}；Pak 已经恢复。")
+                self.write_log(f"第四阶段进入大厅失败：{exc}；未执行 Pak 恢复或地图下载。")
                 return
             self.set_step_state("detect_result", "success" if matched else "failed", "" if matched else "结果未确认")
-            self._set_badge(self.workflow_status_badge, "已返回烽火大厅" if matched else "Pak 已恢复，结果未确认",
+            self._set_badge(self.workflow_status_badge, "已返回烽火大厅" if matched else "结果未确认，未恢复 Pak",
                             "success" if matched else "failed")
             if not matched:
                 return
             if self.execution_mode == "step":
-                self.write_log("单步完成：已进入大厅，点击“恢复地图下载”执行第 2 步。")
+                self.write_log("单步完成：已进入大厅，Pak 仍保持当前状态；点击“恢复 Pak”执行第 2 步。")
                 return
         if start_step != "warehouse":
+            self.set_step_state("restore_pak", "running")
+            try:
+                yield lambda: self.workflow.restore_stage_four_paks(
+                    self.config.game_install_dir, self.config.pak_file_names)
+            except ControlInterrupted:
+                raise
+            except Exception as exc:
+                self.set_step_state("restore_pak", "failed", str(exc))
+                self.write_log(f"第四阶段地图恢复失败：{exc}")
+                return
+            self._sync_pak_button_state()
+            self.set_step_state("restore_pak", "success")
+            self.write_log("第四阶段：Pak 已恢复，接下来可发送地图恢复请求。")
+            if self.execution_mode == "step" and start_step == "restore_pak":
+                self.write_log("单步完成：大厅内 Pak 已恢复，点击“恢复地图下载”执行第 3 步。")
+                return
             downloaded = yield from self._run_stage_four_redownload_tasks()
             if not downloaded:
                 return
@@ -695,7 +695,7 @@ class ActionsMixin:
             self._set_badge(self.workflow_status_badge, "全自动后续待实现", "idle")
             return
         self.set_step_state("warehouse", "running")
-        self.write_log("第四阶段第 3 步：进入仓库并确认提示...")
+        self.write_log("第四阶段第 4 步：进入仓库并确认提示...")
         try:
             yield lambda: self.workflow.enter_stage_four_warehouse(
                 self.config.warehouse_notice_template, self.config.game_confirm_template,
@@ -712,7 +712,7 @@ class ActionsMixin:
 
     def _run_stage_four_redownload_tasks(self):
         self.set_step_state("redownload_map", "running")
-        self.write_log("第四阶段第 2 步：选择长弓、点击下载，再按两次 ESC...")
+        self.write_log("第四阶段第 3 步：选择长弓、点击下载，再按两次 ESC...")
         try:
             yield lambda: self.workflow.redownload_stage_four_map(
                 self.config.redownload_map_choice_template, self.config.redownload_map_panel_template,
@@ -729,7 +729,7 @@ class ActionsMixin:
         return True
 
     def _dbg_stage_four(self):
-        self._run_stage_four()
+        self._run_stage_four(start_step="restore_pak")
 
     def _dbg_stage_four_detect(self):
         self._run_stage_four(start_step="detect_result")

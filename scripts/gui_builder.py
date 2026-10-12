@@ -423,8 +423,8 @@ class BuilderMixin:
         s4_row = FlowLayout()
         s4_row.setContentsMargins(18, 0, 0, 0)
         for attr_name, text, slot in (
-            ("dbg_restore_pak_btn", "恢复 Pak", self._dbg_stage_four),
             ("dbg_result_btn", "确认并进大厅", self._dbg_stage_four_detect),
+            ("dbg_restore_pak_btn", "恢复 Pak", self._dbg_stage_four),
             ("dbg_redownload_btn", "恢复地图下载", self._dbg_stage_four_redownload),
             ("dbg_warehouse_btn", "进入仓库并确认", self._dbg_stage_four_warehouse),
         ):
@@ -467,7 +467,7 @@ class BuilderMixin:
             "warehouse": {"button": self.dbg_warehouse_btn, "base_text": "进入仓库并确认", "title": "进入仓库并确认"},
         }
         for step_ids in (("wait_wegame", "click_more", "assets_manage", "delete_map", "restart_game"),
-                         ("restore_pak", "detect_result", "redownload_map", "warehouse")):
+                         ("detect_result", "restore_pak", "redownload_map", "warehouse")):
             for number, step_id in enumerate(step_ids, start=1):
                 info = self._step_buttons[step_id]
                 info["number"] = number
