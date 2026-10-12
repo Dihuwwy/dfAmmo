@@ -74,6 +74,8 @@ class UpdateMixin:
                 message = (f"已更新至 v{result['version']}。" if result.get("ok")
                            else f"更新未完成：{result.get('message', '未知错误')}。")
                 self.write_log(message)
+                if not result.get("ok"):
+                    self.config = replace(self.config, auto_update=False)
                 result_path.unlink()
             except (OSError, ValueError, KeyError) as exc:
                 self.write_log(f"读取更新结果失败：{exc}")

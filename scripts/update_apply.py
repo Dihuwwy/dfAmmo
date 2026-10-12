@@ -112,6 +112,25 @@ def apply_files(root: Path, payload: Path, backup: Path, portable: bool = True) 
         raise
 
 
+def pause_auto_updates(root: Path, job: Path) -> bool:
+    """Older clients must not retry a failed installation on every restart."""
+    config_path = root / "config.json"
+    try:
+        settings = json.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    if not isinstance(settings, dict) or not settings.get("auto_update"):
+        return True
+    settings["auto_update"] = False
+    try:
+        saved = job / "paused-update-config.json"
+        saved.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
+        replace_file(saved, config_path)
+        return True
+    except OSError:
+        return False
+
+
 def run(plan_path: str) -> int:
     path = Path(plan_path).resolve()
     plan = json.loads(path.read_text(encoding="utf-8"))
@@ -161,6 +180,9 @@ def run(plan_path: str) -> int:
         (path.parent / "done").touch()
     except Exception as exc:
         result["message"] = str(exc)
+        if restart:
+            restart = pause_auto_updates(root, path.parent)
+            result["message"] += "；自动更新已暂停，请在“关于”中手动重试。" if restart else "；请手动启动程序并检查更新日志。"
     result_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
     lock.close()
     if restart:
