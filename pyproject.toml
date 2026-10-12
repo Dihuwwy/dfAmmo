@@ -1,19 +1,15 @@
 [project]
 name = "dfammo"
-version = "0.1.4"
+version = "0.1.5"
 description = "Windows desktop automation assistant for Delta Force"
 readme = "README.md"
 license = "GPL-3.0-only"
 requires-python = ">=3.11"
 dependencies = [
-    "airtest>=1.4.3",
     "numpy",
-    "opencv-python",
-    "paddleocr>=2.10.0",
+    "opencv-python-headless",
     "pillow",
-    "picoui>=0.1.3",
     "psutil",
-    "pyside6",
+    "pyside6-essentials",
     "pywin32",
-    "pywinauto",
 ]

@@ -5,7 +5,6 @@ import random
 
 import win32api
 import win32con
-from pywinauto import mouse
 
 from scripts.task_control import TaskControl, ControlInterrupted
 from scripts.dpi import physical_coordinates
@@ -57,7 +56,6 @@ class Clicker:
         for move_method in (
             self._move_with_user32,
             self._move_with_send_input,
-            self._move_with_pywinauto,
         ):
             self.control.check()
             try:
@@ -95,9 +93,6 @@ class Clicker:
     def _move_with_user32(self, x: int, y: int) -> None:
         if not ctypes.windll.user32.SetCursorPos(x, y):
             raise RuntimeError(f"SetCursorPos 失败：x={x}, y={y}")
-
-    def _move_with_pywinauto(self, x: int, y: int) -> None:
-        mouse.move(coords=(x, y))
 
     def _cursor_is_near(self, x: int, y: int, tolerance: int = 3) -> bool:
         current_x, current_y = win32api.GetCursorPos()

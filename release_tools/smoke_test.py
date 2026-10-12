@@ -34,7 +34,6 @@ def run(arguments: list[str]) -> int:
         from scripts.update_apply import apply_files
         from scripts.version import current_version
         from scripts.privileges import is_elevated
-        from pywinauto import mouse
 
         if report["frozen"]:
             assert PROJECT_ROOT == Path(sys.executable).resolve().parent

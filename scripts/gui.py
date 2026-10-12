@@ -37,6 +37,8 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         self.capture_overlay: TemplateCaptureOverlay | None = None
         self.pending_template_name = ""
         self.game_process_deadline = 0.0
+        self._navigation_mode = "continuous"
+        self._continue_after_navigation = True
         self.task_runner = TaskRunner(self.workflow.control, self)
         self.task_runner.progress.connect(self.write_log)
         self.workflow.report_progress = self.task_runner.progress.emit
@@ -70,7 +72,8 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         self.hotkey_timer = QTimer(self)
         self.hotkey_timer.setInterval(60)
         self.hotkey_timer.timeout.connect(self._check_hotkey)
-        self.hotkey_timer.start()
+        if len(self._registered_hotkeys) < 2:
+            self.hotkey_timer.start()
 
         self.setWindowTitle(self.config.window_title)
         self.setWindowIcon(QIcon(str(APP_ICON_PATH)))

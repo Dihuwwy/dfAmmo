@@ -82,14 +82,3 @@ jobs:
         run: |
           gh release create "$TAG" release-assets/* \
             --verify-tag --title "dfAmmo $TAG" --notes-file release_tools/RELEASE_NOTES.md
-      # One-time replacement requested by the maintainer; retain the historical tag.
-      - name: Withdraw superseded initial release
-        if: github.ref_name == 'v0.1.1'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          tags="$(gh api "repos/$GH_REPO/releases" --paginate --jq '.[].tag_name')"
-          if grep -Fxq 'v0.1.0' <<< "$tags"; then
-            gh release delete v0.1.0 --yes
-          fi

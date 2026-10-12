@@ -55,11 +55,8 @@ class ElementLocator:
 
 
     def match_on_screen(self, template_path: str | Path, threshold: float = 0.78) -> MatchResult:
-        template = self.get_template(template_path)
         source = self.grab_window_bgr()
         height, width = source.shape[:2]
-        if template.shape[1] > width or template.shape[0] > height:
-            raise ValueError(f"模板尺寸大于全屏截图：template={template.shape[1]}x{template.shape[0]}, screen={width}x{height}")
         return self.match_in_source(source, template_path,
                                     BoundWindow(0, right=width, bottom=height), threshold)
 
@@ -102,8 +99,8 @@ class ElementLocator:
 
         window_width = bound_window.right - bound_window.left
         window_height = bound_window.bottom - bound_window.top
-        scale_x = window_width / source_width if source_width else 1.0
-        scale_y = window_height / source_height if source_height else 1.0
+        scale_x = window_width / source_width
+        scale_y = window_height / source_height
         center_x = bound_window.left + round((max_location[0] + template_width / 2) * scale_x)
         center_y = bound_window.top + round((max_location[1] + template_height / 2) * scale_y)
 

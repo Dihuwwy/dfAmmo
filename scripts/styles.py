@@ -38,7 +38,6 @@ COLOR_SUCCESS_BORDER = "#86EFAC"
 
 COLOR_WARNING = "#D97706"
 COLOR_WARNING_BG = "#FFFBEB"
-COLOR_WARNING_BORDER = "#FDE68A"
 
 COLOR_DANGER = "#DC2626"
 COLOR_DANGER_BG = "#FEF2F2"
@@ -74,12 +73,6 @@ QLabel {{
 }}
 
 /* Typography */
-QLabel#windowTitle {{
-    font-size: 16px;
-    font-weight: 600;
-    color: {COLOR_TEXT_MAIN};
-}}
-
 QLabel#sectionTitle {{
     font-size: 13px;
     font-weight: 600;
@@ -90,11 +83,6 @@ QLabel#fieldLabel {{
     font-size: 12px;
     font-weight: 500;
     color: {COLOR_TEXT_SECONDARY};
-}}
-
-QLabel#secondaryText {{
-    font-size: 12px;
-    color: {COLOR_TEXT_MUTED};
 }}
 
 /* ── Panel / Surface Containers ───────────────────────────────────────────── */
@@ -235,7 +223,6 @@ QPushButton:disabled {{
 }}
 
 /* Primary Action Button (The single focal action) */
-QPushButton#primaryButton,
 QPushButton#startCardMailBtn {{
     background-color: {COLOR_PRIMARY};
     border: 1px solid {COLOR_PRIMARY_HOVER};
@@ -247,17 +234,14 @@ QPushButton#startCardMailBtn {{
     min-height: 30px;
 }}
 
-QPushButton#primaryButton:hover,
 QPushButton#startCardMailBtn:hover {{
     background-color: {COLOR_PRIMARY_HOVER};
 }}
 
-QPushButton#primaryButton:pressed,
 QPushButton#startCardMailBtn:pressed {{
     background-color: {COLOR_PRIMARY_PRESSED};
 }}
 
-QPushButton#primaryButton:disabled,
 QPushButton#startCardMailBtn:disabled {{
     background-color: {COLOR_PRIMARY_DISABLED};
     border-color: {COLOR_PRIMARY_DISABLED};
@@ -300,18 +284,6 @@ QPushButton#pauseButton:hover {{
     background-color: {COLOR_WARNING_BG};
 }}
 
-QPushButton#resumeButton {{
-    background-color: {COLOR_SUCCESS};
-    border: 1px solid #15803D;
-    color: #FFFFFF;
-    font-weight: 600;
-    min-height: 28px;
-}}
-
-QPushButton#resumeButton:hover {{
-    background-color: #15803D;
-}}
-
 QPushButton#stopButton {{
     background-color: {COLOR_SURFACE};
     border: 1px solid {COLOR_DANGER};
@@ -350,37 +322,6 @@ QPushButton#clearLogBtn:hover {{
     background-color: {COLOR_SURFACE_HOVER};
     color: {COLOR_TEXT_MAIN};
     border-color: #CBD5E1;
-}}
-
-/* Step Mode Toggle Button (Single-step vs Continuous) */
-QPushButton#stepModeToggle {{
-    background-color: {COLOR_SURFACE};
-    border: 1px solid {COLOR_BORDER};
-    border-radius: {RADIUS_CONTROL};
-    color: {COLOR_TEXT_SECONDARY};
-    font-size: 11px;
-    font-weight: 500;
-    padding: 2px 8px;
-    min-height: 24px;
-}}
-
-QPushButton#stepModeToggle:hover {{
-    background-color: {COLOR_SURFACE_HOVER};
-    color: {COLOR_TEXT_MAIN};
-    border-color: #CBD5E1;
-}}
-
-QPushButton#stepModeToggle:checked {{
-    background-color: #EFF6FF;
-    border-color: {COLOR_PRIMARY};
-    color: {COLOR_PRIMARY};
-    font-weight: 600;
-}}
-
-QPushButton#stepModeToggle:checked:hover {{
-    background-color: #DBEAFE;
-    border-color: {COLOR_PRIMARY_HOVER};
-    color: {COLOR_PRIMARY_HOVER};
 }}
 
 /* ── Stepper & Workflow Components ────────────────────────────────────────── */

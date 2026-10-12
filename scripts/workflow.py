@@ -18,7 +18,6 @@ from scripts.game_process import GameProcess, GameProcessFinder
 from scripts.game_navigation import GameNavigator, NavigationEvent
 from scripts.game_result import confirm_notices_and_enter_lobby, request_map_redownload, enter_warehouse_and_confirm
 from scripts.keyboard import KeyboardController
-from scripts.privileges import ensure_can_control_process
 from scripts.screenshot import ScreenshotService
 from scripts.window_binding import BoundWindow, WindowBinder
 
@@ -76,9 +75,6 @@ class Workflow:
             if result.matched:
                 return result.position, template_path
 
-        if best_result is None:
-            raise RuntimeError("没有可用模板。")
-
         result, template_path = best_result
         raise RuntimeError(
             "没有在绑定窗口里匹配到启动按钮。"
@@ -94,7 +90,6 @@ class Workflow:
         template_names: tuple[str, ...],
         threshold: float = 0.78,
     ) -> tuple[ElementPosition, Path]:
-        ensure_can_control_process(bound_window.process_id)
         self.control.check()
         current_window = self.window_binder.activate(bound_window)
         self.control.wait(0.25)
@@ -305,7 +300,6 @@ class Workflow:
         while time.monotonic() < deadline:
             self.control.check()
             try:
-                self.control.check()
                 current_window = self.window_binder.activate(current_bound)
                 current_bound = current_window
                 self.control.wait(0.3)
@@ -445,16 +439,6 @@ class Workflow:
                 )
                 self.clicker.move(pos)
                 self.control.wait(0.4)
-                try:
-                    screenshot_path = self.screenshot.capture_delete_target(
-                        pos.x - pos.width // 2, pos.y - pos.height // 2,
-                        pos.x - pos.width // 2 + pos.width,
-                        pos.y - pos.height // 2 + pos.height,
-                    )
-                except OSError as exc:
-                    self.report_progress(f"保存删除目标截图失败：{exc}")
-                else:
-                    self.report_progress(f"悬停后的删除目标截图：{screenshot_path}")
                 click_pos = self.click_card_bin(pos, bin_path, threshold, before_click=guard)
                 self.report_progress(f"已发送删除点击：x={click_pos.x}, y={click_pos.y}；等待确认删除弹窗验证。")
                 self.confirm_resource_delete(confirm_template_name, threshold, confirm_timeout, before_click=guard)
@@ -525,29 +509,14 @@ class Workflow:
         button_offset = self.locator.delete_confirmation_offset(template_path)
         deadline = time.monotonic() + timeout
         best_confidence = 0.0
-        window_matches = 0
-        screen_matches = 0
         while time.monotonic() < deadline:
             self.control.check()
-            candidates = []
-            resource_window = self.window_binder.bind_by_title("游戏资源包管理")
-            if resource_window is not None:
-                result = self.locator.match_by_image(template_path, resource_window, threshold)
-                window_matches += 1
-                best_confidence = max(best_confidence, result.position.confidence)
-                if result.matched:
-                    candidates.append(result.position)
-            # Confirmation dialogs may have a different title or extend beyond
-            # the resource manager. Do not refocus its parent over the dialog.
-            self.control.check()
+            # One full-screen match covers dialogs outside the manager's bounds.
             result = self.locator.match_on_screen(template_path, threshold)
-            screen_matches += 1
             best_confidence = max(best_confidence, result.position.confidence)
             if result.matched:
-                candidates.append(result.position)
-            if candidates:
                 self.control.check()
-                position = max(candidates, key=lambda item: item.confidence)
+                position = result.position
                 left = position.x - position.width // 2
                 top = position.y - position.height // 2
                 click_position = ElementPosition(
@@ -567,8 +536,7 @@ class Workflow:
             self.control.wait(min(0.2, max(0, deadline - time.monotonic())))
         raise TimeoutError(
             f"等待确认删除资源包按钮超时（{timeout:g}秒，{template_name}）；"
-            f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}，"
-            f"窗口匹配次数={window_matches}，全屏匹配次数={screen_matches}"
+            f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
         )
 
     def _click_delete_confirmation(self, position, click_position=None):

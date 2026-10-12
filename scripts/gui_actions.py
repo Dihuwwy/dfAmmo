@@ -191,7 +191,6 @@ class ActionsMixin:
         self.bind_button.default_text = "重新拖拽绑定"
         self.bind_button.setText("重新拖拽绑定")
 
-        self.subtitle.setText("WeGame 窗口已绑定，可以开始执行自动化流程或单步调试。")
         self.write_log(
             "窗口绑定成功："
             f"{bound_window.title or '<无标题>'} | "
@@ -219,7 +218,6 @@ class ActionsMixin:
         self.bind_button.default_text = "拖拽至 WeGame 窗口绑定"
         self.bind_button.setText("拖拽至 WeGame 窗口绑定")
 
-        self.subtitle.setText("WeGame 辅助就绪 · 支持窗口智能吸附、实时步骤跟踪与单步调试")
         self.write_log("已解除窗口绑定，请重新选择 WeGame 窗口。")
 
     # ── Automation Control ───────────────────────────────────────────────────
@@ -299,12 +297,11 @@ class ActionsMixin:
         except Exception:
             pass
 
-        for step_id, info in getattr(self, "_step_buttons", {}).items():
+        for step_id, info in self._step_buttons.items():
             btn = info["button"]
             if btn.property("stepState") == "running":
                 self.set_step_state(step_id, "idle")
-        if hasattr(self, "workflow_status_badge"):
-            self._set_badge(self.workflow_status_badge, "任务已停止", "idle")
+        self._set_badge(self.workflow_status_badge, "任务已停止", "idle")
 
         if was_running:
             self.write_log("[任务停止] 已通过快捷键/按钮停止当前自动化任务。")
@@ -331,7 +328,7 @@ class ActionsMixin:
 
     def _on_mode_changed(self) -> None:
         new_mode = "semi_auto" if self.semi_auto_radio.isChecked() else "full_auto"
-        if new_mode == getattr(self.config, "operation_mode", "semi_auto"):
+        if new_mode == self.config.operation_mode:
             return
         self.config = replace(self.config, operation_mode=new_mode)
         self._sync_operation_mode_controls()
@@ -472,8 +469,7 @@ class ActionsMixin:
             f"confidence={position.confidence:.3f}, template={template_path.name}"
         )
         self.write_log("正在等待三角洲行动游戏进程...")
-        if hasattr(self, "workflow_status_badge"):
-            self._set_badge(self.workflow_status_badge, "等待游戏启动...", "running")
+        self._set_badge(self.workflow_status_badge, "等待游戏启动...", "running")
         self.game_process_timer.start()
         yield from self._check_game_process_tasks()
 
@@ -498,14 +494,10 @@ class ActionsMixin:
             )
             self.write_log(message)
             self.set_step_state("nav_game", "failed", "未检测到游戏进程")
-            if hasattr(self, "workflow_status_badge"):
-                self._set_badge(self.workflow_status_badge, "等待启动超时", "failed")
+            self._set_badge(self.workflow_status_badge, "等待启动超时", "failed")
 
     @background_action
     def advance_game_navigation(self):
-        cur_step_idx = getattr(self.workflow.game_navigator, "step_index", 0)
-        self.update_nav_substep_pills(cur_step_idx)
-
         try:
             event = (yield lambda: self.workflow.advance_game_navigation())
         except TaskPaused:
@@ -533,7 +525,7 @@ class ActionsMixin:
 
         self.write_log(event.message)
         if (event.status == NavigationStatus.RUNNING and event.step_completed
-                and getattr(self, "_navigation_mode", "continuous") == "step"):
+                and self._navigation_mode == "step"):
             self.navigation_timer.stop()
             self.workflow.game_navigator.pause()
             self.workflow.control.paused.set()
@@ -544,12 +536,7 @@ class ActionsMixin:
             self.navigation_timer.stop()
             self.workflow.control.paused.set()
             self._set_pause_button_state(is_paused=True)
-            if hasattr(self, "workflow_status_badge"):
-                self._set_badge(
-                    self.workflow_status_badge,
-                    f"流程已暂停（步骤 {cur_step_idx + 1}）",
-                    "running",
-                )
+            self._set_badge(self.workflow_status_badge, f"流程已暂停（步骤 {cur_step_idx + 1}）", "running")
             return
 
         if event.status in (NavigationStatus.COMPLETE, NavigationStatus.FAILED):
@@ -563,7 +550,7 @@ class ActionsMixin:
             if event.status == NavigationStatus.COMPLETE:
                 self.set_step_state("nav_game", "success")
                 self.update_nav_substep_pills(len(self.sub_step_pills))
-                if getattr(self, "_navigation_mode", "continuous") == "step":
+                if self._navigation_mode == "step":
                     self.write_log("单步检测完成，停在选人界面。")
                     return
                 process_exited, process_message = (yield lambda: self.workflow.kill_game_process())
@@ -584,7 +571,7 @@ class ActionsMixin:
                     self.write_log("流程已停止：游戏退出未确认。界面仍可操作，可停止任务或重新开始。")
                     return
 
-                if not getattr(self, "_continue_after_navigation", True):
+                if not self._continue_after_navigation:
                     self.write_log("阶段完成：游戏导航及退出已完成，停止后续阶段。")
                     return
 
@@ -767,8 +754,6 @@ class ActionsMixin:
 
     def update_nav_substep_pills(self, active_index: int) -> None:
         """Update navigation sub-step pills: done, active, or idle."""
-        if not hasattr(self, "sub_step_pills"):
-            return
         for idx, pill in enumerate(self.sub_step_pills):
             if idx < active_index:
                 pill_state = "done"
@@ -776,33 +761,23 @@ class ActionsMixin:
                 pill_state = "active"
             else:
                 pill_state = ""
-            if pill.property("pillState") != pill_state:
-                pill.setProperty("pillState", pill_state)
-                self._repaint(pill)
+            self._set_property(pill, "pillState", pill_state)
 
     def reset_all_step_states(self) -> None:
         """Reset all buttons and sub-step pills to idle."""
-        if hasattr(self, "_step_buttons"):
-            for step_id, info in self._step_buttons.items():
-                btn = info["button"]
-                btn.setProperty("stepState", "idle")
-                btn.setText(info["base_text"])
-                self._repaint(btn)
-
-        if hasattr(self, "sub_step_pills"):
-            for pill in self.sub_step_pills:
-                pill.setProperty("pillState", "")
-                self._repaint(pill)
-
-        if hasattr(self, "workflow_status_badge"):
-            self._set_badge(self.workflow_status_badge, "● 待命就绪", "idle")
+        for info in self._step_buttons.values():
+            btn = info["button"]
+            btn.setText(info["base_text"])
+            self._set_property(btn, "stepState", "idle")
+        for pill in self.sub_step_pills:
+            self._set_property(pill, "pillState", "")
+        self._set_badge(self.workflow_status_badge, "● 待命就绪", "idle")
 
         self._sync_pak_button_state()
 
     @property
     def execution_mode(self) -> str:
-        selector = getattr(self, "step_mode_toggle", None)
-        return selector.currentData() if selector is not None else "step"
+        return self.step_mode_toggle.currentData()
 
     @property
     def is_continuous_mode(self) -> bool:
@@ -903,8 +878,6 @@ class ActionsMixin:
 
 
     def _sync_pak_button_state(self) -> None:
-        if not hasattr(self, "dbg_rename_pak_btn"):
-            return  # Called during UI construction.
         disabled = self.workflow.get_pak_status(
             self.config.game_install_dir, self.config.pak_file_names) == "disabled"
         title = "恢复 Pak" if disabled else "屏蔽 Pak"
@@ -912,8 +885,7 @@ class ActionsMixin:
         button = self.dbg_rename_pak_btn
         button.setText(text)
         button.setToolTip("点击恢复为正常 .pak 文件" if disabled else "点击重命名为 .disabled，再点一次可恢复")
-        if "rename_pak" in getattr(self, "_step_buttons", {}):
-            self._step_buttons["rename_pak"].update(base_text=text, title=title)
+        self._step_buttons["rename_pak"].update(base_text=text, title=title)
         state = button.property("stepState")
         if disabled or state not in ("running", "failed"):
             self._set_property(button, "stepState", "success" if disabled else "idle")
@@ -944,8 +916,7 @@ class ActionsMixin:
                         self.write_log("调试：未绑定 WeGame 窗口，无法继续执行阶段 3。")
             else:
                 self.set_step_state("rename_pak", "idle")
-                if hasattr(self, "workflow_status_badge"):
-                    self._set_badge(self.workflow_status_badge, "步骤完成：恢复 Pak", "success")
+                self._set_badge(self.workflow_status_badge, "步骤完成：恢复 Pak", "success")
                 self.write_log("调试：【已恢复 Pak】已去除 .disabled 后缀，文件恢复正常（再点一次重新屏蔽）。")
                 if self.is_continuous_mode:
                     self.write_log("连续模式：已恢复 Pak（未屏蔽），停止后续 WeGame 删包流程。")

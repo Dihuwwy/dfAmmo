@@ -91,10 +91,6 @@ class BuilderMixin:
         self.bind_panel = self._build_connection_bar()
         root.addWidget(self.bind_panel)
 
-        # Compatibility placeholder
-        self.subtitle = QLabel("WeGame 辅助就绪")
-        self.subtitle.hide()
-
         # ── 2. Main Vertical Splitter ─────────────────────────────────────────
         self.main_splitter = QSplitter(Qt.Vertical)
         self.main_splitter.setObjectName("mainSplitter")
@@ -200,8 +196,6 @@ class BuilderMixin:
 
         title = QLabel("游戏设置")
         title.setObjectName("sectionTitle")
-        self.window_info = QLabel("")
-        self.window_info.hide()
 
         # Install dir row
         dir_row = QHBoxLayout()
@@ -229,7 +223,7 @@ class BuilderMixin:
         mode_label.setFixedWidth(64)
         self.semi_auto_radio = QRadioButton("半自动模式 (手动购入穿戴)")
         self.full_auto_radio = QRadioButton("全自动模式 (配装方案一键买齐)")
-        if getattr(self.config, "operation_mode", "semi_auto") == "full_auto":
+        if self.config.operation_mode == "full_auto":
             self.full_auto_radio.setChecked(True)
         else:
             self.semi_auto_radio.setChecked(True)
@@ -240,7 +234,6 @@ class BuilderMixin:
         mode_row.addStretch(1)
 
         layout.addWidget(title)
-        layout.addWidget(self.window_info)
         layout.addLayout(dir_row)
         layout.addLayout(mode_row)
         layout.addWidget(self._make_divider())

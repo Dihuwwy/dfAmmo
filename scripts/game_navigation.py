@@ -33,10 +33,8 @@ class NavigationEvent:
 @dataclass(frozen=True)
 class NavigationStep:
     name: str
-    action: Literal["click", "press", "press_sequence", "press_when_visible", "detect"]
+    action: Literal["click", "press_sequence", "detect"]
     template_name: str = ""
-    virtual_key: int = 0
-    repeat: int = 1
     key_sequence: tuple[tuple[int, int], ...] = ()
     delay_after: float = 1.2
 
@@ -92,7 +90,6 @@ class GameNavigator:
         self.finished = True
         self.is_paused = False
         self._last_resync_check = 0.0
-        self._last_esc_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
         self.auto_align = True
@@ -107,7 +104,6 @@ class GameNavigator:
         self.finished = False
         self.is_paused = False
         self._last_resync_check = 0.0
-        self._last_esc_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
         if self.step_index > 0:
@@ -120,18 +116,13 @@ class GameNavigator:
 
     def jump_to_step(self, step_index: int) -> NavigationEvent:
         """Manually jump to a specific step index and immediately prepare for execution."""
-        if step_index < 0:
-            step_index = 0
-        elif step_index >= len(NAVIGATION_STEPS):
-            step_index = len(NAVIGATION_STEPS) - 1
-
+        step_index = max(0, min(step_index, len(NAVIGATION_STEPS) - 1))
         self.step_index = step_index
         self.auto_align = False
         self.deadline = time.monotonic() + self.step_timeout_seconds
         self.next_action_at = 0.0
         self.finished = False
         self.is_paused = False
-        self._last_esc_retry = 0.0
         self.last_confidence = 0.0
         self.best_confidence = 0.0
 
@@ -163,7 +154,6 @@ class GameNavigator:
         self.is_paused = False
         self.deadline = time.monotonic() + self.step_timeout_seconds
         self.next_action_at = 0.0
-        self._last_esc_retry = 0.0
         resync_event = self.resync_state()
         if resync_event is not None:
             return resync_event
@@ -178,24 +168,24 @@ class GameNavigator:
             f"[已继续] 自动化已恢复运行，正在推进步骤：【{step_name}】。",
         )
 
-    def resync_state(self, *, allow_backtrack: bool = True) -> NavigationEvent | None:
+    def resync_state(self, *, allow_backtrack: bool = True, source=None) -> NavigationEvent | None:
         """Scan current game window across candidate steps and align step_index to actual UI."""
         self.control.check()
         if self.process_id is None or self.finished:
             return None
 
-        if self.bound_window is None or not win32gui.IsWindow(self.bound_window.handle):
-            self.bound_window = self.window_binder.bind_by_process_id(self.process_id)
-            if self.bound_window is None:
+        if source is None:
+            if self.bound_window is None or not win32gui.IsWindow(self.bound_window.handle):
+                self.bound_window = self.window_binder.bind_by_process_id(self.process_id)
+                if self.bound_window is None:
+                    return None
+            self.bound_window = self.window_binder.bind_by_handle(self.bound_window.handle)
+            try:
+                source = self.locator.grab_window_bgr(self.bound_window)
+            except ControlInterrupted:
+                raise
+            except OSError:
                 return None
-
-        self.bound_window = self.window_binder.bind_by_handle(self.bound_window.handle)
-        try:
-            source = self.locator.grab_window_bgr(self.bound_window)
-        except ControlInterrupted:
-            raise
-        except Exception:
-            return None
 
         # 1. Check for forbidden items / popup alert template if exists
         for forbidden_name in ("df_forbidden.png", "df_popup_forbidden.png"):
@@ -219,16 +209,12 @@ class GameNavigator:
         for idx in candidate_indices:
             if not allow_backtrack and idx < self.step_index:
                 continue
-            if idx >= len(NAVIGATION_STEPS):
-                continue
             cand_step = NAVIGATION_STEPS[idx]
             candidate_tmpl_names = [cand_step.template_name]
             if idx == 0:
                 candidate_tmpl_names.extend(["df_change_mode.png", "df_mode_init.png"])
             elif idx == 7:
                 candidate_tmpl_names.append("df_map_choose_selected.png")
-            elif cand_step.template_name == "df_mode_init.png":
-                candidate_tmpl_names.append("df_mode_choose.png")
 
             match_res = None
             for tname in candidate_tmpl_names:
@@ -238,11 +224,11 @@ class GameNavigator:
                 res = self.locator.match_in_source(
                     source, tmpl_path, self.bound_window, max(self.threshold, 0.90)
                 )
-                if res.matched and res.position.confidence >= max(self.threshold, 0.90):
+                if res.matched:
                     match_res = res
                     break
 
-            if match_res is not None and match_res.matched:
+            if match_res is not None:
                 if idx == 4 and self.step_index <= 2:
                     self.is_paused = True
                     return NavigationEvent(
@@ -250,12 +236,7 @@ class GameNavigator:
                         "已识别到烽火大厅，但地图入口未匹配。请采集已选地图卡片为 df_map_choose_selected.png，"
                         "或手动打开地图选择后继续；未发送 ESC 或 Tab。",
                     )
-                conf = (
-                    float(match_res.position.confidence)
-                    if hasattr(match_res.position, "confidence") and isinstance(match_res.position.confidence, (int, float))
-                    else 0.0
-                )
-                return self._align_to_step(idx, conf)
+                return self._align_to_step(idx, match_res.position.confidence)
 
         return None
 
@@ -341,10 +322,7 @@ class GameNavigator:
             candidate_names: list[str] = [step.template_name]
             if self.step_index == 0:
                 candidate_names.append("df_change_mode.png")
-                if step.template_name == "df_mode_choose.png":
-                    candidate_names.append("df_mode_init.png")
-                elif step.template_name == "df_mode_init.png":
-                    candidate_names.append("df_mode_choose.png")
+                candidate_names.append("df_mode_init.png")
 
             matched_result = None
             best_cand_confidence = 0.0
@@ -357,7 +335,7 @@ class GameNavigator:
                     selected = self.locator.match_in_source(
                         source, selected_path, self.bound_window, max(self.threshold, 0.90)
                     )
-                    if selected.matched and selected.position.confidence >= max(self.threshold, 0.90):
+                    if selected.matched:
                         return self._align_to_step(7, selected.position.confidence)
             for cand_name in candidate_names:
                 self.control.check()
@@ -379,14 +357,14 @@ class GameNavigator:
             self.last_confidence = best_cand_confidence
             self.best_confidence = max(self.best_confidence, self.last_confidence)
 
-            if matched_result is None or not matched_result.matched:
+            if matched_result is None:
                 step_elapsed = now - (self.deadline - self.step_timeout_seconds)
 
                 # Align before any recovery key: the user may already be in a lobby.
-                if self.step_index in (0, 2) or (step_elapsed >= 3.0 and now - self._last_resync_check >= 2.5):
+                if (self.step_index in (0, 2) or step_elapsed >= 3.0) and now - self._last_resync_check >= 2.5:
                     self._last_resync_check = now
                     previous_index = self.step_index
-                    aligned = self.resync_state(allow_backtrack=False)
+                    aligned = self.resync_state(allow_backtrack=False, source=source)
                     if aligned is not None and (
                         self.step_index != previous_index or aligned.status != NavigationStatus.RUNNING
                     ):
@@ -431,8 +409,6 @@ class GameNavigator:
             self.clicker.click(position, self.bound_window.handle)
         elif step.action == "press_sequence" and step.key_sequence:
             self.keyboard.press_sequence(step.key_sequence)
-        elif step.action in ("press", "press_when_visible"):
-            self.keyboard.press(step.virtual_key, step.repeat)
         elif step.action == "detect":
             return self._complete()
 

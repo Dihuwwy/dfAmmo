@@ -16,8 +16,6 @@ versions and upstream project links in `DEPENDENCIES.json`.
 | Pillow | https://github.com/python-pillow/Pillow |
 | psutil | https://github.com/giampaolo/psutil |
 | pywin32 | https://github.com/mhammond/pywin32 |
-| pywinauto | https://github.com/pywinauto/pywinauto |
-| comtypes | https://github.com/enthought/comtypes |
 | PyInstaller bootloader | https://github.com/pyinstaller/pyinstaller |
 
 Qt/PySide are dynamically bundled, not statically linked into the application.

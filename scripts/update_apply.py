@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 import tempfile
 
 from scripts.update_service import UpdateService, git_command, is_link, portable_file, safe_relative
