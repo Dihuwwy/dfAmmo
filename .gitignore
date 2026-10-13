@@ -48,3 +48,4 @@ htmlcov/
 # Local user settings (generated on first launch)
 /config.json
 /.updates/
+/AGENTS.md
