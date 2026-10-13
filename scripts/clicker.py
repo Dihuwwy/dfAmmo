@@ -4,7 +4,6 @@ import ctypes
 import random
 
 import win32api
-import win32con
 
 from scripts.task_control import TaskControl, ControlInterrupted
 from scripts.dpi import physical_coordinates
@@ -104,12 +103,7 @@ class Clicker:
         with physical_coordinates():
             self._move_to_point(x, y)
             self.control.wait(random.uniform(0.08, 0.15))
-            try:
-                self._click_with_send_input(x, y)
-            except ControlInterrupted:
-                raise
-            except Exception:
-                self._click_with_user32(x, y)
+            self._click_with_send_input(x, y)
         return True
 
     def move(self, position: ElementPosition) -> None:
@@ -147,20 +141,6 @@ class Clicker:
             self.control.wait(random.uniform(0.09, 0.16))
         finally:
             self._send_inputs((self._mouse_input(0, 0, MOUSEEVENTF_LEFTUP),), x, y)
-
-    def _click_with_user32(self, x: int, y: int) -> None:
-        user32 = ctypes.windll.user32
-        if not user32.SetCursorPos(x, y):
-            raise RuntimeError(f"SetCursorPos 失败：x={x}, y={y}")
-
-        self.control.wait(0.08)
-        self.control.check()
-        user32.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
-        try:
-            self.control.wait(random.uniform(0.09, 0.16))
-        finally:
-            user32.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)
-
 
     def _send_inputs(self, events: tuple[Input, ...], x: int, y: int) -> None:
         sent = ctypes.windll.user32.SendInput(
