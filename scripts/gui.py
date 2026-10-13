@@ -1,11 +1,7 @@
 from __future__ import annotations
 
-import ctypes
-import ctypes.wintypes
-
 import win32api
 import win32con
-import win32gui
 
 from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtGui import QIcon
@@ -59,21 +55,11 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         self._controls_fit_timer.timeout.connect(self._ensure_controls_expanded)
 
         self._hotkey_down = False
-        self._registered_hotkeys = set()
-        user32 = ctypes.windll.user32
-        user32.RegisterHotKey.argtypes = [ctypes.wintypes.HWND, ctypes.c_int,
-                                         ctypes.wintypes.UINT, ctypes.wintypes.UINT]
-        user32.RegisterHotKey.restype = ctypes.wintypes.BOOL
-        for hotkey_id, modifiers in ((1001, 0), (1002, win32con.MOD_SHIFT)):
-            if user32.RegisterHotKey(int(self.winId()), hotkey_id,
-                                    modifiers | 0x4000, win32con.VK_F12):
-                self._registered_hotkeys.add(hotkey_id)
-
+        # RegisterHotKey is disabled; polling observes keys without reserving them.
         self.hotkey_timer = QTimer(self)
         self.hotkey_timer.setInterval(60)
         self.hotkey_timer.timeout.connect(self._check_hotkey)
-        if len(self._registered_hotkeys) < 2:
-            self.hotkey_timer.start()
+        self.hotkey_timer.start()
 
         self.setWindowTitle(self.config.window_title)
         self.setWindowIcon(QIcon(str(APP_ICON_PATH)))
@@ -83,8 +69,6 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         self._init_updates()
         self._init_window_geometry()
         self.write_log("请先绑定 WeGame 主窗口（如游戏已在运行，可直接点击“开始卡邮件”）。")
-        if len(self._registered_hotkeys) < 2:
-            self.write_log("部分全局快捷键注册失败（可能被占用），已启用按键检测备用方式。")
 
     def _on_worker_busy_changed(self, busy: bool) -> None:
         running = self.navigation_timer.isActive() or self.game_process_timer.isActive()
@@ -173,26 +157,13 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         self.main_splitter.setSizes([top, max(min_log, available - top)])
 
     def _check_hotkey(self) -> None:
-        down = bool(win32api.GetAsyncKeyState(win32con.VK_F12) & 0x8000)
+        f12 = bool(win32api.GetAsyncKeyState(win32con.VK_F12) & 0x8000)
+        shift = bool(win32api.GetAsyncKeyState(win32con.VK_SHIFT) & 0x8000)
+        ctrl = bool(win32api.GetAsyncKeyState(win32con.VK_CONTROL) & 0x8000)
+        down = f12 and (shift or ctrl)
         if down and not self._hotkey_down:
-            shift = bool(win32api.GetAsyncKeyState(win32con.VK_SHIFT) & 0x8000)
-            hotkey_id = 1002 if shift else 1001
-            if hotkey_id not in self._registered_hotkeys:
-                self.emergency_stop() if shift else self.toggle_pause_resume()
+            self.emergency_stop() if shift else self.toggle_pause_resume()
         self._hotkey_down = down
-
-    def nativeEvent(self, event_type, message):
-        try:
-            msg = ctypes.wintypes.MSG.from_address(int(message))
-            if msg.message == win32con.WM_HOTKEY and msg.wParam in (1001, 1002):
-                if msg.wParam == 1002:
-                    self.emergency_stop()
-                else:
-                    self.toggle_pause_resume()
-                return True, 0
-        except Exception:
-            pass
-        return super().nativeEvent(event_type, message)
 
     def closeEvent(self, event) -> None:
         self._shutdown_updates()
@@ -208,9 +179,4 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         self._controls_fit_timer.stop()
         self.task_runner.shutdown()
         self.workflow.cancel_game_navigation()
-        for hotkey_id in self._registered_hotkeys:
-            try:
-                win32gui.UnregisterHotKey(int(self.winId()), hotkey_id)
-            except Exception:
-                pass
         super().closeEvent(event)

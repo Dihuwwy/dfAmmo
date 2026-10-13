@@ -49,8 +49,10 @@ def main() -> int:
     if sys.platform != "win32" or platform.machine().lower() not in ("amd64", "x86_64"):
         parser.error("Build requires Windows x64 and an x64 Python interpreter")
     version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-    if args.version and args.version.removeprefix("v") != version:
+    if args.version and args.version.removeprefix("v").replace("-beta.", "b") != version.replace("-beta.", "b"):
         parser.error(f"Tag/version mismatch: {args.version} != {version}")
+    if args.version:
+        version = args.version.removeprefix("v")
     dist = ROOT / "dist"
     # Do not let DLLs from unrelated applications on PATH leak into the bundle.
     build_env = os.environ.copy()

@@ -223,7 +223,7 @@ class ActionsMixin:
     # ── Automation Control ───────────────────────────────────────────────────
 
     def _set_pause_button_state(self, is_paused: bool) -> None:
-        self.pause_resume_button.setText("继续 (F12)" if is_paused else "暂停 (F12)")
+        self.pause_resume_button.setText("继续 (Ctrl+F12)" if is_paused else "暂停 (Ctrl+F12)")
         self._set_property(self.pause_resume_button, "paused", "true" if is_paused else "false")
 
 
@@ -236,7 +236,7 @@ class ActionsMixin:
             self.workflow.game_navigator.pause()
             self.navigation_timer.stop()
             self._set_pause_button_state(True)
-            self.write_log("[流程暂停] 按 F12 继续，或使用单步调试。")
+            self.write_log("[流程暂停] 按 Ctrl+F12 继续，或使用单步调试。")
         elif self.task_runner.busy:
             self.write_log("正在暂停当前操作，请稍候再继续。")
         else:
@@ -530,7 +530,7 @@ class ActionsMixin:
             self.workflow.game_navigator.pause()
             self.workflow.control.paused.set()
             self._set_pause_button_state(True)
-            self.write_log("单步完成，已暂停。按 F12 或点击继续执行下一步。")
+            self.write_log("单步完成，已暂停。按 Ctrl+F12 或点击继续执行下一步。")
             return
         if event.status == NavigationStatus.PAUSED:
             self.navigation_timer.stop()

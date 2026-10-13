@@ -246,7 +246,7 @@ class BuilderMixin:
         self.start_card_mail_button.setObjectName("startCardMailBtn")
         self.start_card_mail_button.clicked.connect(self.start_card_mail)
 
-        self.pause_resume_button = QPushButton("暂停 (F12)")
+        self.pause_resume_button = QPushButton("暂停 (Ctrl+F12)")
         self.pause_resume_button.setObjectName("pauseButton")
         self.pause_resume_button.setEnabled(False)
         self.pause_resume_button.clicked.connect(self.toggle_pause_resume)

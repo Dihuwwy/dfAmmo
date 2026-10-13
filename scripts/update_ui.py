@@ -8,7 +8,7 @@ import threading
 
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from scripts.config import APP_ICON_PATH, PROJECT_ROOT
 from scripts.update_service import REPO_URL, Release, UpdateCancelled, UpdateService
@@ -51,7 +51,7 @@ class UpdateMixin:
         self.app_version = current_version()
         self.update_worker = UpdateWorker(self)
         self.update_service = UpdateService(self.app_version, report=self.update_worker.report,
-                                            cancelled=self.update_worker.cancelled)
+                                            cancelled=self.update_worker.cancelled, channel=self.config.update_channel)
         self.update_worker.finished.connect(self._update_finished, Qt.ConnectionType.QueuedConnection)
         self.update_worker.progress.connect(self.write_log, Qt.ConnectionType.QueuedConnection)
         self.available_release: Release | None = None
@@ -108,6 +108,16 @@ class UpdateMixin:
             repo = QLabel(f'<a href="{REPO_URL}">GitHub 项目主页</a>')
             repo.setOpenExternalLinks(True)
             layout.addWidget(repo)
+            channel_row = QHBoxLayout()
+            channel_row.addWidget(QLabel("更新渠道"))
+            self.update_channel_combo = QComboBox()
+            self.update_channel_combo.addItem("正式版", "stable")
+            self.update_channel_combo.addItem("测试版", "beta")
+            self.update_channel_combo.setCurrentIndex(self.update_channel_combo.findData(self.config.update_channel))
+            self.update_channel_combo.currentIndexChanged.connect(
+                lambda: self._save_update_setting("update_channel", self.update_channel_combo.currentData()))
+            channel_row.addWidget(self.update_channel_combo)
+            layout.addLayout(channel_row)
             self.startup_check_box = QCheckBox("启动时检查更新")
             self.startup_check_box.setChecked(self.config.check_updates_on_startup)
             self.auto_update_box = QCheckBox("自动安装更新（任务空闲时）")
@@ -139,6 +149,11 @@ class UpdateMixin:
             self.config.save_to_file()
         except OSError as exc:
             self.write_log(f"更新设置保存失败：{exc}")
+        if field == "update_channel":
+            self.available_release = None
+            self._auto_update_pending = False
+            self._auto_update_timer.stop()
+            self._sync_update_buttons()
         if field == "auto_update":
             if checked and self.available_release is not None:
                 self._auto_update_pending = True
@@ -156,6 +171,7 @@ class UpdateMixin:
         if self.about_dialog is None:
             return
         pending = self._update_plan is not None
+        self.update_channel_combo.setEnabled(not self.update_worker.busy and not pending)
         self.check_update_button.setEnabled(not self.update_worker.busy and not pending)
         self.install_update_button.setEnabled(self.available_release is not None and not self.update_worker.busy and not pending)
         self.cancel_update_button.setEnabled(self.update_worker.busy or pending or self._auto_update_pending)
@@ -164,7 +180,8 @@ class UpdateMixin:
         if self.update_worker.busy or self._update_plan is not None or self.update_worker.closed:
             return
         self.available_release = None
-        self.write_log(f"正在检查更新，当前版本 v{self.app_version}。")
+        self.update_service.channel = self.config.update_channel
+        self.write_log(f"正在检查{'测试版' if self.config.update_channel == 'beta' else '正式版'}更新，当前版本 v{self.app_version}。")
         self.update_worker.start("check", self.update_service.check_latest)
         self._sync_update_buttons()
 

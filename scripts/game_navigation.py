@@ -147,7 +147,7 @@ class GameNavigator:
         return NavigationEvent(
             NavigationStatus.PAUSED,
             f"[已暂停] 自动化已暂停（当前处于：{step_name}）。"
-            "请在游戏中处理弹窗/违禁物品，处理完毕后按 F12 或点击“继续”恢复运行。",
+            "请在游戏中处理弹窗/违禁物品，处理完毕后按 Ctrl+F12 或点击“继续”恢复运行。",
         )
 
     def resume(self) -> NavigationEvent:
@@ -199,7 +199,7 @@ class GameNavigator:
                     return NavigationEvent(
                         NavigationStatus.PAUSED,
                         "[警告] 检测到违禁物品弹窗，游戏提示禁止进入！已自动为您暂停。"
-                        "请在游戏中移出保险箱中的四级弹/违禁物品，处理完毕后按 F12 继续！",
+                        "请在游戏中移出保险箱中的四级弹/违禁物品，处理完毕后按 Ctrl+F12 继续！",
                     )
 
         # 2. Candidate step indices to inspect, ordered from downstream to upstream

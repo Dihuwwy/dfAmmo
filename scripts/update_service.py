@@ -23,6 +23,7 @@ from scripts.config import PROJECT_ROOT
 REPOSITORY = "Dihuwwy/dfAmmo"
 REPO_URL = f"https://github.com/{REPOSITORY}"
 LATEST_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
+RELEASES_URL = f"https://api.github.com/repos/{REPOSITORY}/releases?per_page=100"
 MAX_DOWNLOAD = 512 * 1024 * 1024
 MAX_UNPACKED = 1536 * 1024 * 1024
 
@@ -31,11 +32,12 @@ class UpdateCancelled(Exception):
     pass
 
 
-def version_tuple(version: str) -> tuple[int, int, int]:
-    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)", version)
+def version_tuple(version: str) -> tuple[int, ...]:
+    match = re.fullmatch(r"v?(\d+)\.(\d+)\.(\d+)(?:(?:-beta\.|b)(\d+))?", version)
     if not match:
-        raise ValueError(f"不支持的正式版本号：{version}")
-    return tuple(map(int, match.groups()))
+        raise ValueError(f"不支持的版本号：{version}")
+    major, minor, patch, beta = match.groups()
+    return (int(major), int(minor), int(patch), int(beta is None), int(beta or 0))
 
 
 class GitHubRedirect(request.HTTPRedirectHandler):
@@ -95,8 +97,9 @@ def git_command(root: Path, *args: str) -> str:
 
 class UpdateService:
     def __init__(self, version: str, root: Path = PROJECT_ROOT, frozen: bool | None = None,
-                 report=None, cancelled: threading.Event | None = None):
+                 report=None, cancelled: threading.Event | None = None, channel: str = "stable"):
         self.version = version
+        self.channel = channel
         self.root = root.resolve()
         self.frozen = bool(getattr(sys, "frozen", False)) if frozen is None else frozen
         self.report = report or (lambda message: None)
@@ -110,7 +113,7 @@ class UpdateService:
     def open_url(self, url: str):
         self.check_cancelled()
         req = request.Request(url, headers={"User-Agent": f"dfAmmo/{self.version}",
-                              "Accept": "application/vnd.github+json" if url == LATEST_URL else "*/*"})
+                              "Accept": "application/vnd.github+json" if url.startswith("https://api.github.com/") else "*/*"})
         return self.opener.open(req, timeout=15)
 
     def check_latest(self) -> Release | None:
@@ -126,7 +129,7 @@ class UpdateService:
                         if job.is_dir():
                             marker.touch(exist_ok=True)
         try:
-            with self.open_url(LATEST_URL) as response:
+            with self.open_url(RELEASES_URL if self.channel == "beta" else LATEST_URL) as response:
                 payload = response.read(1024 * 1024 + 1)
             if len(payload) > 1024 * 1024:
                 raise ValueError("GitHub 版本信息过大。")
@@ -135,15 +138,24 @@ class UpdateService:
             if exc.code == 404:
                 return None
             if exc.code in (403, 429):
+                if self.channel == "beta":
+                    raise RuntimeError("GitHub 请求受限，请稍后检查测试版更新。") from exc
                 self.report("GitHub API 请求受限，正在通过官方 Release 页面检查版本。")
                 return self.check_latest_redirect()
             raise
         except error.URLError:
+            if self.channel == "beta":
+                raise
             self.report("版本接口连接失败，正在通过官方 Release 页面检查版本。")
             return self.check_latest_redirect()
         self.check_cancelled()
+        if self.channel == "beta":
+            releases = [item for item in data if not item.get("draft")]
+            if not releases:
+                return None
+            data = max(releases, key=lambda item: version_tuple(item["tag_name"]))
         tag = data["tag_name"]
-        if data.get("draft") or data.get("prerelease"):
+        if data.get("draft") or (data.get("prerelease") and self.channel != "beta"):
             return None
         if version_tuple(tag) <= version_tuple(self.version):
             return None
@@ -278,7 +290,7 @@ class UpdateService:
                                timeout=180, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
                 self.check_cancelled()
                 version = tomllib.loads((payload / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
-                if version != release.version or not (payload / "scripts" / "update_apply.py").is_file():
+                if version_tuple(version) != version_tuple(release.version) or not (payload / "scripts" / "update_apply.py").is_file():
                     raise ValueError("新版源码的版本或更新模块不正确。")
                 commit = git_command(payload, "rev-parse", "HEAD")
                 if mode == "git":
