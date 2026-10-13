@@ -53,6 +53,25 @@ class Workflow:
             control=self.control,
         )
 
+    def close_battle_report(self) -> None:
+        source = self.locator.grab_window_bgr()
+        height, width = source.shape[:2]
+        corner = BoundWindow(0, left=width // 2, top=height // 2, right=width, bottom=height)
+        report = self.locator.match_in_source(
+            source[corner.top:, corner.left:], TEMPLATE_DIR / "wegame_battle_report.png", corner, 0.90)
+        if not report.matched:
+            return
+        # Header coordinates relative to the fixed footer in the captured report.
+        x, y = report.position.x, report.position.y
+        header = BoundWindow(0, left=x + 415, top=max(0, y - 900),
+                             right=min(width, x + 495), bottom=max(0, y - 820))
+        close = self.locator.match_in_source(
+            source[header.top:header.bottom, header.left:header.right],
+            TEMPLATE_DIR / "wegame_battle_report_close.png", header, 0.90)
+        if close.matched:
+            self.clicker.click(close.position)
+            self.report_progress("已点击关闭 WeGame 战报。")
+            self.control.wait(0.4)
 
     def find_start_button(
         self,
@@ -93,6 +112,7 @@ class Workflow:
         self.control.check()
         current_window = self.window_binder.activate(bound_window)
         self.control.wait(0.25)
+        self.close_battle_report()
         position, template_path = self.find_start_button(current_window, template_names, threshold)
         self.clicker.click(position, current_window.handle)
         return position, template_path
@@ -303,6 +323,7 @@ class Workflow:
                 current_window = self.window_binder.activate(current_bound)
                 current_bound = current_window
                 self.control.wait(0.3)
+                self.close_battle_report()
                 position, template_path = self.find_start_button(
                     current_window, template_names, threshold
                 )
@@ -325,6 +346,7 @@ class Workflow:
         self.control.check()
         current_window = self.window_binder.activate(bound_window)
         self.control.wait(0.3)
+        self.close_battle_report()
         template_path = TEMPLATE_DIR / template_name
         if not template_path.exists():
             raise FileNotFoundError(f"缺少 WeGame 更多按钮模板：{template_name}")

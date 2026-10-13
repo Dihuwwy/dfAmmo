@@ -155,6 +155,7 @@ uv run --frozen main.py
 
 - `wegame_confirmdelete.png` 必须包含完整删除确认弹窗，不能只截确定按钮或文字。
 - `wegame_bin.png` 是悬停资源条目后显示的垃圾桶图标。
+- `wegame_battle_report.png` 只截战报底部的“WeGame 官方助手”标识；`wegame_battle_report_close.png` 只截右上角关闭图标，不包含战绩、模式或高校认证。战报未出现时直接继续。
 - `wegame_assets_manage.png` 对应菜单项；`wegame_assests_manage.png` 对应管理器顶部区域，请按原文件名分别采集。
 - `df_confirm.png` 用于部分游戏提示的绿色确认；配装确认、继续和 WeGame 橙色确定仍使用各自的模板。
 
