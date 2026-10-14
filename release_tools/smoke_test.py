@@ -52,9 +52,7 @@ def run(arguments: list[str]) -> int:
 
         app = QApplication.instance() or QApplication(["dfAmmo-self-test"])
         with patch("scripts.gui.QSettings", return_value=MagicMock(value=lambda *args: None)), \
-             patch.object(AppConfig, "save_to_file"), \
-             patch("scripts.gui.ctypes.windll.user32.RegisterHotKey", return_value=0), \
-             patch("scripts.gui.win32gui.UnregisterHotKey"):
+             patch.object(AppConfig, "save_to_file"):
             window = MainWindow(config=AppConfig())
             assert not window.windowIcon().isNull(), "Application icon failed to load"
             assert not window.windowIcon().pixmap(32, 32).isNull(), "Application icon failed to render"
