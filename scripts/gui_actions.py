@@ -52,7 +52,6 @@ class ActionsMixin:
     def _set_running_controls(self, running: bool) -> None:
         """Update action buttons enable/disable states for start/stop cycles."""
         self.start_card_mail_button.setEnabled(not running and not self.task_runner.busy)
-        self.pause_resume_button.setEnabled(running)
         self._set_pause_button_state(is_paused=False)
         self.stop_button.setEnabled(running or self.task_runner.busy)
         self.resync_button.setEnabled(running)
@@ -223,22 +222,15 @@ class ActionsMixin:
     # ── Automation Control ───────────────────────────────────────────────────
 
     def _set_pause_button_state(self, is_paused: bool) -> None:
-        self.pause_resume_button.setText("继续 (Ctrl+F12)" if is_paused else "暂停 (Ctrl+F12)")
+        self.pause_resume_button.setEnabled(is_paused)
         self._set_property(self.pause_resume_button, "paused", "true" if is_paused else "false")
 
 
-    def toggle_pause_resume(self) -> None:
-        if not (self.navigation_timer.isActive() or self.workflow.is_navigation_paused
-                or (self.task_runner.busy and not self.workflow.game_navigator.finished)):
-            return
+    def continue_navigation(self) -> None:
         if not self.workflow.is_navigation_paused:
-            self.workflow.control.paused.set()
-            self.workflow.game_navigator.pause()
-            self.navigation_timer.stop()
-            self._set_pause_button_state(True)
-            self.write_log("[流程暂停] 按 Ctrl+F12 继续，或使用单步调试。")
-        elif self.task_runner.busy:
-            self.write_log("正在暂停当前操作，请稍候再继续。")
+            return
+        if self.task_runner.busy:
+            self.write_log("当前操作正在收尾，请稍候再继续。")
         else:
             self.workflow.control.paused.clear()
             self._resume_navigation()

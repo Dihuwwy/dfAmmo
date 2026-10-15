@@ -162,7 +162,7 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         ctrl = bool(win32api.GetAsyncKeyState(win32con.VK_CONTROL) & 0x8000)
         down = f12 and (shift or ctrl)
         if down and not self._hotkey_down:
-            self.emergency_stop() if shift else self.toggle_pause_resume()
+            self.emergency_stop() if shift else self.continue_navigation()
         self._hotkey_down = down
 
     def closeEvent(self, event) -> None:
