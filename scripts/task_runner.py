@@ -23,6 +23,9 @@ def background_action(function):
         if function.__name__ not in ("check_game_process", "advance_game_navigation", "manual_resync", "_resume_navigation"):
             self.game_process_timer.stop()
             self.navigation_timer.stop()
+            if function.__name__ != "_resume_interrupted":
+                self.workflow.progress.reset()
+                self._resume_step = None
         if function.__name__ in ("_run_debug_step", "_run_wegame_post_process", "_dbg_rename_pak", "_run_stage_four"):
             self.workflow.game_navigator.cancel()
         self.task_runner.start(function(self, *args, **kwargs))

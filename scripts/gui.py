@@ -35,6 +35,7 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         self.game_process_deadline = 0.0
         self._navigation_mode = "continuous"
         self._continue_after_navigation = True
+        self._resume_step = None
         self.task_runner = TaskRunner(self.workflow.control, self)
         self.task_runner.progress.connect(self.write_log)
         self.workflow.report_progress = self.task_runner.progress.emit
@@ -74,8 +75,9 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         running = self.navigation_timer.isActive() or self.game_process_timer.isActive()
         self.start_card_mail_button.setEnabled(not (busy or running or self.workflow.is_navigation_paused))
         self.stop_button.setEnabled(busy or running or self.workflow.is_navigation_paused)
+        self.pause_resume_button.setEnabled(
+            not busy and not running and (self.workflow.is_navigation_paused or self._resume_step is not None))
         if not busy and not running and not self.workflow.is_navigation_paused:
-            self.pause_resume_button.setEnabled(False)
             self.resync_button.setEnabled(False)
 
     def _on_worker_failed(self, message: str) -> None:

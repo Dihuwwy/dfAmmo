@@ -99,18 +99,22 @@ def _wait_for_game_ui(workflow, template_paths, threshold, timeout):
 
 def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, threshold, timeout):
     """One stage-four action: two notices, mode selection, activities and lobby."""
-    if not wait_for_reconnect_notice(workflow, template_path, confirm_path, threshold, timeout):
+    progress = workflow.progress
+    if not progress.run("first_notice", lambda: wait_for_reconnect_notice(
+            workflow, template_path, confirm_path, threshold, timeout)):
         return False
     directory = template_path.parent
     step_timeout = workflow.game_navigator.step_timeout_seconds
     workflow.report_progress("第四阶段：等待烽火模式选择...")
-    window, position, _ = _wait_for_game_ui(
-        workflow, [directory / NAVIGATION_STEPS[0].template_name], threshold, step_timeout)
-    workflow.control.check()
-    workflow.clicker.click(replace(position, width=0, height=0), window.handle)
+    def choose_mode():
+        window, position, _ = _wait_for_game_ui(
+            workflow, [directory / NAVIGATION_STEPS[0].template_name], threshold, step_timeout)
+        workflow.clicker.click(replace(position, width=0, height=0), window.handle)
+    progress.run("mode", choose_mode)
     workflow.report_progress("第四阶段：已点击 df_mode_choose，等待第二次提示并确认...")
     workflow.control.wait(NAVIGATION_STEPS[0].delay_after)
-    if not wait_for_reconnect_notice(workflow, template_path, confirm_path, threshold, step_timeout):
+    if not progress.run("second_notice", lambda: wait_for_reconnect_notice(
+            workflow, template_path, confirm_path, threshold, step_timeout)):
         return False
     process = workflow.find_game_process()
     window = workflow.window_binder.bind_by_process_id(process.process_id) if process else None
@@ -118,7 +122,7 @@ def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, thres
         raise RuntimeError("第四阶段游戏窗口已退出，未发送空格或 Tab。")
     workflow.window_binder.activate(window)
     workflow.control.wait(0.5)
-    workflow.keyboard.press_sequence(NAVIGATION_STEPS[1].key_sequence)
+    progress.keys("lobby", workflow.keyboard, NAVIGATION_STEPS[1].key_sequence)
     workflow.report_progress("第四阶段：已按两次空格跳过活动并按一次 Tab，等待大厅画面。")
     workflow.control.wait(NAVIGATION_STEPS[1].delay_after)
     _, position, name = _wait_for_game_ui(
@@ -137,12 +141,23 @@ def request_map_redownload(workflow, directory, choice_name, panel_name, downloa
             raise FileNotFoundError(f"缺少第四阶段地图恢复模板：{path.name}")
     steps = [([directory / "df_map_choose.png", directory / "df_map_choose_selected.png"], "打开地图选择"),
              ([choice], "选择待恢复的长弓溪谷")]
-    for paths, label in steps:
-        window, position, name = _wait_for_game_ui(workflow, paths, threshold, timeout)
-        workflow.control.check()
-        workflow.clicker.click(replace(position, width=0, height=0), window.handle)
+    def choose(paths, label, following):
+        window, position, name = _wait_for_game_ui(workflow, following + paths, threshold, timeout)
+        if name in {path.name for path in paths}:
+            workflow.clicker.click(replace(position, width=0, height=0), window.handle)
         workflow.report_progress(f"第四阶段：{label} | template={name}, confidence={position.confidence:.3f}")
+    for index, (paths, label) in enumerate(steps):
+        following = [panel, choice] if index == 0 else [panel]
+        workflow.progress.run(f"map_{index}", lambda: choose(paths, label, following))
         workflow.control.wait(0.5)
+    workflow.progress.run("download", lambda: _click_map_download(
+        workflow, panel, download, threshold, timeout))
+    workflow.control.wait(0.5)
+    workflow.progress.keys("return_lobby", workflow.keyboard, ((win32con.VK_ESCAPE, 2),))
+    workflow.report_progress("第四阶段：已按两次 ESC 返回大厅，地图恢复请求已发送；由游戏自行校验文件。")
+
+
+def _click_map_download(workflow, panel, download, threshold, timeout):
     window, position, _ = _wait_for_game_ui(workflow, [panel], threshold, timeout)
     left, top = position.x - position.width // 2, position.y - position.height // 2
     # The panel anchor excludes the download row (615px of the original 702px).
@@ -155,10 +170,6 @@ def request_map_redownload(workflow, directory, choice_name, panel_name, downloa
     workflow.control.check()
     workflow.clicker.click(replace(result.position, width=0, height=0), window.handle)
     workflow.report_progress(f"第四阶段：已点击长弓下载按钮：x={result.position.x}, y={result.position.y}")
-    workflow.control.wait(0.5)
-    workflow.control.check()
-    workflow.keyboard.press(win32con.VK_ESCAPE, repeat=2, interval=0.35)
-    workflow.report_progress("第四阶段：已按两次 ESC 返回大厅，地图恢复请求已发送；由游戏自行校验文件。")
 
 
 def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, timeout):
@@ -167,6 +178,8 @@ def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, 
         if not path.is_file():
             raise FileNotFoundError(f"缺少仓库提示模板：{path.name}")
     directory = notice_path.parent
+    if "warehouse_confirm" in workflow.progress.completed:
+        return
     # A retry may already be at the notice; never toggle E on an unknown screen.
     window, _, name = _wait_for_game_ui(
         workflow, [notice_path, directory / "df_map_choose.png",
@@ -175,7 +188,7 @@ def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, 
     if name != notice_path.name:
         workflow.control.check()
         workflow.window_binder.activate(window)
-        workflow.keyboard.press(ord("E"))
+        workflow.progress.run("warehouse_enter", lambda: workflow.keyboard.press(ord("E")))
         workflow.report_progress("第四阶段：已在大厅按 E，等待仓库提示...")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -193,7 +206,8 @@ def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, 
                     confirmation = workflow.locator.match_in_source(cropped, confirm_path, region, threshold)
                     if confirmation.matched:
                         workflow.control.check()
-                        workflow.clicker.click(replace(confirmation.position, width=0, height=0), window.handle)
+                        workflow.progress.run("warehouse_confirm", lambda: workflow.clicker.click(
+                            replace(confirmation.position, width=0, height=0), window.handle))
                         workflow.report_progress(
                             f"已识别仓库提示并点击确认：x={confirmation.position.x}, "
                             f"y={confirmation.position.y}, confidence={confirmation.position.confidence:.3f}")

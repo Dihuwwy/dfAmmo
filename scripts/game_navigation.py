@@ -10,6 +10,7 @@ import win32con
 import win32gui
 
 from scripts.task_control import TaskControl, ControlInterrupted
+from scripts.step_progress import StepProgress
 from scripts.clicker import Clicker
 from scripts.element_locator import ElementLocator
 from scripts.keyboard import KeyboardController
@@ -72,8 +73,10 @@ class GameNavigator:
         clicker: Clicker,
         keyboard: KeyboardController,
         control: TaskControl | None = None,
+        progress: StepProgress | None = None,
     ) -> None:
         self.control = control or TaskControl()
+        self.progress = progress or StepProgress(self.control)
         self.template_dir = template_dir
         self.threshold = threshold
         self.step_timeout_seconds = step_timeout_seconds
@@ -95,6 +98,8 @@ class GameNavigator:
         self.auto_align = True
 
     def start(self, process_id: int, initial_step: int = 0, auto_align: bool = True) -> NavigationEvent:
+        if self.process_id != process_id:
+            self.progress.completed.clear()
         self.auto_align = auto_align
         self.process_id = process_id
         self.bound_window = None
@@ -408,7 +413,7 @@ class GameNavigator:
         if step.action == "click" and position is not None:
             self.clicker.click(position, self.bound_window.handle)
         elif step.action == "press_sequence" and step.key_sequence:
-            self.keyboard.press_sequence(step.key_sequence)
+            self.progress.keys("lobby", self.keyboard, step.key_sequence)
         elif step.action == "detect":
             return self._complete()
 

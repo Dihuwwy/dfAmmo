@@ -64,7 +64,7 @@ class ActionsMixin:
         self.set_step_state(step_id, "running")
         self.write_log(f"调试：{start_msg}")
         try:
-            result = yield action_fn
+            result = yield partial(self.workflow.progress.run, "action", action_fn)
         except ControlInterrupted:
             raise
         except Exception as exc:
@@ -199,6 +199,7 @@ class ActionsMixin:
 
     def reset_binding(self) -> None:
         """Release current bound window and stop running timers."""
+        self._resume_step = None
         self.game_process_timer.stop()
         self.navigation_timer.stop()
         self.task_runner.cancel()
@@ -227,13 +228,37 @@ class ActionsMixin:
 
 
     def continue_navigation(self) -> None:
-        if not self.workflow.is_navigation_paused:
+        if not (self.workflow.is_navigation_paused or self._resume_step):
             return
         if self.task_runner.busy:
             self.write_log("当前操作正在收尾，请稍候再继续。")
         else:
             self.workflow.control.paused.clear()
-            self._resume_navigation()
+            if self._resume_step:
+                self._resume_interrupted()
+            else:
+                self._resume_navigation()
+
+    @background_action
+    def _resume_interrupted(self):
+        step = self._resume_step
+        self._resume_step = None
+        self._continue_after_navigation = self.is_continuous_mode
+        self.write_log(f"继续中断的步骤：{step}；已完成的小操作会跳过。")
+        if step == "launch":
+            yield from self.start_card_mail.__wrapped__(self, resume=True)
+        elif step == "nav_game":
+            yield from self._dbg_takeover_navigation.__wrapped__(self)
+        elif step == "exit_game":
+            yield from self._finish_navigation()
+        elif step == "rename_pak":
+            yield from self._run_stage_two()
+        elif step == "toggle_pak":
+            yield from self._dbg_rename_pak.__wrapped__(self)
+        elif step in self._wegame_step_ids:
+            yield from self._run_wegame_post_process_tasks(start_step=step)
+        else:
+            yield from self._run_stage_four_tasks(start_step=step)
 
     @background_action
     def _resume_navigation(self):
@@ -274,12 +299,15 @@ class ActionsMixin:
             or self.game_process_timer.isActive()
             or self.workflow.is_navigation_paused
         )
+        if was_running:
+            self._resume_step = self.workflow.progress.step or None
         self.game_process_timer.stop()
         self.navigation_timer.stop()
         self.task_runner.cancel()
         self.workflow.cancel_game_navigation()
         self._continue_after_navigation = False
         self._set_running_controls(False)
+        self.pause_resume_button.setEnabled(self._resume_step is not None and not self.task_runner.busy)
 
         self.showNormal()
         self.activateWindow()
@@ -297,6 +325,8 @@ class ActionsMixin:
 
         if was_running:
             self.write_log("[任务停止] 已通过快捷键/按钮停止当前自动化任务。")
+            if self._resume_step:
+                self.write_log("已保留当前步骤及小操作进度，可点击“继续”接续；点击“开始卡邮件”重新开始。")
         else:
             self.write_log("[任务停止] 当前无正在运行的自动化任务。")
 
@@ -417,8 +447,10 @@ class ActionsMixin:
     # ── Core Workflow Actions ────────────────────────────────────────────────
 
     @background_action
-    def start_card_mail(self):
-        self.reset_all_step_states()
+    def start_card_mail(self, resume=False):
+        if not resume:
+            self.reset_all_step_states()
+        self.workflow.progress.enter("launch")
         self._continue_after_navigation = self.is_continuous_mode
         self.workflow.control.paused.clear()
         game_process = (yield lambda: self.workflow.find_game_process())
@@ -439,11 +471,11 @@ class ActionsMixin:
         self.hide()
 
         try:
-            position, template_path = (yield lambda: self.workflow.click_start_button(
+            position, template_path = (yield lambda: self.workflow.progress.run("launch", lambda: self.workflow.click_start_button(
                 self.bound_window,
                 self.config.start_button_templates,
                 self.config.template_match_threshold,
-            ))
+            )))
         except ControlInterrupted:
             raise
         except Exception as exc:
@@ -545,55 +577,46 @@ class ActionsMixin:
                 if self._navigation_mode == "step":
                     self.write_log("单步检测完成，停在选人界面。")
                     return
-                process_exited, process_message = (yield lambda: self.workflow.kill_game_process())
-                self.write_log(process_message)
+                yield from self._finish_navigation()
 
-                if self.bound_window is not None:
-                    try:
-                        self.bound_window = (yield lambda: self.workflow.window_binder.activate(self.bound_window))
-                    except ControlInterrupted:
-                        raise
-                    except Exception as exc:
-                        self.write_log(f"返回 WeGame 窗口失败：{exc}")
-                    else:
-                        self.write_log("已返回 WeGame 窗口。")
+    def _finish_navigation(self):
+        self.workflow.progress.enter("exit_game")
+        process_exited, message = yield lambda: self.workflow.progress.run("exit", self.workflow.kill_game_process)
+        self.write_log(message)
+        if not process_exited:
+            self.set_step_state("nav_game", "failed", message)
+            return
+        if self.bound_window is not None:
+            try:
+                self.bound_window = yield lambda: self.workflow.window_binder.activate(self.bound_window)
+            except ControlInterrupted:
+                raise
+            except Exception as exc:
+                self.write_log(f"返回 WeGame 窗口失败：{exc}")
+            else:
+                self.write_log("已返回 WeGame 窗口。")
+        if self._continue_after_navigation:
+            yield from self._run_stage_two()
+        else:
+            self.write_log("阶段完成：游戏导航及退出已完成，停止后续阶段。")
 
-                if not process_exited:
-                    self.set_step_state("nav_game", "failed", process_message)
-                    self.write_log("流程已停止：游戏退出未确认。界面仍可操作，可停止任务或重新开始。")
-                    return
-
-                if not self._continue_after_navigation:
-                    self.write_log("阶段完成：游戏导航及退出已完成，停止后续阶段。")
-                    return
-
-                paks_path: Path | None = None
-                if self.config.game_install_dir:
-                    paks_path = Workflow.get_paks_dir(self.config.game_install_dir)
-                    if not paks_path.is_dir():
-                        self.write_log(f"Paks 目录不存在，请检查安装目录：{paks_path}")
-                        paks_path = None
-
-                    if paks_path is not None:
-                        self.set_step_state("rename_pak", "running")
-                        try:
-                            results = (yield lambda: self.workflow.rename_pak_files(
-                                self.config.game_install_dir,
-                                self.config.pak_file_names,
-                            ))
-                            self._sync_pak_button_state()
-                            self.set_step_state("rename_pak", "success")
-                        except OSError as exc:
-                            self.set_step_state("rename_pak", "failed", str(exc))
-                            self.write_log(f"重命名 pak 文件失败：{exc}")
-                        else:
-                            for message in results:
-                                self.write_log(message)
-                else:
-                    self.write_log("未配置游戏安装目录，跳过 pak 文件重命名。")
-
-                if self.bound_window is not None:
-                    yield from self._run_wegame_post_process_tasks()
+    def _run_stage_two(self):
+        self.set_step_state("rename_pak", "running")
+        try:
+            messages = yield lambda: self.workflow.rename_pak_files(
+                self.config.game_install_dir, self.config.pak_file_names)
+        except ControlInterrupted:
+            raise
+        except OSError as exc:
+            self.set_step_state("rename_pak", "failed", str(exc))
+            self.write_log(f"屏蔽 Pak 失败：{exc}")
+            return
+        for message in messages:
+            self.write_log(message)
+        self._sync_pak_button_state()
+        self.set_step_state("rename_pak", "success")
+        if self.is_continuous_mode and self.bound_window is not None:
+            yield from self._run_wegame_post_process_tasks()
 
     @background_action
     def _run_wegame_post_process(self, start_step: str = "wait_wegame"):
@@ -646,7 +669,7 @@ class ActionsMixin:
             if self.execution_mode == "step":
                 self.write_log("单步完成：已进入大厅，Pak 仍保持当前状态；点击“恢复 Pak”执行第 2 步。")
                 return
-        if start_step != "warehouse":
+        if start_step in ("detect_result", "restore_pak"):
             self.set_step_state("restore_pak", "running")
             try:
                 yield lambda: self.workflow.restore_stage_four_paks(
@@ -663,6 +686,7 @@ class ActionsMixin:
             if self.execution_mode == "step" and start_step == "restore_pak":
                 self.write_log("单步完成：大厅内 Pak 已恢复，点击“恢复地图下载”执行第 3 步。")
                 return
+        if start_step != "warehouse":
             downloaded = yield from self._run_stage_four_redownload_tasks()
             if not downloaded:
                 return
@@ -722,7 +746,9 @@ class ActionsMixin:
 
     # ── Debug & Step Status Management ───────────────────────────────────────
 
-    def set_step_state(self, step_id: str, state: str, detail: str = "") -> None:
+    def set_step_state(self, step_id: str, state: str, detail: str = "", *, checkpoint=None) -> None:
+        if state == "running" and step_id != "open_paks":
+            self.workflow.progress.enter(checkpoint or step_id)
         info = self._step_buttons.get(step_id)
         title = info["title"] if info else step_id
         if info:
@@ -757,6 +783,7 @@ class ActionsMixin:
 
     def reset_all_step_states(self) -> None:
         """Reset all buttons and sub-step pills to idle."""
+        self._resume_step = None
         for info in self._step_buttons.values():
             btn = info["button"]
             btn.setText(info["base_text"])
@@ -891,12 +918,14 @@ class ActionsMixin:
             self.set_step_state("rename_pak", "failed", "未配置游戏安装目录")
             return
 
-        self.set_step_state("rename_pak", "running")
+        self.set_step_state("rename_pak", "running", checkpoint="toggle_pak")
         try:
-            action, results = (yield lambda: self.workflow.toggle_pak_files(
-                self.config.game_install_dir,
-                self.config.pak_file_names,
-            ))
+            progress = self.workflow.progress
+            target = progress.run("target", lambda: "restore" if self.workflow.get_pak_status(
+                self.config.game_install_dir, self.config.pak_file_names) == "disabled" else "disable")
+            action = "restored" if target == "restore" else "disabled"
+            operation = self.workflow.restore_pak_files if target == "restore" else self.workflow.rename_pak_files
+            results = yield lambda: operation(self.config.game_install_dir, self.config.pak_file_names)
             if action == "disabled":
                 self.set_step_state("rename_pak", "success")
                 self.write_log("调试：【已屏蔽 Pak】已重命名为 .disabled 状态（再点一次恢复正常）。")

@@ -10,6 +10,7 @@ import win32api
 import win32con
 import win32event
 from scripts.task_control import TaskControl, ControlInterrupted
+from scripts.step_progress import StepProgress
 
 from scripts.clicker import Clicker
 from scripts.config import TEMPLATE_DIR, DEFAULT_PAK_NAMES
@@ -33,6 +34,7 @@ class Workflow:
         game_window_timeout_seconds: int = 90,
     ) -> None:
         self.control = TaskControl()
+        self.progress = StepProgress(self.control)
         self.report_progress = lambda message: None
         self.window_binder = WindowBinder()
         self.screenshot = ScreenshotService()
@@ -51,6 +53,7 @@ class Workflow:
             clicker=self.clicker,
             keyboard=self.keyboard,
             control=self.control,
+            progress=self.progress,
         )
 
     def close_battle_report(self) -> None:
@@ -435,6 +438,14 @@ class Workflow:
         if not (TEMPLATE_DIR / manager_header_template).exists():
             raise FileNotFoundError(f"缺少资源管理器顶部模板：{manager_header_template}")
 
+        if "bin" not in self.progress.completed:
+            dialog = self.locator.match_on_screen(TEMPLATE_DIR / confirm_template_name, threshold)
+            if dialog.matched:
+                self.progress.completed["bin"] = dialog.position
+        if "bin" in self.progress.completed:
+            return self._finish_resource_delete(confirm_template_name, manager_header_template,
+                                                threshold, confirm_timeout, guard)
+
         deadline = time.monotonic() + timeout
         best_confidence = 0.0
         last_scroll_at = 0.0
@@ -461,13 +472,11 @@ class Workflow:
                 )
                 self.clicker.move(pos)
                 self.control.wait(0.4)
-                click_pos = self.click_card_bin(pos, bin_path, threshold, before_click=guard)
+                click_pos = self.progress.run("bin", lambda: self.click_card_bin(
+                    pos, bin_path, threshold, before_click=guard))
                 self.report_progress(f"已发送删除点击：x={click_pos.x}, y={click_pos.y}；等待确认删除弹窗验证。")
-                self.confirm_resource_delete(confirm_template_name, threshold, confirm_timeout, before_click=guard)
-                # WeGame's resource state is separate from retained .disabled files.
-                self.report_progress("已发送确定点击，正在关闭资源管理器；保留本地重命名文件。")
-                self.close_resource_manager(manager_header_template, threshold)
-                return click_pos
+                return self._finish_resource_delete(confirm_template_name, manager_header_template,
+                                                    threshold, confirm_timeout, guard)
 
             # Scroll the resource-manager window downward every scroll_interval seconds
             now = time.monotonic()
@@ -482,6 +491,12 @@ class Workflow:
             f"未在资源包管理窗口中找到删除长弓溪谷按钮（{template_name}），"
             f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
         )
+
+    def _finish_resource_delete(self, confirmation, header, threshold, timeout, guard):
+        self.progress.run("confirm", lambda: self.confirm_resource_delete(
+            confirmation, threshold, timeout, before_click=guard))
+        self.progress.run("close", lambda: self.close_resource_manager(header, threshold))
+        return self.progress.completed["bin"]
 
     def click_card_bin(
         self, card: ElementPosition, template_path: Path,
