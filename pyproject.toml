@@ -1,6 +1,6 @@
 [project]
 name = "dfammo"
-version = "0.1.6"
+version = "1.0.0"
 description = "Windows desktop automation assistant for Delta Force"
 readme = "README.md"
 license = "GPL-3.0-only"

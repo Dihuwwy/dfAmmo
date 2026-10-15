@@ -64,10 +64,10 @@
 
 ### 从源码运行
 
-需要 Python 3.11 或以上，推荐 Python 3.11，并使用 `uv` 管理依赖。正式版源码请从对应 Release 的 **Source code** 下载，或按正式版标签克隆（下面以 `v0.1.6` 为例）：
+需要 Python 3.11 或以上，推荐 Python 3.11，并使用 `uv` 管理依赖。正式版源码请从对应 Release 的 **Source code** 下载，或按正式版标签克隆（下面以 `v1.0.0` 为例）：
 
 ```powershell
-git clone --branch v0.1.6 https://github.com/Dihuwwy/dfAmmo.git
+git clone --branch v1.0.0 https://github.com/Dihuwwy/dfAmmo.git
 cd dfAmmo
 uv sync --frozen --python 3.11
 uv run --frozen main.py
@@ -135,7 +135,7 @@ uv run --frozen main.py
 
 默认启动时检查 GitHub 最新正式 Release；自动安装默认关闭，可在“关于”中开启。自动安装会等待当前任务结束，准备完成后倒计时 5 秒退出并安装，可在“关于”中取消。
 
-“关于”中的更新渠道可选择正式版或测试版。正式版集中发布较大的更新；测试版标记为 **Pre-release**，采用 `v0.1.6-beta.1` 这样的标签，仅在选择测试版渠道时参与更新。测试版渠道也接收后续正式版。`main` 分支包含开发中的改动，需要稳定源码时请下载正式版标签，而不是直接使用 `main`。
+“关于”中的更新渠道可选择正式版或测试版。正式版集中发布较大的更新；测试版标记为 **Pre-release**，采用 `v1.0.1-beta.1` 这样的标签，仅在选择测试版渠道时参与更新。测试版渠道也接收后续正式版。`main` 分支包含开发中的改动，需要稳定源码时请下载正式版标签，而不是直接使用 `main`。
 
 - EXE 版下载 Windows ZIP 并校验 SHA-256，退出后替换程序文件，再自动重启。个人配置、自采或修改过的模板会保留，替换失败时尝试恢复旧文件。
 - 源码版通过 Git 获取对应版本。已有仓库只执行快进更新；有本地修改或提交分叉时停止更新并记录原因。直接下载的源码目录会克隆对应版本后更新；检测到 `uv` 时同步依赖。
