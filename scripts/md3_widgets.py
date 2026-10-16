@@ -1,6 +1,6 @@
 """Presentation helpers for the Material-styled native Qt interface."""
 from PySide6.QtCore import Qt, QRectF, QSize, QPointF
-from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
+from PySide6.QtGui import QColor, QIcon, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import QComboBox, QGraphicsDropShadowEffect, QListView, QSizePolicy, QWidget
 
 try:
@@ -20,6 +20,14 @@ def apply_md_shadow(widget):
 
 def set_md_icon(button, name, color, fallback):
     icon = qta.icon(f"mdi6.{name}", color=color) if qta else button.style().standardIcon(fallback)
+    if not qta and name == "play":
+        pixmap = icon.pixmap(button.iconSize() * button.devicePixelRatioF())
+        pixmap.setDevicePixelRatio(button.devicePixelRatioF())
+        painter = QPainter(pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
+        painter.fillRect(pixmap.rect(), QColor(color))
+        painter.end()
+        icon = QIcon(pixmap)
     button.setIcon(icon)
 
 

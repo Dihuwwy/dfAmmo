@@ -5,7 +5,7 @@ import win32con
 
 from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QBoxLayout, QWidget
+from PySide6.QtWidgets import QApplication, QWidget
 
 from scripts.config import APP_ICON_PATH, AppConfig
 from scripts.gui_actions import ActionsMixin
@@ -139,9 +139,6 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        if hasattr(self, "header_layout"):
-            self.header_layout.setDirection(
-                QBoxLayout.TopToBottom if self.width() < 850 else QBoxLayout.LeftToRight)
         if hasattr(self, "_controls_fit_timer"):
             self._controls_fit_timer.start()
 
