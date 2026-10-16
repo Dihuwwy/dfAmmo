@@ -98,6 +98,8 @@ class BuilderMixin:
         self.header_layout.addWidget(self.bind_panel, 1)
         self.header_layout.addWidget(self.feature_panel, 2)
         root.addWidget(self.header_panel)
+        self.action_panel = self._build_action_bar()
+        root.addWidget(self.action_panel)
 
         # ── 2. Main Vertical Splitter ─────────────────────────────────────────
         self.main_splitter = QSplitter(Qt.Vertical)
@@ -116,9 +118,7 @@ class BuilderMixin:
         left_layout.setContentsMargins(0, 0, 6, 0)
         left_layout.setSpacing(8)
 
-        self.action_panel = self._build_action_bar()
         self.debug_panel = self._build_stepper_card()
-        left_layout.addWidget(self.action_panel)
         left_layout.addWidget(self.debug_panel)
         left_layout.addStretch(1)
 

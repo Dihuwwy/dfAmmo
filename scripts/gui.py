@@ -105,10 +105,12 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         content_w = max(
             self.left_column.sizeHint().width() + 32,
             self.header_panel.sizeHint().width() + 32,
+            self.action_panel.sizeHint().width() + 32,
             860,
         )
         content_h = (
             self.header_panel.sizeHint().height()
+            + self.action_panel.sizeHint().height() + 8
             + req_top_h
             + 200
             + 40
