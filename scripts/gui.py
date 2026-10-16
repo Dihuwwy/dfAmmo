@@ -77,8 +77,6 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         self.stop_button.setEnabled(busy or running or self.workflow.is_navigation_paused)
         self.pause_resume_button.setEnabled(
             not busy and not running and (self.workflow.is_navigation_paused or self._resume_step is not None))
-        if not busy and not running and not self.workflow.is_navigation_paused:
-            self.resync_button.setEnabled(False)
 
     def _on_worker_failed(self, message: str) -> None:
         self.game_process_timer.stop()

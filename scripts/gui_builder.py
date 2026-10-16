@@ -256,11 +256,6 @@ class BuilderMixin:
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.emergency_stop)
 
-        self.resync_button = QPushButton("重同步")
-        self.resync_button.setObjectName("secondaryButton")
-        self.resync_button.setEnabled(False)
-        self.resync_button.clicked.connect(self.manual_resync)
-
         self.capture_button = QPushButton("采集模板")
         self.capture_button.setObjectName("secondaryButton")
         self.capture_button.clicked.connect(self.start_template_capture)
@@ -279,7 +274,6 @@ class BuilderMixin:
             self.start_card_mail_button,
             self.pause_resume_button,
             self.stop_button,
-            self.resync_button,
             self.capture_button,
             self.rebind_button,
         ):

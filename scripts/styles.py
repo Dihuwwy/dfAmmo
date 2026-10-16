@@ -280,8 +280,14 @@ QPushButton#pauseButton {{
     min-height: 28px;
 }}
 
-QPushButton#pauseButton:hover {{
+QPushButton#pauseButton:enabled:hover {{
     background-color: {COLOR_WARNING_BG};
+}}
+
+QPushButton#pauseButton:disabled {{
+    background-color: {COLOR_SURFACE_SECONDARY};
+    border-color: {COLOR_BORDER_SUBTLE};
+    color: {COLOR_TEXT_DISABLED};
 }}
 
 QPushButton#stopButton {{

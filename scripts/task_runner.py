@@ -20,7 +20,7 @@ def background_action(function):
             if function.__name__ not in ("check_game_process", "advance_game_navigation"):
                 self.write_log("当前操作仍在处理中，请等待完成或停止任务。")
             return
-        if function.__name__ not in ("check_game_process", "advance_game_navigation", "manual_resync", "_resume_navigation"):
+        if function.__name__ not in ("check_game_process", "advance_game_navigation", "_resume_navigation"):
             self.game_process_timer.stop()
             self.navigation_timer.stop()
             if function.__name__ != "_resume_interrupted":

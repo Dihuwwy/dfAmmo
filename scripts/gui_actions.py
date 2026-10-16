@@ -54,7 +54,6 @@ class ActionsMixin:
         self.start_card_mail_button.setEnabled(not running and not self.task_runner.busy)
         self._set_pause_button_state(is_paused=False)
         self.stop_button.setEnabled(running or self.task_runner.busy)
-        self.resync_button.setEnabled(running)
 
     @background_action
     def _run_debug_step(self, step_id, start_msg, action_fn, success_msg, fail_label):
@@ -107,10 +106,7 @@ class ActionsMixin:
         }
 
     def _dbg_wegame(self, step_id):
-        if self.execution_mode != "step":
-            self._run_wegame_post_process(start_step=step_id)
-        else:
-            self._run_debug_step(step_id, *self._wegame_steps()[step_id][:4])
+        self._run_wegame_post_process(start_step=step_id)
 
 
     # ── Log Management ───────────────────────────────────────────────────────
@@ -227,8 +223,13 @@ class ActionsMixin:
         self._set_property(self.pause_resume_button, "paused", "true" if is_paused else "false")
 
 
+    def _offer_continue(self, step: str) -> None:
+        self._resume_step = step
+        self.write_log("已停在步骤边界，点击“继续”或按 Ctrl+F12 执行下一步。")
+
     def continue_navigation(self) -> None:
         if not (self.workflow.is_navigation_paused or self._resume_step):
+            self.write_log("当前没有待继续的步骤，请先启动流程或选择一个步骤。")
             return
         if self.task_runner.busy:
             self.write_log("当前操作正在收尾，请稍候再继续。")
@@ -244,7 +245,7 @@ class ActionsMixin:
         step = self._resume_step
         self._resume_step = None
         self._continue_after_navigation = self.is_continuous_mode
-        self.write_log(f"继续中断的步骤：{step}；已完成的小操作会跳过。")
+        self.write_log(f"继续执行步骤：{step}；已完成的小操作会跳过。")
         if step == "launch":
             yield from self.start_card_mail.__wrapped__(self, resume=True)
         elif step == "nav_game":
@@ -273,23 +274,6 @@ class ActionsMixin:
         self._set_pause_button_state(self.workflow.is_navigation_paused)
         if not self.workflow.is_navigation_paused and not self.workflow.game_navigator.finished:
             self.navigation_timer.start()
-
-    @background_action
-    def manual_resync(self):
-        if not self.workflow.game_navigator.bound_window:
-            self.write_log("[重同步] 当前没有正在导航的游戏窗口。")
-            return
-        self.write_log("[重同步] 手动重新对齐画面状态...")
-        was_paused = self.workflow.is_navigation_paused
-        self.workflow.control.paused.clear()
-        try:
-            event = yield self.workflow.resync_game_navigation
-            if event is not None:
-                yield from self._advance_game_navigation_result(event)
-        finally:
-            if was_paused and not self.workflow.game_navigator.finished:
-                self.workflow.game_navigator.pause()
-                self.workflow.control.paused.set()
 
     def emergency_stop(self) -> None:
         """Stop all automation tasks and bring tool window to foreground."""
@@ -576,6 +560,7 @@ class ActionsMixin:
                 self.update_nav_substep_pills(len(self.sub_step_pills))
                 if self._navigation_mode == "step":
                     self.write_log("单步检测完成，停在选人界面。")
+                    self._offer_continue("exit_game")
                     return
                 yield from self._finish_navigation()
 
@@ -599,6 +584,7 @@ class ActionsMixin:
             yield from self._run_stage_two()
         else:
             self.write_log("阶段完成：游戏导航及退出已完成，停止后续阶段。")
+            self._offer_continue("rename_pak")
 
     def _run_stage_two(self):
         self.set_step_state("rename_pak", "running")
@@ -617,6 +603,8 @@ class ActionsMixin:
         self.set_step_state("rename_pak", "success")
         if self.is_continuous_mode and self.bound_window is not None:
             yield from self._run_wegame_post_process_tasks()
+        else:
+            self._offer_continue("wait_wegame")
 
     @background_action
     def _run_wegame_post_process(self, start_step: str = "wait_wegame"):
@@ -635,11 +623,14 @@ class ActionsMixin:
             if not succeeded:
                 return
             if self.execution_mode == "step":
-                self.write_log("单步完成，停止后续步骤。")
+                next_index = order.index(step_id) + 1
+                self._offer_continue(order[next_index] if next_index < len(order) else "detect_result")
                 return
         self._set_badge(self.workflow_status_badge, "WeGame 阶段已完成", "success")
         if self.is_continuous_mode:
             yield from self._run_stage_four_tasks()
+        else:
+            self._offer_continue("detect_result")
 
     @background_action
     def _run_stage_four(self, start_step: str = "detect_result"):
@@ -667,7 +658,7 @@ class ActionsMixin:
             if not matched:
                 return
             if self.execution_mode == "step":
-                self.write_log("单步完成：已进入大厅，Pak 仍保持当前状态；点击“恢复 Pak”执行第 2 步。")
+                self._offer_continue("restore_pak")
                 return
         if start_step in ("detect_result", "restore_pak"):
             self.set_step_state("restore_pak", "running")
@@ -683,15 +674,15 @@ class ActionsMixin:
             self._sync_pak_button_state()
             self.set_step_state("restore_pak", "success")
             self.write_log("第四阶段：Pak 已恢复，接下来可发送地图恢复请求。")
-            if self.execution_mode == "step" and start_step == "restore_pak":
-                self.write_log("单步完成：大厅内 Pak 已恢复，点击“恢复地图下载”执行第 3 步。")
+            if self.execution_mode == "step":
+                self._offer_continue("redownload_map")
                 return
         if start_step != "warehouse":
             downloaded = yield from self._run_stage_four_redownload_tasks()
             if not downloaded:
                 return
             if self.config.operation_mode == "semi_auto" and self.execution_mode == "step":
-                self.write_log("单步完成：地图恢复请求已发送，点击“进入仓库并确认”执行最后一步。")
+                self._offer_continue("warehouse")
                 return
         if self.config.operation_mode != "semi_auto":
             self.write_log("第四阶段公共步骤完成；全自动后续按钮仅占位，未进仓库，未执行后续操作或循环。")
@@ -935,6 +926,8 @@ class ActionsMixin:
                         yield from self._run_wegame_post_process_tasks()
                     else:
                         self.write_log("调试：未绑定 WeGame 窗口，无法继续执行阶段 3。")
+                else:
+                    self._offer_continue("wait_wegame")
             else:
                 self.set_step_state("rename_pak", "idle")
                 self._set_badge(self.workflow_status_badge, "步骤完成：恢复 Pak", "success")

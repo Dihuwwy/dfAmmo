@@ -141,9 +141,6 @@ class Workflow:
     def resume_game_navigation(self) -> NavigationEvent:
         return self.game_navigator.resume()
 
-    def resync_game_navigation(self) -> NavigationEvent | None:
-        return self.game_navigator.resync_state()
-
     @property
     def is_navigation_paused(self) -> bool:
         return self.game_navigator.is_paused
