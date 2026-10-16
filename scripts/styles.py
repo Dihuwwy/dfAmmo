@@ -51,7 +51,9 @@ QLabel[class="stepDot"][state="success"] { background: #10B981; border-color: #1
 QLabel[class="stepDot"][state="failed"] { background: #EF4444; border-color: #EF4444; }
 QFrame[md3_type="segmented_container"] { background-color: #F0F4F9; border-radius: 14px; border: 1px solid #E2E8F0; }
 QRadioButton { background-color: transparent; color: #475569; border: 1px solid transparent; border-radius: 11px; padding: 4px 14px; font-weight: 500; }
-QRadioButton::indicator { width: 0px; height: 0px; }
+QRadioButton::indicator, QRadioButton::indicator:checked, QRadioButton::indicator:unchecked {
+    width: 0px; height: 0px; image: none; border: none; background: transparent;
+}
 QRadioButton:checked { background-color: #FFFFFF; color: #0B57D0; font-weight: bold; border-color: #CBD5E1; }
 QRadioButton:hover { color: #0B57D0; }
 QPushButton[md3_type="dashed"] { background-color: #F3F6FC; color: #0B57D0; border: 1px dashed #7CACF8; border-radius: 12px; padding: 8px; font-weight: bold; }

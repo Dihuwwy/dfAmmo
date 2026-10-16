@@ -213,7 +213,6 @@ class BuilderMixin:
         self.about_button.setObjectName("aboutButton")
         self.about_button.setStyleSheet("padding: 0;")
         self.about_button.clicked.connect(self.show_about)
-        title_row.addWidget(self.about_button)
         return panel
 
     def _build_settings_card(self) -> QFrame:
@@ -223,15 +222,19 @@ class BuilderMixin:
         layout.setContentsMargins(14, 10, 14, 10)
         layout.setSpacing(8)
 
-        title = QLabel("游戏设置")
+        title = QLabel("设置")
         title.setObjectName("sectionTitle")
+        settings_header = QHBoxLayout()
+        settings_header.addWidget(title)
+        settings_header.addStretch(1)
+        settings_header.addWidget(self.about_button)
 
         # Install dir row
         dir_row = QHBoxLayout()
         dir_row.setSpacing(8)
-        dir_label = QLabel("安装目录：")
+        dir_label = QLabel("游戏安装目录：")
         dir_label.setObjectName("fieldLabel")
-        dir_label.setFixedWidth(64)
+        dir_label.setFixedWidth(92)
         self.game_dir_input = QLineEdit()
         self.game_dir_input.setPlaceholderText("请选择包含 DeltaForce 文件夹的安装目录")
         self.game_dir_input.setText(self.config.game_install_dir)
@@ -249,7 +252,7 @@ class BuilderMixin:
         mode_row.setSpacing(8)
         mode_label = QLabel("运行模式：")
         mode_label.setObjectName("fieldLabel")
-        mode_label.setFixedWidth(64)
+        mode_label.setFixedWidth(92)
         self.semi_auto_radio = QRadioButton("半自动")
         self.full_auto_radio = QRadioButton("全自动")
         segmented = QFrame()
@@ -268,7 +271,7 @@ class BuilderMixin:
         mode_row.addWidget(segmented)
         mode_row.addStretch(1)
 
-        layout.addWidget(title)
+        layout.addLayout(settings_header)
         layout.addLayout(dir_row)
         layout.addLayout(mode_row)
         layout.addStretch(1)
