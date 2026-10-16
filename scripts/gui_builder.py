@@ -5,6 +5,7 @@ from typing import Any
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QComboBox,
+    QBoxLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -89,7 +90,14 @@ class BuilderMixin:
 
         # ── 1. Connection Toolbar ─────────────────────────────────────────────
         self.bind_panel = self._build_connection_bar()
-        root.addWidget(self.bind_panel)
+        self.feature_panel = self._build_settings_card()
+        self.header_panel = QWidget()
+        self.header_layout = QBoxLayout(QBoxLayout.LeftToRight, self.header_panel)
+        self.header_layout.setContentsMargins(0, 0, 0, 0)
+        self.header_layout.setSpacing(8)
+        self.header_layout.addWidget(self.bind_panel, 1)
+        self.header_layout.addWidget(self.feature_panel, 2)
+        root.addWidget(self.header_panel)
 
         # ── 2. Main Vertical Splitter ─────────────────────────────────────────
         self.main_splitter = QSplitter(Qt.Vertical)
@@ -108,9 +116,9 @@ class BuilderMixin:
         left_layout.setContentsMargins(0, 0, 6, 0)
         left_layout.setSpacing(8)
 
-        self.feature_panel = self._build_settings_card()
+        self.action_panel = self._build_action_bar()
         self.debug_panel = self._build_stepper_card()
-        left_layout.addWidget(self.feature_panel)
+        left_layout.addWidget(self.action_panel)
         left_layout.addWidget(self.debug_panel)
         left_layout.addStretch(1)
 
@@ -137,7 +145,7 @@ class BuilderMixin:
     def _build_connection_bar(self) -> QFrame:
         panel = QFrame()
         panel.setObjectName("connectionBar")
-        layout = QHBoxLayout(panel)
+        layout = QVBoxLayout(panel)
         layout.setContentsMargins(14, 8, 14, 8)
         layout.setSpacing(10)
 
@@ -163,10 +171,10 @@ class BuilderMixin:
         title_row.addWidget(self.conn_badge)
         title_row.addStretch(1)
 
-        self.conn_detail_label = QLabel(
-            "请按住右侧按钮拖动到 WeGame 主窗口后松开（如游戏已运行可直接卡邮件）"
-        )
+        self.conn_detail_label = QLabel("未绑定窗口")
         self.conn_detail_label.setObjectName("connDetail")
+        self.conn_detail_label.setWordWrap(True)
+        self.conn_detail_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
         info_box.addLayout(title_row)
         info_box.addWidget(self.conn_detail_label)
@@ -174,7 +182,8 @@ class BuilderMixin:
         self.bind_button = BindButton()
         self.bind_button.released_at.connect(self.bind_window_at)
 
-        layout.addLayout(info_box, stretch=1)
+        layout.addLayout(info_box)
+        layout.addStretch(1)
         layout.addWidget(self.bind_button)
         self.about_button = QPushButton()
         self.about_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
@@ -184,7 +193,7 @@ class BuilderMixin:
         self.about_button.setObjectName("secondaryButton")
         self.about_button.setStyleSheet("padding: 0;")
         self.about_button.clicked.connect(self.show_about)
-        layout.addWidget(self.about_button)
+        title_row.addWidget(self.about_button)
         return panel
 
     def _build_settings_card(self) -> QFrame:
@@ -221,8 +230,8 @@ class BuilderMixin:
         mode_label = QLabel("运行模式：")
         mode_label.setObjectName("fieldLabel")
         mode_label.setFixedWidth(64)
-        self.semi_auto_radio = QRadioButton("半自动模式 (手动购入穿戴)")
-        self.full_auto_radio = QRadioButton("全自动模式 (配装方案一键买齐)")
+        self.semi_auto_radio = QRadioButton("半自动")
+        self.full_auto_radio = QRadioButton("全自动")
         if self.config.operation_mode == "full_auto":
             self.full_auto_radio.setChecked(True)
         else:
@@ -236,9 +245,13 @@ class BuilderMixin:
         layout.addWidget(title)
         layout.addLayout(dir_row)
         layout.addLayout(mode_row)
-        layout.addWidget(self._make_divider())
+        layout.addStretch(1)
+        return panel
 
-        # Action bar
+    def _build_action_bar(self) -> QWidget:
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(0, 0, 0, 0)
         action_bar = QHBoxLayout()
         action_bar.setSpacing(6)
 
@@ -260,10 +273,6 @@ class BuilderMixin:
         self.capture_button.setObjectName("secondaryButton")
         self.capture_button.clicked.connect(self.start_template_capture)
 
-        self.rebind_button = QPushButton("重新绑定")
-        self.rebind_button.setObjectName("secondaryButton")
-        self.rebind_button.clicked.connect(self.reset_binding)
-
         self.workflow_status_badge = QLabel("待命就绪")
         self.workflow_status_badge.setObjectName("workflowStatusBadge")
         self.workflow_status_badge.setProperty("state", "idle")
@@ -274,11 +283,10 @@ class BuilderMixin:
             self.start_card_mail_button,
             self.pause_resume_button,
             self.stop_button,
-            self.capture_button,
-            self.rebind_button,
         ):
             action_bar.addWidget(btn)
         action_bar.addStretch(1)
+        action_bar.addWidget(self.capture_button)
         action_bar.addWidget(self.workflow_status_badge)
 
         layout.addLayout(action_bar)

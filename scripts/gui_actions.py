@@ -210,7 +210,7 @@ class ActionsMixin:
         self.conn_badge.setProperty("connected", "false")
         self._repaint(self.conn_badge)
 
-        self.conn_detail_label.setText("请按住右侧按钮拖动到 WeGame 主窗口后松开（如游戏已运行可直接卡邮件）")
+        self.conn_detail_label.setText("未绑定窗口")
         self.bind_button.default_text = "拖拽至 WeGame 窗口绑定"
         self.bind_button.setText("拖拽至 WeGame 窗口绑定")
 

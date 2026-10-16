@@ -5,7 +5,7 @@ import win32con
 
 from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QBoxLayout, QWidget
 
 from scripts.config import APP_ICON_PATH, AppConfig
 from scripts.gui_actions import ActionsMixin
@@ -104,11 +104,11 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         # Optimal initial size derived from actual content cards (avoiding QScrollArea dummy sizeHint)
         content_w = max(
             self.left_column.sizeHint().width() + 32,
-            self.bind_panel.sizeHint().width() + 32,
+            self.header_panel.sizeHint().width() + 32,
             860,
         )
         content_h = (
-            self.bind_panel.sizeHint().height()
+            self.header_panel.sizeHint().height()
             + req_top_h
             + 200
             + 40
@@ -139,6 +139,9 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
+        if hasattr(self, "header_layout"):
+            self.header_layout.setDirection(
+                QBoxLayout.TopToBottom if self.width() < 850 else QBoxLayout.LeftToRight)
         if hasattr(self, "_controls_fit_timer"):
             self._controls_fit_timer.start()
 
