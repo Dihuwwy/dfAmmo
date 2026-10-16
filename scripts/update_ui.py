@@ -8,7 +8,8 @@ import threading
 
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QCheckBox, QComboBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from scripts.md3_widgets import CompactComboBox
 
 from scripts.config import APP_ICON_PATH, PROJECT_ROOT
 from scripts.update_service import REPO_URL, Release, UpdateCancelled, UpdateService
@@ -110,13 +111,14 @@ class UpdateMixin:
             layout.addWidget(repo)
             channel_row = QHBoxLayout()
             channel_row.addWidget(QLabel("更新渠道"))
-            self.update_channel_combo = QComboBox()
+            self.update_channel_combo = CompactComboBox()
             self.update_channel_combo.addItem("正式版", "stable")
             self.update_channel_combo.addItem("测试版", "beta")
             self.update_channel_combo.setCurrentIndex(self.update_channel_combo.findData(self.config.update_channel))
             self.update_channel_combo.currentIndexChanged.connect(
                 lambda: self._save_update_setting("update_channel", self.update_channel_combo.currentData()))
             channel_row.addWidget(self.update_channel_combo)
+            channel_row.addStretch(1)
             layout.addLayout(channel_row)
             self.startup_check_box = QCheckBox("启动时检查更新")
             self.startup_check_box.setChecked(self.config.check_updates_on_startup)
