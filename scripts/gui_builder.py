@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPlainTextEdit,
+    QTextEdit,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -25,6 +25,7 @@ from scripts.bind_button import BindButton
 from scripts.game_navigation import NAVIGATION_STEPS
 from scripts.flow_layout import FlowLayout
 from scripts.styles import MAIN_WINDOW_STYLE
+from scripts.md3_widgets import Timeline, apply_md_shadow, set_md_icon
 
 
 class BuilderMixin:
@@ -53,7 +54,8 @@ class BuilderMixin:
         header = QHBoxLayout()
         header.setSpacing(8)
 
-        dot = QLabel(dot_char)
+        dot = QLabel()
+        dot.setFixedSize(12, 12)
         dot.setProperty("class", "stepDot")
         dot.setProperty("state", "idle")
 
@@ -138,6 +140,22 @@ class BuilderMixin:
         self.log_panel.setMinimumHeight(160)
 
         root.addWidget(self.main_splitter, stretch=1)
+        for card in (self.bind_panel, self.feature_panel, self.debug_panel, self.log_panel):
+            apply_md_shadow(card)
+        icons = (
+            (self.start_card_mail_button, "play", "#FFFFFF", QStyle.SP_MediaPlay),
+            (self.pause_resume_button, "fast-forward-outline", "#44474E", QStyle.SP_MediaSkipForward),
+            (self.stop_button, "stop-circle-outline", "#DC2626", QStyle.SP_MediaStop),
+            (self.bind_button, "crosshairs-gps", "#0B57D0", QStyle.SP_TitleBarShadeButton),
+            (self.about_button, "information-outline", "#64748B", QStyle.SP_FileDialogInfoView),
+            (self.capture_button, "camera-iris", "#44474E", QStyle.SP_DesktopIcon),
+            (self.dbg_nav_start_btn, "compass-outline", "#0B57D0", QStyle.SP_ArrowForward),
+            (self.reset_status_btn, "refresh", "#44474E", QStyle.SP_BrowserReload),
+            (self.copy_log_btn, "content-copy", "#44474E", QStyle.SP_FileIcon),
+            (self.clear_log_btn, "trash-can-outline", "#44474E", QStyle.SP_TrashIcon),
+        )
+        for button, name, color, fallback in icons:
+            set_md_icon(button, name, color, fallback)
         self.setStyleSheet(MAIN_WINDOW_STYLE)
         self._sync_pak_button_state()
         self._sync_operation_mode_controls()
@@ -165,6 +183,7 @@ class BuilderMixin:
         self.conn_badge = QLabel("未连接")
         self.conn_badge.setObjectName("connBadge")
         self.conn_badge.setProperty("connected", "false")
+        self.conn_badge.setProperty("status", "disconnected")
 
         title_row.addWidget(self.conn_dot)
         title_row.addWidget(conn_title)
@@ -180,6 +199,7 @@ class BuilderMixin:
         info_box.addWidget(self.conn_detail_label)
 
         self.bind_button = BindButton()
+        self.bind_button.setProperty("md3_type", "dashed")
         self.bind_button.released_at.connect(self.bind_window_at)
 
         layout.addLayout(info_box)
@@ -187,10 +207,10 @@ class BuilderMixin:
         layout.addWidget(self.bind_button)
         self.about_button = QPushButton()
         self.about_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
-        self.about_button.setFixedSize(32, 32)
+        self.about_button.setFixedSize(24, 24)
         self.about_button.setToolTip("关于 / 更新")
         self.about_button.setAccessibleName("关于 / 更新")
-        self.about_button.setObjectName("secondaryButton")
+        self.about_button.setObjectName("aboutButton")
         self.about_button.setStyleSheet("padding: 0;")
         self.about_button.clicked.connect(self.show_about)
         title_row.addWidget(self.about_button)
@@ -232,14 +252,20 @@ class BuilderMixin:
         mode_label.setFixedWidth(64)
         self.semi_auto_radio = QRadioButton("半自动")
         self.full_auto_radio = QRadioButton("全自动")
+        segmented = QFrame()
+        segmented.setProperty("md3_type", "segmented_container")
+        segments = QHBoxLayout(segmented)
+        segments.setContentsMargins(3, 3, 3, 3)
+        segments.setSpacing(2)
+        segments.addWidget(self.semi_auto_radio)
+        segments.addWidget(self.full_auto_radio)
         if self.config.operation_mode == "full_auto":
             self.full_auto_radio.setChecked(True)
         else:
             self.semi_auto_radio.setChecked(True)
         self.semi_auto_radio.toggled.connect(self._on_mode_changed)
         mode_row.addWidget(mode_label)
-        mode_row.addWidget(self.semi_auto_radio)
-        mode_row.addWidget(self.full_auto_radio)
+        mode_row.addWidget(segmented)
         mode_row.addStretch(1)
 
         layout.addWidget(title)
@@ -257,14 +283,18 @@ class BuilderMixin:
 
         self.start_card_mail_button = QPushButton("开始卡邮件")
         self.start_card_mail_button.setObjectName("startCardMailBtn")
+        self.start_card_mail_button.setProperty("md3_type", "filled")
         self.start_card_mail_button.clicked.connect(self.start_card_mail)
 
-        self.pause_resume_button = QPushButton("继续 (Ctrl+F12)")
+        self.pause_resume_button = QPushButton("继续")
+        self.pause_resume_button.setToolTip("继续执行 (Ctrl+F12)")
         self.pause_resume_button.setObjectName("pauseButton")
         self.pause_resume_button.setEnabled(False)
         self.pause_resume_button.clicked.connect(self.continue_navigation)
 
-        self.stop_button = QPushButton("停止 (Shift+F12)")
+        self.stop_button = QPushButton("停止")
+        self.stop_button.setToolTip("停止任务 (Shift+F12)")
+        self.stop_button.setProperty("md3_type", "danger_outlined")
         self.stop_button.setObjectName("stopButton")
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self.emergency_stop)
@@ -273,10 +303,12 @@ class BuilderMixin:
         self.capture_button.setObjectName("secondaryButton")
         self.capture_button.clicked.connect(self.start_template_capture)
 
-        self.workflow_status_badge = QLabel("待命就绪")
+        self.workflow_status_badge = QLabel("● 待命就绪")
+        self.workflow_status_badge.setProperty("md3_type", "badge")
+        self.workflow_status_badge.setWordWrap(True)
         self.workflow_status_badge.setObjectName("workflowStatusBadge")
         self.workflow_status_badge.setProperty("state", "idle")
-        self.workflow_status_badge.setMaximumWidth(200)
+        self.workflow_status_badge.setFixedWidth(220)
         self.workflow_status_badge.setAlignment(Qt.AlignCenter)
 
         for btn in (
@@ -325,7 +357,7 @@ class BuilderMixin:
         header.addWidget(self.reset_status_btn)
         outer.addLayout(header)
 
-        self.debug_body = QWidget()
+        self.debug_body = Timeline()
         body_layout = QVBoxLayout(self.debug_body)
         body_layout.setContentsMargins(0, 2, 0, 2)
         body_layout.setSpacing(10)
@@ -341,7 +373,7 @@ class BuilderMixin:
         )
         s1_vbox = s1_w.layout()
 
-        pills_row = QHBoxLayout()
+        pills_row = FlowLayout()
         pills_row.setSpacing(6)
         pills_row.setContentsMargins(18, 0, 0, 0)
         self.sub_step_names = [
@@ -358,8 +390,7 @@ class BuilderMixin:
             pill.setToolTip(f"点击直接跳转至第 {idx + 1} 步执行：【{step_desc}】")
             pill.clicked.connect(lambda chk=False, i=idx: self._on_step_pill_clicked(i))
             self.sub_step_pills.append(pill)
-            pills_row.addWidget(pill)
-        pills_row.addStretch(1)
+            self._add_step_pill(pills_row, pill)
         s1_vbox.addLayout(pills_row)
         body_layout.addWidget(s1_w)
         body_layout.addWidget(self._make_divider())
@@ -406,7 +437,7 @@ class BuilderMixin:
             btn.setToolTip(tip)
             btn.clicked.connect(slot)
             setattr(self, attr_name, btn)
-            sec3_row.addWidget(btn)
+            self._add_step_pill(sec3_row, btn)
         s3_vbox.addLayout(sec3_row)
         self.stage_three_actions = sec3_row
         body_layout.addWidget(s3_w)
@@ -428,7 +459,7 @@ class BuilderMixin:
             btn.setProperty("stepState", "idle")
             btn.clicked.connect(slot)
             setattr(self, attr_name, btn)
-            s4_row.addWidget(btn)
+            self._add_step_pill(s4_row, btn)
         s4_w.layout().addLayout(s4_row)
         self.stage_four_actions = s4_row
 
@@ -441,8 +472,9 @@ class BuilderMixin:
             button.setToolTip("全自动模式占位，尚未实现")
             button.setEnabled(False)
             self.full_auto_placeholder_buttons.append(button)
-            s4_row.addWidget(button)
+            self._add_step_pill(s4_row, button)
         body_layout.addWidget(s4_w)
+        self.debug_body.dots = (self.step1_dot, self.step2_dot, self.step3_dot, self.step4_dot)
 
         outer.addWidget(self.debug_body)
 
@@ -496,13 +528,13 @@ class BuilderMixin:
         header.addWidget(self.copy_log_btn)
         header.addWidget(self.clear_log_btn)
 
-        self.log_output = QPlainTextEdit()
+        self.log_output = QTextEdit()
         self.log_output.setObjectName("logOutput")
         self.log_output.setReadOnly(True)
         self.log_output.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.log_output.setMinimumHeight(120)
         self.log_output.document().setMaximumBlockCount(800)
-        self.log_output.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth)
+        self.log_output.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
 
         layout.addLayout(header)
         layout.addWidget(self.log_output)
@@ -513,3 +545,19 @@ class BuilderMixin:
         self._log_flush_timer.timeout.connect(self._flush_log_buffer)
         self._log_flush_timer.start()
         return panel
+
+    @staticmethod
+    def _add_step_pill(layout, button):
+        button.setProperty("md3_type", "step_pill")
+        button.setProperty("step_state", "pending")
+        group = QWidget()
+        row = QHBoxLayout(group)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(4)
+        if layout.count():
+            arrow = QLabel("›")
+            arrow.setObjectName("stepArrow")
+            row.addWidget(arrow)
+        row.addWidget(button)
+        button.step_group = group
+        layout.addWidget(group)

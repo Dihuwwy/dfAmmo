@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import time
+from html import escape
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
@@ -42,11 +43,14 @@ class ActionsMixin:
     def _set_property(self, widget, name, value):
         if widget.property(name) != value:
             widget.setProperty(name, value)
+            if name in ("stepState", "pillState"):
+                widget.setProperty("step_state", {"running": "running", "active": "running",
+                    "success": "done", "done": "done", "failed": "failed"}.get(value, "pending"))
             self._repaint(widget)
 
     def _set_badge(self, badge: QLabel, text: str, state: str) -> None:
         """Update badge text and dynamic state property with instant stylesheet polish."""
-        badge.setText(text)
+        badge.setText("● " + text.removeprefix("● "))
         self._set_property(badge, "state", state)
 
     def _set_running_controls(self, running: bool) -> None:
@@ -118,6 +122,7 @@ class ActionsMixin:
 
     def copy_log(self) -> None:
         """Copy all log content to clipboard."""
+        self._flush_log_buffer()
         text = self.log_output.toPlainText()
         if text:
             clipboard = QApplication.clipboard()
@@ -127,7 +132,16 @@ class ActionsMixin:
     def write_log(self, message: str) -> None:
         """Append a timestamped message to the log buffer."""
         timestamp = time.strftime("%H:%M:%S")
-        self._log_buffer.append(f"[{timestamp}] {message}")
+        color = "#E2E8F0"
+        if any(word in message for word in ("失败", "错误", "异常")):
+            color = "#EF4444"
+        elif any(word in message for word in ("请先", "警告", "提示", "未检测", "未绑定", "超时")):
+            color = "#F59E0B"
+        elif any(word in message for word in ("成功", "完成", "已恢复", "已连接")):
+            color = "#10B981"
+        self._log_buffer.append(
+            f'<span style="color:#64748B;">[{timestamp}]</span> '
+            f'<span style="color:{color};">{escape(message).replace(chr(10), "<br>")}</span>')
 
     def _flush_log_buffer(self) -> None:
         """Batch-insert buffered log entries into QPlainTextEdit."""
@@ -145,7 +159,12 @@ class ActionsMixin:
 
         self.log_output.setUpdatesEnabled(False)
         try:
-            self.log_output.appendPlainText("\n".join(lines))
+            cursor = QTextCursor(self.log_output.document())
+            cursor.movePosition(QTextCursor.MoveOperation.End)
+            for line in lines:
+                if not self.log_output.document().isEmpty():
+                    cursor.insertBlock()
+                cursor.insertHtml(line)
         finally:
             self.log_output.setUpdatesEnabled(True)
             self.log_output.update()
@@ -180,6 +199,7 @@ class ActionsMixin:
 
         self.conn_badge.setText("已连接")
         self.conn_badge.setProperty("connected", "true")
+        self.conn_badge.setProperty("status", "connected")
         self._repaint(self.conn_badge)
 
         self.conn_detail_label.setText(info_text)
@@ -208,6 +228,7 @@ class ActionsMixin:
 
         self.conn_badge.setText("未连接")
         self.conn_badge.setProperty("connected", "false")
+        self.conn_badge.setProperty("status", "disconnected")
         self._repaint(self.conn_badge)
 
         self.conn_detail_label.setText("未绑定窗口")
@@ -348,9 +369,9 @@ class ActionsMixin:
 
     def _sync_operation_mode_controls(self) -> None:
         semi_auto = self.config.operation_mode == "semi_auto"
-        self.dbg_warehouse_btn.setVisible(semi_auto)
+        self.dbg_warehouse_btn.step_group.setVisible(semi_auto)
         for button in self.full_auto_placeholder_buttons:
-            button.setVisible(not semi_auto)
+            button.step_group.setVisible(not semi_auto)
         self.stage_four_actions.invalidate()
         self._controls_fit_timer.start()
 
@@ -781,6 +802,8 @@ class ActionsMixin:
             self._set_property(btn, "stepState", "idle")
         for pill in self.sub_step_pills:
             self._set_property(pill, "pillState", "")
+        for dot in (self.step1_dot, self.step2_dot, self.step3_dot, self.step4_dot):
+            self._set_property(dot, "state", "idle")
         self._set_badge(self.workflow_status_badge, "● 待命就绪", "idle")
 
         self._sync_pak_button_state()
