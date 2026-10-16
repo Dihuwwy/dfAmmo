@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QTextEdit,
     QPushButton,
-    QRadioButton,
     QScrollArea,
     QSizePolicy,
     QStyle,
@@ -253,8 +252,13 @@ class BuilderMixin:
         mode_label = QLabel("运行模式：")
         mode_label.setObjectName("fieldLabel")
         mode_label.setFixedWidth(92)
-        self.semi_auto_radio = QRadioButton("半自动")
-        self.full_auto_radio = QRadioButton("全自动")
+        self.semi_auto_radio = QPushButton("半自动")
+        self.full_auto_radio = QPushButton("全自动")
+        for button in (self.semi_auto_radio, self.full_auto_radio):
+            button.setCheckable(True)
+            button.setAutoExclusive(True)
+            button.setProperty("md3_type", "segment")
+            button.setFixedSize(88, 32)
         segmented = QFrame()
         segmented.setProperty("md3_type", "segmented_container")
         segments = QHBoxLayout(segmented)

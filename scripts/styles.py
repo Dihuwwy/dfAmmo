@@ -19,7 +19,7 @@ QLabel#sectionTitle, QLabel#connStatusLabel, QLabel[class="stepTitle"] { font-si
 QLabel#connDetail, QLabel[class="stepSubtitle"], QLabel#fieldLabel { color: #64748B; }
 QPushButton {
     background-color: #FFFFFF; color: #44474E; border: 1px solid #C4C6D0;
-    border-radius: 16px; padding: 6px 16px; font-weight: 500; min-height: 20px;
+    border-radius: 10px; padding: 6px 16px; font-weight: 500; min-height: 20px; text-align: center;
 }
 QPushButton:hover { background-color: #F0F4FA; border-color: #0B57D0; color: #0B57D0; }
 QPushButton:pressed { background-color: #DCE2F9; }
@@ -31,7 +31,7 @@ QPushButton[md3_type="filled"] {
 QPushButton[md3_type="filled"]:hover { background-color: #1B66C9; }
 QPushButton[md3_type="filled"]:pressed { background-color: #0842A0; }
 QPushButton[md3_type="filled"]:disabled { background-color: #DCE2F9; color: #777B85; }
-QPushButton[md3_type="danger_outlined"] { background-color: #FFF5F5; color: #DC2626; border: 1px solid #FECACA; border-radius: 16px; }
+QPushButton[md3_type="danger_outlined"] { background-color: #FFF5F5; color: #DC2626; border: 1px solid #FECACA; border-radius: 10px; }
 QPushButton[md3_type="danger_outlined"]:hover { background-color: #FEE2E2; border-color: #DC2626; }
 QPushButton[md3_type="danger_outlined"]:disabled { background-color: #F1F0F4; border-color: transparent; color: #A9ABB4; }
 QPushButton[md3_type="step_pill"] {
@@ -50,13 +50,10 @@ QLabel[class="stepDot"][state="running"] { background: #0B57D0; border-color: #0
 QLabel[class="stepDot"][state="success"] { background: #10B981; border-color: #10B981; }
 QLabel[class="stepDot"][state="failed"] { background: #EF4444; border-color: #EF4444; }
 QFrame[md3_type="segmented_container"] { background-color: #F0F4F9; border-radius: 14px; border: 1px solid #E2E8F0; }
-QRadioButton { background-color: transparent; color: #475569; border: 1px solid transparent; border-radius: 11px; padding: 4px 14px; font-weight: 500; }
-QRadioButton::indicator, QRadioButton::indicator:checked, QRadioButton::indicator:unchecked {
-    width: 0px; height: 0px; image: none; border: none; background: transparent;
-}
-QRadioButton:checked { background-color: #FFFFFF; color: #0B57D0; font-weight: bold; border-color: #CBD5E1; }
-QRadioButton:hover { color: #0B57D0; }
-QPushButton[md3_type="dashed"] { background-color: #F3F6FC; color: #0B57D0; border: 1px dashed #7CACF8; border-radius: 12px; padding: 8px; font-weight: bold; }
+QPushButton[md3_type="segment"] { background-color: transparent; color: #475569; border: 1px solid transparent; border-radius: 10px; padding: 0; font-weight: 500; }
+QPushButton[md3_type="segment"]:checked { background-color: #FFFFFF; color: #0B57D0; border-color: #CBD5E1; }
+QPushButton[md3_type="segment"]:hover { color: #0B57D0; }
+QPushButton[md3_type="dashed"] { background-color: #F3F6FC; color: #0B57D0; border: 1px solid #7CACF8; border-radius: 10px; padding: 8px; font-weight: bold; }
 QPushButton[md3_type="dashed"]:hover { background-color: #E1E9F8; border-color: #0B57D0; }
 QPushButton#aboutButton { background: transparent; border: none; padding: 0; border-radius: 12px; }
 QPushButton#aboutButton:hover { background: #F0F4FA; }
