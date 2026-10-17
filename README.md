@@ -64,10 +64,10 @@
 
 ### 从源码运行
 
-需要 Python 3.11 或以上，推荐 Python 3.11，并使用 `uv` 管理依赖。正式版源码请从对应 Release 的 **Source code** 下载，或按正式版标签克隆（下面以 `v1.0.0` 为例）：
+需要 Python 3.11 或以上，推荐 Python 3.11，并使用 `uv` 管理依赖。正式版源码请从对应 Release 的 **Source code** 下载，或按正式版标签克隆（下面以 `v1.1.0` 为例）：
 
 ```powershell
-git clone --branch v1.0.0 https://github.com/Dihuwwy/dfAmmo.git
+git clone --branch v1.1.0 https://github.com/Dihuwwy/dfAmmo.git
 cd dfAmmo
 uv sync --frozen --python 3.11
 uv run --frozen main.py
