@@ -617,34 +617,7 @@ class Workflow:
         raise TimeoutError("未定位到资源管理器关闭按钮，已停止后续启动。")
 
     def _scroll_active_window_down(self, clicks: int = 3, hwnd: int | None = None) -> None:
-        """Send mouse wheel scroll-down messages to the specified window or foreground window.
-
-        Physically moves the mouse to the center of the window to ensure UI frameworks
-        that require mouse-hover (like WeGame's CEF) process the scroll correctly.
-        """
-        import ctypes
-        import win32con as _win32con
-        import win32gui as _win32gui
-
-        try:
-            self.control.check()
-            target_hwnd = hwnd or _win32gui.GetForegroundWindow()
-            if not target_hwnd:
-                return
-
-            # Find window center
-            rect = _win32gui.GetWindowRect(target_hwnd)
-            cx = (rect[0] + rect[2]) // 2
-            cy = (rect[1] + rect[3]) // 2
-
-            # Move mouse to center
-            ctypes.windll.user32.SetCursorPos(cx, cy)
-
-            # Perform scroll (-120 per click for downward scroll)
-            wheel_delta = -120 * clicks
-            ctypes.windll.user32.mouse_event(_win32con.MOUSEEVENTF_WHEEL, 0, 0, wheel_delta, 0)
-        except ControlInterrupted:
-            raise
-        except Exception:
-            pass
+        """Scroll the resource manager downward through the shared SendInput path."""
+        self.control.check()
+        self.clicker.scroll(clicks, hwnd)
 

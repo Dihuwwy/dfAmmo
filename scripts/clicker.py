@@ -14,12 +14,16 @@ from scripts.element_locator import ElementPosition
 
 
 INPUT_MOUSE = 0
+INPUT_KEYBOARD = 1
 ULONG_PTR = ctypes.c_ulonglong if ctypes.sizeof(ctypes.c_void_p) == 8 else ctypes.c_ulong
 MOUSEEVENTF_MOVE = 0x0001
 MOUSEEVENTF_LEFTDOWN = 0x0002
 MOUSEEVENTF_LEFTUP = 0x0004
+MOUSEEVENTF_WHEEL = 0x0800
 MOUSEEVENTF_ABSOLUTE = 0x8000
 MOUSEEVENTF_VIRTUALDESK = 0x4000
+KEYEVENTF_KEYUP = 0x0002
+WHEEL_DELTA = 120
 
 
 class MouseInput(ctypes.Structure):
@@ -33,8 +37,18 @@ class MouseInput(ctypes.Structure):
     )
 
 
+class KeyboardInput(ctypes.Structure):
+    _fields_ = (
+        ("wVk", ctypes.c_ushort),
+        ("wScan", ctypes.c_ushort),
+        ("dwFlags", ctypes.c_ulong),
+        ("time", ctypes.c_ulong),
+        ("dwExtraInfo", ULONG_PTR),
+    )
+
+
 class InputUnion(ctypes.Union):
-    _fields_ = (("mi", MouseInput),)
+    _fields_ = (("mi", MouseInput), ("ki", KeyboardInput))
 
 
 class Input(ctypes.Structure):
@@ -160,6 +174,37 @@ class Clicker:
         with physical_coordinates():
             self._move_to_point(position.x, position.y)
 
+    def press(self, virtual_key: int, repeat: int = 1, interval: float = 0.12) -> None:
+        """Send key presses through the same SendInput path as mouse clicks."""
+        for index in range(repeat):
+            self.control.check()
+            self._send_inputs((self._keyboard_input(virtual_key, 0),), 0, 0)
+            try:
+                self.control.wait(0.045)
+            finally:
+                self._send_inputs((self._keyboard_input(virtual_key, KEYEVENTF_KEYUP),), 0, 0)
+            if index + 1 < repeat:
+                self.control.wait(interval)
+
+    def scroll(self, clicks: int, hwnd: int | None = None) -> None:
+        """Scroll downward over the given window, or the foreground window.
+
+        The cursor is centred first: frameworks such as WeGame's CEF only
+        deliver the wheel event to the control under the pointer.
+        """
+        self.control.check()
+        with physical_coordinates():
+            target = hwnd or win32gui.GetForegroundWindow()
+            if not target:
+                raise RuntimeError("滚动失败：没有可用的目标窗口。")
+            left, top, right, bottom = win32gui.GetWindowRect(target)
+            self._move_to_point((left + right) // 2, (top + bottom) // 2)
+            self._send_inputs(
+                (self._mouse_input(0, 0, MOUSEEVENTF_WHEEL, -WHEEL_DELTA * clicks),),
+                (left + right) // 2,
+                (top + bottom) // 2,
+            )
+
     def _humanized_point(self, position: ElementPosition) -> tuple[int, int]:
         max_offset_x = max(0, min(8, position.width // 4))
         max_offset_y = max(0, min(6, position.height // 4))
@@ -199,14 +244,28 @@ class Clicker:
         if sent != len(events):
             raise RuntimeError(f"SendInput 失败：x={x}, y={y}, sent={sent}/{len(events)}")
 
-    def _mouse_input(self, x: int, y: int, flags: int) -> Input:
+    def _mouse_input(self, x: int, y: int, flags: int, mouse_data: int = 0) -> Input:
         return Input(
             type=INPUT_MOUSE,
             union=InputUnion(
                 mi=MouseInput(
                     dx=x,
                     dy=y,
-                    mouseData=0,
+                    mouseData=mouse_data,
+                    dwFlags=flags,
+                    time=0,
+                    dwExtraInfo=0,
+                )
+            ),
+        )
+
+    def _keyboard_input(self, virtual_key: int, flags: int) -> Input:
+        return Input(
+            type=INPUT_KEYBOARD,
+            union=InputUnion(
+                ki=KeyboardInput(
+                    wVk=virtual_key,
+                    wScan=0,
                     dwFlags=flags,
                     time=0,
                     dwExtraInfo=0,
