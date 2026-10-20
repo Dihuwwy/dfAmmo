@@ -30,6 +30,7 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
             game_window_timeout_seconds=self.config.game_window_timeout_seconds,
         )
         self.bound_window: BoundWindow | None = None
+        self.workflow.game_navigator.configure_map(self.config)
         self.capture_overlay: TemplateCaptureOverlay | None = None
         self.pending_template_name = ""
         self.game_process_deadline = 0.0
@@ -73,6 +74,7 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
 
     def _on_worker_busy_changed(self, busy: bool) -> None:
         running = self.navigation_timer.isActive() or self.game_process_timer.isActive()
+        self.map_selector.setEnabled(not (busy or running or self.workflow.is_navigation_paused or self._resume_step))
         self.start_card_mail_button.setEnabled(not (busy or running or self.workflow.is_navigation_paused))
         self.stop_button.setEnabled(busy or running or self.workflow.is_navigation_paused)
         self.pause_resume_button.setEnabled(

@@ -143,6 +143,29 @@ uv run --frozen main.py
 
 ## 模板采集
 
+### AZ3 地图
+
+在“设置 → 目标地图”选择 AZ3。默认仍为长弓溪谷，切换地图不会覆盖长弓模板。
+任务执行或保留继续进度时不能切换地图；停止后可用“重置状态”放弃进度再切换。
+
+AZ3 接入沿用长弓流程，尚待实机验证。Pak 编号暂按 219 配置为以下两个文件，请先核对实际安装目录：
+
+- `pak-0-2-pakchunk219-WindowsClient.pak`
+- `pak-0-2-pakchunk219optional-WindowsClient.pak`
+
+请采集以下图片到 `assets/templates/`（尚未附带 AZ3 模板）：
+
+| 模板名称 | 采集内容 |
+| --- | --- |
+| `df_az3_choose.png` | 第一阶段选地图界面的 AZ3 可点击选项 |
+| `df_az3_selected.png` | 大厅已经选好 AZ3 后的地图卡片，避开匹配计时等动态内容 |
+| `wegame_az3_map.png` | WeGame 资源包管理器里的 AZ3 地图卡片，尺寸范围参考原 `wegame_delete_map.png` |
+| `df_az3_choose_2.png` | 第四阶段地图待恢复时的 AZ3 可点击选项 |
+| `df_az3_redownload_panel.png` | AZ3 下载面板上部，排除底部下载行和容量数字；裁剪范围、比例参考 `df_redownload_panel.png` |
+
+恢复下载暂按与长弓相同的面板布局定位底部按钮，复用 `df_redownload_button.png`。
+确定、垃圾桶、关闭、出发、选人等通用模板继续复用；若 AZ3 对应界面不同，需要补充模板适配。
+
 模板位于 [assets/templates](assets/templates)。遇到界面更新或识别不准确时，可通过内置截图工具更新模板。
 
 1. 停止任务，将目标界面放在前台。

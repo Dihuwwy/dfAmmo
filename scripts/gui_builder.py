@@ -20,7 +20,6 @@ from PySide6.QtWidgets import (
 )
 
 from scripts.bind_button import BindButton
-from scripts.game_navigation import NAVIGATION_STEPS
 from scripts.flow_layout import FlowLayout
 from scripts.styles import MAIN_WINDOW_STYLE
 from scripts.md3_widgets import CompactComboBox, Timeline, apply_md_shadow, set_md_icon
@@ -277,6 +276,18 @@ class BuilderMixin:
         layout.addLayout(settings_header)
         layout.addLayout(dir_row)
         layout.addLayout(mode_row)
+        map_row = QHBoxLayout()
+        map_label = QLabel("目标地图：")
+        map_label.setFixedWidth(92)
+        self.map_selector = CompactComboBox()
+        self.map_selector.addItem("长弓溪谷", "changgong")
+        self.map_selector.addItem("AZ3", "az3")
+        self.map_selector.setCurrentIndex(self.map_selector.findData(self.config.map_id))
+        self.map_selector.currentIndexChanged.connect(self._on_map_changed)
+        map_row.addWidget(map_label)
+        map_row.addWidget(self.map_selector)
+        map_row.addStretch(1)
+        layout.addLayout(map_row)
         layout.addStretch(1)
         return panel
 
@@ -382,7 +393,7 @@ class BuilderMixin:
         pills_row.setSpacing(6)
         pills_row.setContentsMargins(18, 0, 0, 0)
         self.sub_step_names = [
-            "1.模式", "2.进大厅", "3.选地图", "4.选长弓", "5.行动",
+            "1.模式", "2.进大厅", "3.选地图", f"4.选{self.config.map_name}", "5.行动",
             "6.配装", "7.继续", "8.出发", "9.选人",
         ]
         self.sub_step_pills = []
@@ -391,7 +402,7 @@ class BuilderMixin:
             pill.setProperty("class", "stepBtn")
             pill.setProperty("pillState", "")
             pill.setCursor(Qt.PointingHandCursor)
-            step_desc = NAVIGATION_STEPS[idx].name if idx < len(NAVIGATION_STEPS) else sname
+            step_desc = self.workflow.game_navigator.steps[idx].name
             pill.setToolTip(f"点击直接跳转至第 {idx + 1} 步执行：【{step_desc}】")
             pill.clicked.connect(lambda chk=False, i=idx: self._on_step_pill_clicked(i))
             self.sub_step_pills.append(pill)
@@ -406,7 +417,7 @@ class BuilderMixin:
             title="阶段二",
             subtitle="隔离 Pak 补丁文件",
             btn_text="屏蔽 Pak",
-            btn_tooltip="重命名长弓溪谷 Pak 文件为 .disabled 状态以屏蔽加载",
+            btn_tooltip="重命名目标地图 Pak 文件为 .disabled 状态以屏蔽加载",
             btn_slot=self._dbg_rename_pak,
         )
         self.dbg_open_paks_btn = QPushButton("浏览 Paks 目录")
@@ -432,7 +443,7 @@ class BuilderMixin:
             ("dbg_wait_wegame_btn", "等待启动按钮", "等待 WeGame 客户端回到启动按钮可用状态", self._dbg_wait_wegame),
             ("dbg_more_btn", "选项菜单 (...)", "点击 WeGame 游戏主页右侧的更多操作 (...) 按钮", self._dbg_click_more),
             ("dbg_assets_btn", "资源包管理", "点击弹出菜单中的“游戏资源包管理”项", self._dbg_assets_manage),
-            ("dbg_delete_btn", "删除长弓溪谷", "在资源管理窗口中自动滚动并点击删除长弓溪谷地图资源", self._dbg_delete_changgong),
+            ("dbg_delete_btn", f"删除{self.config.map_name}", "在资源管理窗口中删除目标地图资源", self._dbg_delete_changgong),
             ("dbg_restart_btn", "重新启动游戏", "在 WeGame 中点击启动按钮重新拉起三角洲行动", self._dbg_restart_game),
         ]
         for attr_name, text, tip, slot in step3_btns_def:
@@ -491,7 +502,7 @@ class BuilderMixin:
             "wait_wegame": {"button": self.dbg_wait_wegame_btn, "base_text": "等待启动按钮", "title": "等待启动按钮"},
             "click_more": {"button": self.dbg_more_btn, "base_text": "选项菜单 (...)", "title": "选项菜单"},
             "assets_manage": {"button": self.dbg_assets_btn, "base_text": "资源包管理", "title": "资源包管理"},
-            "delete_map": {"button": self.dbg_delete_btn, "base_text": "删除长弓溪谷", "title": "删除长弓溪谷"},
+            "delete_map": {"button": self.dbg_delete_btn, "base_text": f"删除{self.config.map_name}", "title": f"删除{self.config.map_name}"},
             "restart_game": {"button": self.dbg_restart_btn, "base_text": "重新启动游戏", "title": "重新启动游戏"},
             "restore_pak": {"button": self.dbg_restore_pak_btn, "base_text": "恢复 Pak", "title": "恢复 Pak"},
             "detect_result": {"button": self.dbg_result_btn, "base_text": "确认并进大厅", "title": "确认并进大厅"},

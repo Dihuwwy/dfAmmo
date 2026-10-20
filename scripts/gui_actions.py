@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from scripts.game_navigation import NAVIGATION_STEPS, NavigationStatus
+from scripts.game_navigation import NavigationStatus
 from scripts.template_capture import TemplateCaptureOverlay
 from scripts.workflow import Workflow
 from scripts.task_runner import background_action
@@ -58,6 +58,7 @@ class ActionsMixin:
         self.start_card_mail_button.setEnabled(not running and not self.task_runner.busy)
         self._set_pause_button_state(is_paused=False)
         self.stop_button.setEnabled(running or self.task_runner.busy)
+        self.map_selector.setEnabled(not (running or self.task_runner.busy or self._resume_step))
 
     @background_action
     def _run_debug_step(self, step_id, start_msg, action_fn, success_msg, fail_label):
@@ -93,16 +94,16 @@ class ActionsMixin:
             "assets_manage": ("打开游戏资源包管理...",
                 partial(wf.click_assets_manage, window, cfg.wegame_assets_manage_template, threshold),
                 "已打开资源包管理。", "打开资源包管理", 0.5),
-            "delete_map": ("查找并删除长弓溪谷（会自动向下滚动）...",
-                partial(wf.delete_changgong_map, cfg.wegame_delete_map_template,
+            "delete_map": (f"查找并删除{cfg.map_name}（会自动向下滚动）...",
+                partial(wf.delete_changgong_map, cfg.map_template(cfg.wegame_delete_map_template),
                         threshold, timeout=cfg.delete_map_timeout_seconds,
                         confirm_template_name=cfg.wegame_confirm_delete_template,
                         confirm_timeout=cfg.confirm_delete_timeout_seconds,
                         game_install_dir=cfg.game_install_dir,
-                        pak_names=cfg.pak_file_names,
+                        pak_names=cfg.active_pak_names,
                         bin_template_name=cfg.wegame_bin_template,
                         manager_header_template=cfg.wegame_manager_header_template),
-                lambda pos: f"已发送 WeGame 确定及关闭点击，保留本地重命名文件 (x={pos.x}, y={pos.y})。", "删除长弓溪谷", 1.0),
+                lambda pos: f"已发送 WeGame 确定及关闭点击，保留本地重命名文件 (x={pos.x}, y={pos.y})。", f"删除{cfg.map_name}", 1.0),
             "restart_game": ("重新启动游戏...",
                 partial(wf.click_start_button, window, cfg.start_button_templates, threshold),
                 lambda ret: f"已点击启动按钮 {ret[1].name} (x={ret[0].x}, y={ret[0].y})。",
@@ -375,6 +376,23 @@ class ActionsMixin:
         self.stage_four_actions.invalidate()
         self._controls_fit_timer.start()
 
+    def _on_map_changed(self) -> None:
+        self.config = replace(self.config, map_id=self.map_selector.currentData())
+        self.workflow.game_navigator.configure_map(self.config)
+        self.workflow.progress.reset()
+        self.workflow.game_navigator.step_index = 0
+        self.reset_all_step_states()
+        self.sub_step_pills[3].setText(f"4.选{self.config.map_name}")
+        self.sub_step_pills[3].setToolTip(f"选择{self.config.map_name}")
+        info = self._step_buttons["delete_map"]
+        info.update(title=f"删除{self.config.map_name}", base_text=f"4.删除{self.config.map_name}")
+        info["button"].setText(info["base_text"])
+        try:
+            self.config.save_to_file()
+        except OSError as exc:
+            self.write_log(f"保存目标地图失败：{exc}")
+        self.write_log(f"目标地图：{self.config.map_name}。请确认对应模板已采集、Pak 文件名正确。")
+
     def _choose_game_dir(self) -> None:
         initial_dir = self.game_dir_input.text().strip() or str(Path.home())
         selected_dir = QFileDialog.getExistingDirectory(
@@ -611,7 +629,7 @@ class ActionsMixin:
         self.set_step_state("rename_pak", "running")
         try:
             messages = yield lambda: self.workflow.rename_pak_files(
-                self.config.game_install_dir, self.config.pak_file_names)
+                self.config.game_install_dir, self.config.active_pak_names)
         except ControlInterrupted:
             raise
         except OSError as exc:
@@ -685,7 +703,7 @@ class ActionsMixin:
             self.set_step_state("restore_pak", "running")
             try:
                 yield lambda: self.workflow.restore_stage_four_paks(
-                    self.config.game_install_dir, self.config.pak_file_names)
+                    self.config.game_install_dir, self.config.active_pak_names)
             except ControlInterrupted:
                 raise
             except Exception as exc:
@@ -727,10 +745,10 @@ class ActionsMixin:
 
     def _run_stage_four_redownload_tasks(self):
         self.set_step_state("redownload_map", "running")
-        self.write_log("第四阶段第 3 步：选择长弓、点击下载，再按两次 ESC...")
+        self.write_log(f"第四阶段第 3 步：选择{self.config.map_name}、点击下载，再按两次 ESC...")
         try:
             yield lambda: self.workflow.redownload_stage_four_map(
-                self.config.redownload_map_choice_template, self.config.redownload_map_panel_template,
+                self.config.map_template(self.config.redownload_map_choice_template), self.config.map_template(self.config.redownload_map_panel_template),
                 self.config.redownload_map_button_template, self.config.template_match_threshold,
                 self.config.navigation_step_timeout_seconds)
         except ControlInterrupted:
@@ -796,6 +814,7 @@ class ActionsMixin:
     def reset_all_step_states(self) -> None:
         """Reset all buttons and sub-step pills to idle."""
         self._resume_step = None
+        self.map_selector.setEnabled(not self._automation_active())
         for info in self._step_buttons.values():
             btn = info["button"]
             btn.setText(info["base_text"])
@@ -864,7 +883,7 @@ class ActionsMixin:
             self.write_log("未检测到三角洲行动游戏进程，请先启动游戏再点击步骤跳转。")
             return
 
-        target_step = NAVIGATION_STEPS[step_index]
+        target_step = self.workflow.game_navigator.steps[step_index]
         self.write_log(
             f"【手动跳转】用户指定第 {step_index + 1} 步：【{target_step.name}】"
         )
@@ -912,7 +931,7 @@ class ActionsMixin:
 
     def _sync_pak_button_state(self) -> None:
         disabled = self.workflow.get_pak_status(
-            self.config.game_install_dir, self.config.pak_file_names) == "disabled"
+            self.config.game_install_dir, self.config.active_pak_names) == "disabled"
         title = "恢复 Pak" if disabled else "屏蔽 Pak"
         text = f"{title} (移除 .disabled)" if disabled else f"{title} (重命名 .disabled)"
         button = self.dbg_rename_pak_btn
@@ -936,10 +955,10 @@ class ActionsMixin:
         try:
             progress = self.workflow.progress
             target = progress.run("target", lambda: "restore" if self.workflow.get_pak_status(
-                self.config.game_install_dir, self.config.pak_file_names) == "disabled" else "disable")
+                self.config.game_install_dir, self.config.active_pak_names) == "disabled" else "disable")
             action = "restored" if target == "restore" else "disabled"
             operation = self.workflow.restore_pak_files if target == "restore" else self.workflow.rename_pak_files
-            results = yield lambda: operation(self.config.game_install_dir, self.config.pak_file_names)
+            results = yield lambda: operation(self.config.game_install_dir, self.config.active_pak_names)
             if action == "disabled":
                 self.set_step_state("rename_pak", "success")
                 self.write_log("调试：【已屏蔽 Pak】已重命名为 .disabled 状态（再点一次恢复正常）。")

@@ -126,7 +126,7 @@ def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, thres
     workflow.report_progress("第四阶段：已按两次空格跳过活动并按一次 Tab，等待大厅画面。")
     workflow.control.wait(NAVIGATION_STEPS[1].delay_after)
     _, position, name = _wait_for_game_ui(
-        workflow, [directory / "df_map_choose.png", directory / "df_map_choose_selected.png",
+        workflow, [directory / "df_map_choose.png", directory / workflow.game_navigator.selected_map_template,
                    directory / "df_start_manoeuver.png"],
         threshold, step_timeout)
     workflow.report_progress(f"第四阶段已进入烽火大厅：{name}，相似度={position.confidence:.3f}；本步完成。")
@@ -139,8 +139,8 @@ def request_map_redownload(workflow, directory, choice_name, panel_name, downloa
     for path in (choice, panel, download):
         if not path.is_file():
             raise FileNotFoundError(f"缺少第四阶段地图恢复模板：{path.name}")
-    steps = [([directory / "df_map_choose.png", directory / "df_map_choose_selected.png"], "打开地图选择"),
-             ([choice], "选择待恢复的长弓溪谷")]
+    steps = [([directory / "df_map_choose.png", directory / workflow.game_navigator.selected_map_template], "打开地图选择"),
+             ([choice], "选择待恢复的地图")]
     def choose(paths, label, following):
         window, position, name = _wait_for_game_ui(workflow, following + paths, threshold, timeout)
         if name in {path.name for path in paths}:
@@ -166,10 +166,10 @@ def _click_map_download(workflow, panel, download, threshold, timeout):
                          bottom=min(window.bottom, top + round(position.height * 702 / 615)))
     result = workflow.locator.match_by_image(download, region, threshold)
     if not result.matched:
-        raise RuntimeError(f"下载按钮未在长弓面板底部匹配：最高相似度={result.position.confidence:.3f}。未发送下载点击。")
+        raise RuntimeError(f"下载按钮未在地图面板底部匹配：最高相似度={result.position.confidence:.3f}。未发送下载点击。")
     workflow.control.check()
     workflow.clicker.click(replace(result.position, width=0, height=0), window.handle)
-    workflow.report_progress(f"第四阶段：已点击长弓下载按钮：x={result.position.x}, y={result.position.y}")
+    workflow.report_progress(f"第四阶段：已点击地图下载按钮：x={result.position.x}, y={result.position.y}")
 
 
 def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, timeout):
@@ -183,7 +183,7 @@ def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, 
     # A retry may already be at the notice; never toggle E on an unknown screen.
     window, _, name = _wait_for_game_ui(
         workflow, [notice_path, directory / "df_map_choose.png",
-                   directory / "df_map_choose_selected.png", directory / "df_start_manoeuver.png"],
+                   directory / workflow.game_navigator.selected_map_template, directory / "df_start_manoeuver.png"],
         threshold, timeout)
     if name != notice_path.name:
         workflow.control.check()

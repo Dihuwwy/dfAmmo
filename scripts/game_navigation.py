@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum
 from pathlib import Path
 import time
@@ -96,6 +96,14 @@ class GameNavigator:
         self.last_confidence = 0.0
         self.best_confidence = 0.0
         self.auto_align = True
+        self.steps = NAVIGATION_STEPS
+        self.selected_map_template = "df_map_choose_selected.png"
+
+    def configure_map(self, config) -> None:
+        self.steps = tuple(replace(step, template_name=config.map_template(step.template_name),
+                                  name=f"选择{config.map_name}" if index == 3 else step.name)
+                           for index, step in enumerate(NAVIGATION_STEPS))
+        self.selected_map_template = config.map_template("df_map_choose_selected.png")
 
     def start(self, process_id: int, initial_step: int = 0, auto_align: bool = True) -> NavigationEvent:
         if self.process_id != process_id:
@@ -103,7 +111,7 @@ class GameNavigator:
         self.auto_align = auto_align
         self.process_id = process_id
         self.bound_window = None
-        self.step_index = max(0, min(initial_step, len(NAVIGATION_STEPS) - 1))
+        self.step_index = max(0, min(initial_step, len(self.steps) - 1))
         self.deadline = time.monotonic() + self.window_timeout_seconds
         self.next_action_at = 0.0
         self.finished = False
@@ -112,7 +120,7 @@ class GameNavigator:
         self.last_confidence = 0.0
         self.best_confidence = 0.0
         if self.step_index > 0:
-            step_name = NAVIGATION_STEPS[self.step_index].name
+            step_name = self.steps[self.step_index].name
             return NavigationEvent(
                 NavigationStatus.RUNNING,
                 f"正在连接游戏窗口，准备从步骤【{step_name}】推进...",
@@ -121,7 +129,7 @@ class GameNavigator:
 
     def jump_to_step(self, step_index: int) -> NavigationEvent:
         """Manually jump to a specific step index and immediately prepare for execution."""
-        step_index = max(0, min(step_index, len(NAVIGATION_STEPS) - 1))
+        step_index = max(0, min(step_index, len(self.steps) - 1))
         self.step_index = step_index
         self.auto_align = False
         self.deadline = time.monotonic() + self.step_timeout_seconds
@@ -132,7 +140,7 @@ class GameNavigator:
         self.best_confidence = 0.0
 
 
-        target_step = NAVIGATION_STEPS[step_index]
+        target_step = self.steps[step_index]
         return NavigationEvent(
             NavigationStatus.RUNNING,
             f"[跳转] 手动跳转至步骤【{target_step.name}】，立即执行...",
@@ -145,8 +153,8 @@ class GameNavigator:
     def pause(self) -> NavigationEvent:
         self.is_paused = True
         step_name = (
-            NAVIGATION_STEPS[self.step_index].name
-            if self.step_index < len(NAVIGATION_STEPS)
+            self.steps[self.step_index].name
+            if self.step_index < len(self.steps)
             else "当前步骤"
         )
         return NavigationEvent(
@@ -164,8 +172,8 @@ class GameNavigator:
             return resync_event
 
         step_name = (
-            NAVIGATION_STEPS[self.step_index].name
-            if self.step_index < len(NAVIGATION_STEPS)
+            self.steps[self.step_index].name
+            if self.step_index < len(self.steps)
             else "未知步骤"
         )
         return NavigationEvent(
@@ -214,12 +222,12 @@ class GameNavigator:
         for idx in candidate_indices:
             if not allow_backtrack and idx < self.step_index:
                 continue
-            cand_step = NAVIGATION_STEPS[idx]
+            cand_step = self.steps[idx]
             candidate_tmpl_names = [cand_step.template_name]
             if idx == 0:
                 candidate_tmpl_names.extend(["df_change_mode.png", "df_mode_init.png"])
             elif idx == 7:
-                candidate_tmpl_names.append("df_map_choose_selected.png")
+                candidate_tmpl_names.append(self.selected_map_template)
 
             match_res = None
             for tname in candidate_tmpl_names:
@@ -238,7 +246,7 @@ class GameNavigator:
                     self.is_paused = True
                     return NavigationEvent(
                         NavigationStatus.PAUSED,
-                        "已识别到烽火大厅，但地图入口未匹配。请采集已选地图卡片为 df_map_choose_selected.png，"
+                        f"已识别到烽火大厅，但地图入口未匹配。请采集已选地图卡片为 {self.selected_map_template}，"
                         "或手动打开地图选择后继续；未发送 ESC 或 Tab。",
                     )
                 return self._align_to_step(idx, match_res.position.confidence)
@@ -254,7 +262,7 @@ class GameNavigator:
             self.next_action_at = 0.0
         self.last_confidence = confidence
         self.best_confidence = max(self.best_confidence, confidence) if old_index == index else confidence
-        step = NAVIGATION_STEPS[index]
+        step = self.steps[index]
         if step.action == "detect":
             return self._complete()
         if old_index != index:
@@ -313,10 +321,10 @@ class GameNavigator:
             return None
 
         self.bound_window = self.window_binder.bind_by_handle(self.bound_window.handle)
-        if self.step_index >= len(NAVIGATION_STEPS):
+        if self.step_index >= len(self.steps):
             return self._complete()
 
-        step = NAVIGATION_STEPS[self.step_index]
+        step = self.steps[self.step_index]
         if self.step_index == 1:
             aligned = self.resync_state(allow_backtrack=False)
             if aligned is not None and (self.step_index != 1 or aligned.status != NavigationStatus.RUNNING):
@@ -335,7 +343,7 @@ class GameNavigator:
             source = self.locator.grab_window_bgr(self.bound_window)
             if self.step_index == 2:
                 # The selected-map template includes the loadout/departure controls.
-                selected_path = self.template_dir / "df_map_choose_selected.png"
+                selected_path = self.template_dir / self.selected_map_template
                 if selected_path.exists():
                     selected = self.locator.match_in_source(
                         source, selected_path, self.bound_window, max(self.threshold, 0.90)

@@ -426,7 +426,7 @@ class Workflow:
         self.report_progress("Pak 屏蔽检查通过：所有目标 .disabled 文件存在，原名文件不存在。")
         template_path = TEMPLATE_DIR / template_name
         if not template_path.exists():
-            raise FileNotFoundError(f"缺少删除长弓溪谷资源包模板：{template_name}")
+            raise FileNotFoundError(f"缺少目标地图资源包模板：{template_name}")
         if not (TEMPLATE_DIR / confirm_template_name).exists():
             raise FileNotFoundError(f"缺少确认删除资源包模板：{confirm_template_name}")
         bin_path = TEMPLATE_DIR / bin_template_name
@@ -485,7 +485,7 @@ class Workflow:
             self.control.wait(0.3)
 
         raise RuntimeError(
-            f"未在资源包管理窗口中找到删除长弓溪谷按钮（{template_name}），"
+            f"未在资源包管理窗口中找到目标地图删除按钮（{template_name}），"
             f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
         )
 
@@ -524,7 +524,7 @@ class Workflow:
                 return position
             self.control.wait(min(0.2, max(0, deadline - time.monotonic())))
         raise TimeoutError(
-            f"悬停后未在长弓卡片内匹配到垃圾桶（{template_path.name}）；"
+            f"悬停后未在目标地图卡片内匹配到垃圾桶（{template_path.name}）；"
             f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}。未发送删除点击。"
         )
 

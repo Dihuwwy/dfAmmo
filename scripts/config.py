@@ -45,6 +45,7 @@ class AppConfig:
     game_install_dir: str = ""
     pak_file_names: tuple[str, ...] = DEFAULT_PAK_NAMES
     operation_mode: str = "semi_auto"
+    map_id: str = "changgong"
     wegame_more_template: str = "wegame_more.png"
     wegame_assets_manage_template: str = "wegame_assets_manage.png"
     wegame_delete_map_template: str = "wegame_delete_map.png"
@@ -63,6 +64,28 @@ class AppConfig:
     redownload_map_button_template: str = "df_redownload_button.png"
     warehouse_notice_template: str = "df_warehouse_notice.png"
     warehouse_notice_threshold: float = 0.90
+
+    @property
+    def map_name(self) -> str:
+        return "AZ3" if self.map_id == "az3" else "长弓溪谷"
+
+    @property
+    def active_pak_names(self) -> tuple[str, ...]:
+        if self.map_id == "az3":
+            return ("pak-0-2-pakchunk219-WindowsClient.pak",
+                    "pak-0-2-pakchunk219optional-WindowsClient.pak")
+        return tuple(self.pak_file_names)
+
+    def map_template(self, name: str) -> str:
+        if self.map_id != "az3":
+            return name
+        return {
+            "df_changgong_choose.png": "df_az3_choose.png",
+            "df_map_choose_selected.png": "df_az3_selected.png",
+            self.wegame_delete_map_template: "wegame_az3_map.png",
+            self.redownload_map_choice_template: "df_az3_choose_2.png",
+            self.redownload_map_panel_template: "df_az3_redownload_panel.png",
+        }.get(name, name)
 
     def save_to_file(self, path: Path | None = None, *, overwrite: bool = True) -> None:
         path = path or CONFIG_FILE
