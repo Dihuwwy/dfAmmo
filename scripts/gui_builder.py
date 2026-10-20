@@ -112,7 +112,6 @@ class BuilderMixin:
         self.left_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
 
         self.left_column = QWidget()
-        self.left_column.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.MinimumExpanding)
         left_layout = QVBoxLayout(self.left_column)
         left_layout.setContentsMargins(0, 0, 6, 0)
         left_layout.setSpacing(8)
@@ -134,7 +133,6 @@ class BuilderMixin:
         self.main_splitter.setCollapsible(0, False)
         self.main_splitter.setCollapsible(1, False)
         self.left_scroll.setMinimumHeight(280)
-        self.log_panel.setMinimumHeight(160)
 
         root.addWidget(self.main_splitter, stretch=1)
         for card in (self.bind_panel, self.feature_panel, self.debug_panel, self.log_panel):

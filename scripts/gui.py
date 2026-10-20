@@ -156,7 +156,7 @@ class MainWindow(ActionsMixin, BuilderMixin, UpdateMixin, QWidget):
         required = layout.totalHeightForWidth(width) if layout.hasHeightForWidth() else layout.sizeHint().height()
         available = self.main_splitter.height() - self.main_splitter.handleWidth()
         min_top = self.left_scroll.minimumHeight()
-        min_log = self.log_panel.minimumHeight()
+        min_log = self.log_panel.minimumSizeHint().height()
         top = min(max(min_top, required + 8), max(min_top, available - min_log))
         self.main_splitter.setSizes([top, max(min_log, available - top)])
 
