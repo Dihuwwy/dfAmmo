@@ -180,6 +180,7 @@ class BuilderMixin:
         self.conn_badge.setProperty("connected", "false")
         self.conn_badge.setProperty("status", "disconnected")
 
+        title_row.addStretch(1)
         title_row.addWidget(self.conn_dot)
         title_row.addWidget(conn_title)
         title_row.addWidget(self.conn_badge)
@@ -188,6 +189,7 @@ class BuilderMixin:
         self.conn_detail_label = QLabel("未绑定窗口")
         self.conn_detail_label.setObjectName("connDetail")
         self.conn_detail_label.setWordWrap(True)
+        self.conn_detail_label.setAlignment(Qt.AlignCenter)
         self.conn_detail_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
         info_box.addLayout(title_row)
@@ -197,9 +199,11 @@ class BuilderMixin:
         self.bind_button.setProperty("md3_type", "dashed")
         self.bind_button.released_at.connect(self.bind_window_at)
 
-        layout.addLayout(info_box)
         layout.addStretch(1)
+        layout.addLayout(info_box)
+        layout.addSpacing(8)
         layout.addWidget(self.bind_button)
+        layout.addStretch(1)
         self.about_button = QPushButton()
         self.about_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
         self.about_button.setFixedSize(24, 24)
@@ -349,7 +353,7 @@ class BuilderMixin:
 
         # Header
         header = QHBoxLayout()
-        title = QLabel("执行流程与单步调试")
+        title = QLabel("执行流程")
         title.setObjectName("sectionTitle")
 
         self.step_mode_toggle = CompactComboBox()
