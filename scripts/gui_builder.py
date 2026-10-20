@@ -369,10 +369,16 @@ class BuilderMixin:
         self.reset_status_btn.setToolTip("重置所有步骤状态为待命")
         self.reset_status_btn.clicked.connect(self.reset_all_step_states)
 
+        self.dbg_nav_start_btn = QPushButton("接管导航")
+        self.dbg_nav_start_btn.setProperty("class", "stepBtn")
+        self.dbg_nav_start_btn.setProperty("stepState", "idle")
+        self.dbg_nav_start_btn.setToolTip("检测游戏窗口并自动推进游戏菜单与模式步骤")
+        self.dbg_nav_start_btn.clicked.connect(self._dbg_takeover_navigation)
+
         header.addWidget(title)
         header.addStretch(1)
-        header.addWidget(self.step_mode_toggle)
-        header.addWidget(self.reset_status_btn)
+        for widget in (self.step_mode_toggle, self.dbg_nav_start_btn, self.reset_status_btn):
+            header.addWidget(widget, alignment=Qt.AlignVCenter)
         outer.addLayout(header)
 
         self.debug_body = Timeline()
@@ -381,13 +387,10 @@ class BuilderMixin:
         body_layout.setSpacing(10)
 
         # ── Step 1: In-game Navigation ──
-        s1_w, _, self.step1_dot, self.dbg_nav_start_btn = self._create_step_section(
+        s1_w, _, self.step1_dot, _ = self._create_step_section(
             dot_char="●",
             title="阶段一",
             subtitle="游戏内自动导航",
-            btn_text="接管导航",
-            btn_tooltip="检测游戏窗口并自动推进游戏菜单与模式步骤",
-            btn_slot=self._dbg_takeover_navigation,
         )
         s1_vbox = s1_w.layout()
 
