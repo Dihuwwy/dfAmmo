@@ -33,6 +33,7 @@ class NavigationEvent:
 
 @dataclass(frozen=True)
 class NavigationStep:
+    key: str
     name: str
     action: Literal["click", "press_sequence", "detect"]
     template_name: str = ""
@@ -41,21 +42,34 @@ class NavigationStep:
 
 
 NAVIGATION_STEPS = (
-    NavigationStep("选择烽火地带模式", "click", "df_mode_choose.png", delay_after=2.0),
+    NavigationStep("select_mode", "选择烽火地带模式", "click", "df_mode_choose.png", delay_after=2.0),
     NavigationStep(
+        "enter_lobby",
         "进入烽火地带大厅",
         "press_sequence",
         key_sequence=((win32con.VK_SPACE, 2), (win32con.VK_TAB, 1)),
         delay_after=2.5,
     ),
-    NavigationStep("打开地图选择", "click", "df_map_choose.png", delay_after=1.2),
-    NavigationStep("选择长弓溪谷", "click", "df_changgong_choose.png", delay_after=1.2),
-    NavigationStep("开始行动", "click", "df_start_manoeuver.png", delay_after=1.5),
-    NavigationStep("确认配装", "click", "df_confirm_loadout.png", delay_after=1.0),
-    NavigationStep("确认继续", "click", "df_still_continue.png", delay_after=1.0),
-    NavigationStep("点击出发", "click", "df_go.png", delay_after=2.0),
-    NavigationStep("等待选人界面", "detect", "df_operator_select.png", delay_after=0.0),
+    NavigationStep("open_map", "打开地图选择", "click", "df_map_choose.png", delay_after=1.2),
+    NavigationStep("select_map", "选择长弓溪谷", "click", "df_changgong_choose.png", delay_after=1.2),
+    NavigationStep("start_action", "开始行动", "click", "df_start_manoeuver.png", delay_after=1.5),
+    NavigationStep("confirm_loadout", "确认配装", "click", "df_confirm_loadout.png", delay_after=1.0),
+    NavigationStep("still_continue", "确认继续", "click", "df_still_continue.png", delay_after=1.0),
+    NavigationStep("depart", "点击出发", "click", "df_go.png", delay_after=2.0),
+    NavigationStep("wait_operator", "等待选人界面", "detect", "df_operator_select.png", delay_after=0.0),
 )
+
+# Recognition order is deliberate: the lobby screen wins over earlier menu
+# screens, so a partly advanced UI is never mistaken for its predecessor.
+RESYNC_ORDER = ("wait_operator", "depart", "still_continue", "confirm_loadout",
+                "start_action", "select_map", "open_map", "select_mode")
+# Before the lobby, the map card is checked ahead of the loading screen.
+RESYNC_ORDER_EARLY = ("wait_operator", "depart", "still_continue", "confirm_loadout",
+                      "select_map", "open_map", "start_action", "select_mode")
+
+
+def step_by_key(key: str, steps=NAVIGATION_STEPS) -> NavigationStep:
+    return next(step for step in steps if step.key == key)
 
 
 
@@ -101,9 +115,17 @@ class GameNavigator:
 
     def configure_map(self, config) -> None:
         self.steps = tuple(replace(step, template_name=config.map_template(step.template_name),
-                                  name=f"选择{config.map_name}" if index == 3 else step.name)
-                           for index, step in enumerate(NAVIGATION_STEPS))
+                                  name=f"选择{config.map_name}" if step.key == "select_map" else step.name)
+                           for step in NAVIGATION_STEPS)
         self.selected_map_template = config.map_template("df_map_choose_selected.png")
+
+    @property
+    def current_step(self) -> NavigationStep | None:
+        return self.steps[self.step_index] if self.step_index < len(self.steps) else None
+
+    def step_index_of(self, key: str) -> int:
+        """Return the cursor position of a step key in the active map configuration."""
+        return next(index for index, step in enumerate(self.steps) if step.key == key)
 
     def start(self, process_id: int, initial_step: int = 0, auto_align: bool = True) -> NavigationEvent:
         if self.process_id != process_id:
@@ -215,18 +237,18 @@ class GameNavigator:
                         "请在游戏中移出保险箱中的四级弹/违禁物品，处理完毕后按 Ctrl+F12 继续！",
                     )
 
-        # 2. Candidate step indices to inspect, ordered from downstream to upstream
-        candidate_indices = [8, 7, 6, 5, 4, 3, 2, 0]
-        if self.step_index <= 2:
-            candidate_indices = [8, 7, 6, 5, 3, 2, 4, 0]
-        for idx in candidate_indices:
-            if not allow_backtrack and idx < self.step_index:
+        # 2. Candidate steps to inspect, ordered from downstream to upstream.
+        order = RESYNC_ORDER_EARLY if self.step_index <= 2 else RESYNC_ORDER
+        positions = {step.key: index for index, step in enumerate(self.steps)}
+        for key in order:
+            idx = positions.get(key)
+            if idx is None or (not allow_backtrack and idx < self.step_index):
                 continue
             cand_step = self.steps[idx]
             candidate_tmpl_names = [cand_step.template_name]
-            if idx == 0:
+            if key == "select_mode":
                 candidate_tmpl_names.extend(["df_change_mode.png", "df_mode_init.png"])
-            elif idx == 7:
+            elif key == "depart":
                 candidate_tmpl_names.append(self.selected_map_template)
 
             match_res = None
@@ -242,7 +264,7 @@ class GameNavigator:
                     break
 
             if match_res is not None:
-                if idx == 4 and self.step_index <= 2:
+                if key == "start_action" and self.step_index <= 2:
                     self.is_paused = True
                     return NavigationEvent(
                         NavigationStatus.PAUSED,
@@ -325,15 +347,17 @@ class GameNavigator:
             return self._complete()
 
         step = self.steps[self.step_index]
-        if self.step_index == 1:
+        if step.key == "enter_lobby":
             aligned = self.resync_state(allow_backtrack=False)
-            if aligned is not None and (self.step_index != 1 or aligned.status != NavigationStatus.RUNNING):
+            current_key = self.current_step.key if self.current_step else None
+            if aligned is not None and (current_key != "enter_lobby"
+                                        or aligned.status != NavigationStatus.RUNNING):
                 return aligned
         position = None
         matched_cand_name = ""
         if step.template_name:
             candidate_names: list[str] = [step.template_name]
-            if self.step_index == 0:
+            if step.key == "select_mode":
                 candidate_names.append("df_change_mode.png")
                 candidate_names.append("df_mode_init.png")
 
@@ -341,7 +365,7 @@ class GameNavigator:
             best_cand_confidence = 0.0
 
             source = self.locator.grab_window_bgr(self.bound_window)
-            if self.step_index == 2:
+            if step.key == "open_map":
                 # The selected-map template includes the loadout/departure controls.
                 selected_path = self.template_dir / self.selected_map_template
                 if selected_path.exists():
@@ -349,7 +373,8 @@ class GameNavigator:
                         source, selected_path, self.bound_window, max(self.threshold, 0.90)
                     )
                     if selected.matched:
-                        return self._align_to_step(7, selected.position.confidence)
+                        return self._align_to_step(self.step_index_of("depart"),
+                                                   selected.position.confidence)
             for cand_name in candidate_names:
                 self.control.check()
                 tmpl_path = self.template_dir / cand_name
@@ -374,7 +399,8 @@ class GameNavigator:
                 step_elapsed = now - (self.deadline - self.step_timeout_seconds)
 
                 # Align before any recovery key: the user may already be in a lobby.
-                if (self.step_index in (0, 2) or step_elapsed >= 3.0) and now - self._last_resync_check >= 2.5:
+                if (step.key in ("select_mode", "open_map") or step_elapsed >= 3.0) \
+                        and now - self._last_resync_check >= 2.5:
                     self._last_resync_check = now
                     previous_index = self.step_index
                     aligned = self.resync_state(allow_backtrack=False, source=source)
@@ -416,7 +442,6 @@ class GameNavigator:
         if position is not None and self.bound_window != recognized_window:
             if (self.bound_window.right - self.bound_window.left, self.bound_window.bottom - self.bound_window.top) != (recognized_window.right - recognized_window.left, recognized_window.bottom - recognized_window.top):
                 return None
-            from dataclasses import replace
             position = replace(position, x=position.x + self.bound_window.left - recognized_window.left, y=position.y + self.bound_window.top - recognized_window.top)
         if step.action == "click" and position is not None:
             self.clicker.click(position, self.bound_window.handle)
@@ -426,6 +451,7 @@ class GameNavigator:
             return self._complete()
 
 
+        completed_key = step.key
         self.step_index += 1
         self.next_action_at = time.monotonic() + step.delay_after
         self.deadline = self.next_action_at + self.step_timeout_seconds
@@ -433,7 +459,7 @@ class GameNavigator:
         self.last_confidence = 0.0
         self.best_confidence = 0.0
         extra_note = ""
-        if self.step_index - 1 == 0 and matched_cand_name == "df_change_mode.png":
+        if completed_key == "select_mode" and matched_cand_name == "df_change_mode.png":
             extra_note = "（通过模式切换菜单匹配）"
         return NavigationEvent(
             NavigationStatus.RUNNING,

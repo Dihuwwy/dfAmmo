@@ -6,7 +6,7 @@ from pathlib import Path
 
 import win32con
 
-from scripts.game_navigation import NAVIGATION_STEPS
+from scripts.game_navigation import step_by_key
 from scripts.task_control import ControlInterrupted
 from scripts.window_binding import BoundWindow
 
@@ -105,14 +105,16 @@ def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, thres
         return False
     directory = template_path.parent
     step_timeout = workflow.game_navigator.step_timeout_seconds
+    mode_step = step_by_key("select_mode")
+    lobby_step = step_by_key("enter_lobby")
     workflow.report_progress("第四阶段：等待烽火模式选择...")
     def choose_mode():
         window, position, _ = _wait_for_game_ui(
-            workflow, [directory / NAVIGATION_STEPS[0].template_name], threshold, step_timeout)
+            workflow, [directory / mode_step.template_name], threshold, step_timeout)
         workflow.clicker.click(replace(position, width=0, height=0), window.handle)
     progress.run("mode", choose_mode)
     workflow.report_progress("第四阶段：已点击 df_mode_choose，等待第二次提示并确认...")
-    workflow.control.wait(NAVIGATION_STEPS[0].delay_after)
+    workflow.control.wait(mode_step.delay_after)
     if not progress.run("second_notice", lambda: wait_for_reconnect_notice(
             workflow, template_path, confirm_path, threshold, step_timeout)):
         return False
@@ -122,9 +124,9 @@ def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, thres
         raise RuntimeError("第四阶段游戏窗口已退出，未发送空格或 Tab。")
     workflow.window_binder.activate(window)
     workflow.control.wait(0.5)
-    progress.keys("lobby", workflow.keyboard, NAVIGATION_STEPS[1].key_sequence)
+    progress.keys("lobby", workflow.keyboard, lobby_step.key_sequence)
     workflow.report_progress("第四阶段：已按两次空格跳过活动并按一次 Tab，等待大厅画面。")
-    workflow.control.wait(NAVIGATION_STEPS[1].delay_after)
+    workflow.control.wait(lobby_step.delay_after)
     _, position, name = _wait_for_game_ui(
         workflow, [directory / "df_map_choose.png", directory / workflow.game_navigator.selected_map_template,
                    directory / "df_start_manoeuver.png"],
