@@ -56,7 +56,7 @@ class Workflow:
             progress=self.progress,
         )
 
-    def close_battle_report(self) -> None:
+    def close_battle_report(self, bound_window: BoundWindow | None = None) -> None:
         source = self.locator.grab_window_bgr()
         height, width = source.shape[:2]
         corner = BoundWindow(0, left=width // 2, top=height // 2, right=width, bottom=height)
@@ -72,7 +72,7 @@ class Workflow:
             source[header.top:header.bottom, header.left:header.right],
             TEMPLATE_DIR / "wegame_battle_report_close.png", header, 0.90)
         if close.matched:
-            self.clicker.click(close.position)
+            self.clicker.click(close.position, bound_window.handle if bound_window else None)
             self.report_progress("已点击关闭 WeGame 战报。")
             self.control.wait(0.4)
 
@@ -115,7 +115,7 @@ class Workflow:
         self.control.check()
         current_window = self.window_binder.activate(bound_window)
         self.control.wait(0.25)
-        self.close_battle_report()
+        self.close_battle_report(current_window)
         position, template_path = self.find_start_button(current_window, template_names, threshold)
         self.clicker.click(position, current_window.handle)
         return position, template_path
@@ -323,7 +323,7 @@ class Workflow:
                 current_window = self.window_binder.activate(current_bound)
                 current_bound = current_window
                 self.control.wait(0.3)
-                self.close_battle_report()
+                self.close_battle_report(current_window)
                 position, template_path = self.find_start_button(
                     current_window, template_names, threshold
                 )
@@ -346,7 +346,7 @@ class Workflow:
         self.control.check()
         current_window = self.window_binder.activate(bound_window)
         self.control.wait(0.3)
-        self.close_battle_report()
+        self.close_battle_report(current_window)
         template_path = TEMPLATE_DIR / template_name
         if not template_path.exists():
             raise FileNotFoundError(f"缺少 WeGame 更多按钮模板：{template_name}")
@@ -375,10 +375,11 @@ class Workflow:
 
         deadline = time.monotonic() + timeout
         best_confidence = 0.0
+        current_window = bound_window
 
         while time.monotonic() < deadline:
             self.control.check()
-            current_window = self.window_binder.activate(bound_window)
+            current_window = self.window_binder.activate(current_window)
             result = self.locator.match_by_image(template_path, current_window, threshold)
             best_confidence = max(best_confidence, result.position.confidence)
             if result.matched:
@@ -388,7 +389,9 @@ class Workflow:
             screen_result = self.locator.match_on_screen(template_path, threshold)
             best_confidence = max(best_confidence, screen_result.position.confidence)
             if screen_result.matched:
-                self.clicker.click(screen_result.position)
+                # The popup menu can be a separate WeGame window; the foreground
+                # check accepts any window owned by the same client process.
+                self.clicker.click(screen_result.position, current_window.handle)
                 return screen_result.position
 
             self.control.wait(0.5)
@@ -469,11 +472,12 @@ class Workflow:
                 )
                 self.clicker.move(pos)
                 self.control.wait(0.4)
+                manager_handle = resource_window.handle if resource_window else None
                 click_pos = self.progress.run("bin", lambda: self.click_card_bin(
-                    pos, bin_path, threshold, before_click=guard))
+                    pos, bin_path, threshold, before_click=guard, window_handle=manager_handle))
                 self.report_progress(f"已发送删除点击：x={click_pos.x}, y={click_pos.y}；等待确认删除弹窗验证。")
                 return self._finish_resource_delete(confirm_template_name, manager_header_template,
-                                                    threshold, confirm_timeout, guard)
+                                                    threshold, confirm_timeout, guard, manager_handle)
 
             # Scroll the resource-manager window downward every scroll_interval seconds
             now = time.monotonic()
@@ -489,16 +493,19 @@ class Workflow:
             f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
         )
 
-    def _finish_resource_delete(self, confirmation, header, threshold, timeout, guard):
+    def _finish_resource_delete(self, confirmation, header, threshold, timeout, guard,
+                                manager_handle: int | None = None):
         self.progress.run("confirm", lambda: self.confirm_resource_delete(
-            confirmation, threshold, timeout, before_click=guard))
-        self.progress.run("close", lambda: self.close_resource_manager(header, threshold))
+            confirmation, threshold, timeout, before_click=guard, window_handle=manager_handle))
+        self.progress.run("close", lambda: self.close_resource_manager(
+            header, threshold, window_handle=manager_handle))
         return self.progress.completed["bin"]
 
     def click_card_bin(
         self, card: ElementPosition, template_path: Path,
         threshold: float = 0.78, timeout: float = 3.0,
         before_click: Callable[[], None] | None = None,
+        window_handle: int | None = None,
     ) -> ElementPosition:
         if card.width <= 0 or card.height <= 0:
             raise ValueError("卡片识别区域无效，无法定位垃圾桶。")
@@ -520,7 +527,7 @@ class Workflow:
                 self.control.check()
                 if before_click is not None:
                     before_click()
-                self.clicker.click(replace(position, width=0, height=0))
+                self.clicker.click(replace(position, width=0, height=0), window_handle)
                 return position
             self.control.wait(min(0.2, max(0, deadline - time.monotonic())))
         raise TimeoutError(
@@ -534,6 +541,7 @@ class Workflow:
         threshold: float = 0.78,
         timeout: float = 10.0,
         before_click: Callable[[], None] | None = None,
+        window_handle: int | None = None,
     ) -> ElementPosition:
         """Match the complete dialog before clicking its orange confirmation button."""
         template_path = TEMPLATE_DIR / template_name
@@ -565,7 +573,7 @@ class Workflow:
                 if before_click is not None:
                     before_click()
                 return self._click_delete_confirmation(
-                    position, click_position=click_position,
+                    position, click_position=click_position, window_handle=window_handle,
                 )
             self.control.wait(min(0.2, max(0, deadline - time.monotonic())))
         raise TimeoutError(
@@ -573,7 +581,7 @@ class Workflow:
             f"最高相似度={best_confidence:.3f}，阈值={threshold:.3f}"
         )
 
-    def _click_delete_confirmation(self, position, click_position=None):
+    def _click_delete_confirmation(self, position, click_position=None, window_handle=None):
         """Send one confirmation click without waiting for a visual state change."""
         click_position = click_position or replace(position, width=0, height=0)
         self.control.check()
@@ -581,10 +589,11 @@ class Workflow:
             f"点击确认删除：x={click_position.x}, y={click_position.y}, "
             f"confidence={position.confidence:.3f}"
         )
-        self.clicker.click(click_position)
+        self.clicker.click(click_position, window_handle)
         return position
 
-    def close_resource_manager(self, template_name="wegame_assests_manage.png", threshold=0.78, timeout=10.0):
+    def close_resource_manager(self, template_name="wegame_assests_manage.png", threshold=0.78,
+                               timeout=10.0, window_handle=None):
         template_path = TEMPLATE_DIR / template_name
         if not template_path.exists():
             raise FileNotFoundError(f"缺少资源管理器顶部模板：{template_name}")
@@ -601,7 +610,7 @@ class Workflow:
                     confidence=header.confidence,
                 )
                 self.control.check()
-                self.clicker.click(position)
+                self.clicker.click(position, window_handle)
                 self.report_progress(f"已发送资源管理器关闭点击：x={position.x}, y={position.y}")
                 return
             self.control.wait(min(0.3, max(0, deadline - time.monotonic())))

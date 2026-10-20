@@ -4,6 +4,9 @@ import ctypes
 import random
 
 import win32api
+import win32con
+import win32gui
+import win32process
 
 from scripts.task_control import TaskControl, ControlInterrupted
 from scripts.dpi import physical_coordinates
@@ -99,12 +102,57 @@ class Clicker:
 
     def click(self, position: ElementPosition, window_handle: int | None = None) -> bool:
         self.control.check()
+        if window_handle is not None:
+            self._require_foreground(window_handle)
         x, y = self._humanized_point(position)
         with physical_coordinates():
             self._move_to_point(x, y)
             self.control.wait(random.uniform(0.08, 0.15))
             self._click_with_send_input(x, y)
         return True
+
+    def _require_foreground(self, window_handle: int) -> None:
+        """Refuse to click when the intended window is not the active one."""
+        if not win32gui.IsWindow(window_handle):
+            raise RuntimeError(f"点击目标窗口句柄无效：handle={window_handle}。未发送点击。")
+        if self._foreground_belongs_to(window_handle):
+            return
+        foreground = win32gui.GetForegroundWindow()
+        raise RuntimeError(
+            "目标窗口不在前台，已取消此次点击以免误操作："
+            f"目标={self._window_label(window_handle)}，"
+            f"当前前台={self._window_label(foreground)}。请重新绑定或让目标窗口回到前台。"
+        )
+
+    def _foreground_belongs_to(self, window_handle: int) -> bool:
+        """Accept the target, its root owner, or another window of the same client.
+
+        WeGame opens the resource manager and confirmation dialogs as separate
+        windows, so an exact handle comparison would reject legitimate targets.
+        """
+        foreground = win32gui.GetForegroundWindow()
+        if not foreground:
+            return False
+        target_root = win32gui.GetAncestor(window_handle, win32con.GA_ROOT) or window_handle
+        foreground_root = win32gui.GetAncestor(foreground, win32con.GA_ROOT) or foreground
+        if foreground in (window_handle, target_root) or foreground_root == target_root:
+            return True
+        try:
+            target_pid = win32process.GetWindowThreadProcessId(target_root)[1]
+            foreground_pid = win32process.GetWindowThreadProcessId(foreground_root)[1]
+        except win32gui.error:
+            return False
+        return bool(target_pid) and target_pid == foreground_pid
+
+    @staticmethod
+    def _window_label(handle: int) -> str:
+        if not handle:
+            return "<无前台窗口>"
+        try:
+            title = win32gui.GetWindowText(handle)
+        except win32gui.error:
+            title = ""
+        return f"“{title}” (handle={handle})" if title else f"<无标题> (handle={handle})"
 
     def move(self, position: ElementPosition) -> None:
         """Move without clicking so hover-only controls can appear."""
