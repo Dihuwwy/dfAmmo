@@ -116,6 +116,7 @@ uv run --frozen main.py
 | --- | --- |
 | `game_install_dir` | 空字符串；填写包含 `DeltaForce` 子目录的安装目录 |
 | `operation_mode` | `semi_auto`；另有 `full_auto`，其后续功能尚未实现 |
+| `check_fill_teammates` | `true`；行动前检查补齐队友，未勾选时自动开启，可在设置中关闭 |
 | `check_updates_on_startup` | `true`；启动时检查 GitHub 正式版本 |
 | `auto_update` | `false`；可在“关于”中开启空闲时自动安装 |
 | `template_match_threshold` | `0.78`；部分专用识别使用单独阈值 |
@@ -124,7 +125,7 @@ uv run --frozen main.py
 | `navigation_step_timeout_seconds` | `60`；导航步骤的超时时间 |
 | `pak_file_names` | 需要屏蔽或恢复的 Pak 文件名列表 |
 | `game_confirm_template` | `df_confirm.png`；部分游戏提示共用的绿色确认模板 |
-| `wegame_confirm_delete_template` | `wegame_confirmdelete.png`；完整的 WeGame 删除确认弹窗 |
+| `wegame_confirm_delete_template` | `wegame_resource_delete_confirm.png`；完整的 WeGame 删除确认弹窗 |
 
 手动修改配置前请退出程序。
 
@@ -148,22 +149,22 @@ uv run --frozen main.py
 在“设置 → 目标地图”选择 AZ3。默认仍为长弓溪谷，切换地图不会覆盖长弓模板。
 任务执行或保留继续进度时不能切换地图；停止后可用“重置状态”放弃进度再切换。
 
-AZ3 接入沿用长弓流程，尚待实机验证。Pak 编号暂按 219 配置为以下两个文件，请先核对实际安装目录：
+AZ3 沿用长弓流程，使用以下两个 Pak 文件：
 
 - `pak-0-2-pakchunk219-WindowsClient.pak`
 - `pak-0-2-pakchunk219optional-WindowsClient.pak`
 
-请采集以下图片到 `assets/templates/`（尚未附带 AZ3 模板）：
+两种地图的模板分别保存，已采集的图片位于 `assets/templates/`：
 
-| 模板名称 | 采集内容 |
-| --- | --- |
-| `df_az3_choose.png` | 第一阶段选地图界面的 AZ3 可点击选项 |
-| `df_az3_selected.png` | 大厅已经选好 AZ3 后的地图卡片，避开匹配计时等动态内容 |
-| `wegame_az3_map.png` | WeGame 资源包管理器里的 AZ3 地图卡片，尺寸范围参考原 `wegame_delete_map.png` |
-| `df_az3_choose_2.png` | 第四阶段地图待恢复时的 AZ3 可点击选项 |
-| `df_az3_redownload_panel.png` | AZ3 下载面板上部，排除底部下载行和容量数字；裁剪范围、比例参考 `df_redownload_panel.png` |
+| 用途 | 长弓溪谷 | AZ3 |
+| --- | --- | --- |
+| 第一阶段地图选项 | `df_changgong_map_option.png` | `df_az3_map_option.png` |
+| 已选地图的大厅卡片 | `df_changgong_map_selected.png` | `df_az3_map_selected.png` |
+| WeGame 中的完整地图卡片 | `wegame_changgong_map_card.png` | `wegame_az3_map_card.png` |
+| 第四阶段待恢复地图选项 | `df_changgong_download_option.png` | 复用 `df_az3_map_option.png` |
+| 下载面板上部 | `df_changgong_download_panel.png` | `df_az3_download_panel.png` |
 
-恢复下载暂按与长弓相同的面板布局定位底部按钮，复用 `df_redownload_button.png`。
+下载面板模板截到“行动时限”行下方、下载行上方，排除容量数字；下载图标根据面板位置定位，不需要单独采集按钮。
 确定、垃圾桶、关闭、出发、选人等通用模板继续复用；若 AZ3 对应界面不同，需要补充模板适配。
 
 模板位于 [assets/templates](assets/templates)。遇到界面更新或识别不准确时，可通过内置截图工具更新模板。
@@ -177,10 +178,11 @@ AZ3 接入沿用长弓流程，尚待实机验证。Pak 编号暂按 219 配置�
 
 特别注意：
 
-- `wegame_confirmdelete.png` 必须包含完整删除确认弹窗，不能只截确定按钮或文字。
+- `wegame_resource_delete_confirm.png` 必须包含完整删除确认弹窗，不能只截确定按钮或文字。
 - `wegame_bin.png` 是悬停资源条目后显示的垃圾桶图标。
 - `wegame_battle_report.png` 只截战报底部的“WeGame 官方助手”标识；`wegame_battle_report_close.png` 只截右上角关闭图标，不包含战绩、模式或高校认证。战报未出现时直接继续。
-- `wegame_assets_manage.png` 对应菜单项；`wegame_assests_manage.png` 对应管理器顶部区域，请按原文件名分别采集。
+- `wegame_resource_manager_menu.png` 对应菜单项；`wegame_resource_manager_header.png` 对应管理器顶部区域。
+- `df_fill_teammates_checked.png` 是已勾选的“补齐队友”控件。保留附带图片的裁剪范围；程序按文字轮廓定位、单独比较方框，避免大块背景影响识别。检查默认开启。
 - `df_confirm.png` 用于部分游戏提示的绿色确认；配装确认、继续和 WeGame 橙色确定仍使用各自的模板。
 
 ## 项目结构

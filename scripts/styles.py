@@ -71,6 +71,8 @@ QLabel#connDot { color: #CBD5E1; }
 QLabel#connDot[connected="true"] { color: #10B981; }
 QLineEdit, QComboBox { background-color: #F0F4F9; border: 1px solid transparent; border-radius: 10px; padding: 6px 12px; color: #191C20; min-height: 20px; }
 QLineEdit:focus, QComboBox:focus, QComboBox:hover { background-color: #FFFFFF; border-color: #0B57D0; }
+QCheckBox { background-color: transparent; color: #44474E; spacing: 6px; }
+QCheckBox::indicator { width: 16px; height: 16px; }
 QComboBox::drop-down { border: none; width: 22px; }
 QComboBox QAbstractItemView { background: #FFFFFF; selection-background-color: #D3E3FD; selection-color: #0B57D0; }
 QFrame[class="divider"], QFrame[frameShape="4"] { border: none; background: #F1F5F9; min-height: 1px; max-height: 1px; }

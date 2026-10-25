@@ -226,9 +226,9 @@ class Workflow:
         return confirm_notices_and_enter_lobby(self, TEMPLATE_DIR / template_name,
                                                TEMPLATE_DIR / confirm_template_name, threshold, timeout)
 
-    def redownload_stage_four_map(self, choice_name: str, panel_name: str, download_name: str,
+    def redownload_stage_four_map(self, choice_name: str, panel_name: str,
                                   threshold: float, timeout: float) -> None:
-        request_map_redownload(self, TEMPLATE_DIR, choice_name, panel_name, download_name, threshold, timeout)
+        request_map_redownload(self, TEMPLATE_DIR, choice_name, panel_name, threshold, timeout)
 
     def enter_stage_four_warehouse(self, notice_name: str, confirm_name: str,
                                    threshold: float, timeout: float) -> None:
@@ -364,7 +364,7 @@ class Workflow:
     def click_assets_manage(
         self,
         bound_window: BoundWindow,
-        template_name: str = "wegame_assets_manage.png",
+        template_name: str = "wegame_resource_manager_menu.png",
         threshold: float = 0.78,
         timeout: float = 6.0,
     ) -> ElementPosition:
@@ -403,15 +403,15 @@ class Workflow:
 
     def delete_changgong_map(
         self,
-        template_name: str = "wegame_delete_map.png",
+        template_name: str = "wegame_changgong_map_card.png",
         threshold: float = 0.78,
         timeout: float = 30.0,
         scroll_step: int = 3,
         scroll_interval: float = 0.8,
-        confirm_template_name: str = "wegame_confirmdelete.png",
+        confirm_template_name: str = "wegame_resource_delete_confirm.png",
         confirm_timeout: float = 10.0,
         bin_template_name: str = "wegame_bin.png",
-        manager_header_template: str = "wegame_assests_manage.png",
+        manager_header_template: str = "wegame_resource_manager_header.png",
         game_install_dir: str = "",
         pak_names: tuple[str, ...] = DEFAULT_PAK_NAMES,
     ) -> ElementPosition:
@@ -462,7 +462,8 @@ class Workflow:
                     raise
                 except Exception:
                     pass
-            result = self.locator.match_on_screen(template_path, threshold)
+            self.control.wait(max(0, scroll_interval - (time.monotonic() - last_scroll_at)))
+            result = self.locator.match_resource_card(template_path, threshold)
             best_confidence = max(best_confidence, result.position.confidence)
             if result.matched:
                 pos = result.position
@@ -472,9 +473,19 @@ class Workflow:
                 )
                 self.clicker.move(pos)
                 self.control.wait(0.4)
+                settled = self.locator.match_resource_card(template_path, threshold)
+                if not settled.matched or abs(settled.position.y - pos.y) > 3:
+                    continue
                 manager_handle = resource_window.handle if resource_window else None
-                click_pos = self.progress.run("bin", lambda: self.click_card_bin(
-                    pos, bin_path, threshold, before_click=guard, window_handle=manager_handle))
+                try:
+                    click_pos = self.progress.run("bin", lambda: self.click_card_bin(
+                        settled.position, bin_path, threshold, timeout=min(1.5, max(0, deadline - time.monotonic())),
+                        before_click=guard, window_handle=manager_handle))
+                except TimeoutError:
+                    self.report_progress("卡片已匹配但垃圾桶尚未显示，继续向下滚动一格后重新定位。")
+                    self._scroll_active_window_down(1, manager_handle)
+                    last_scroll_at = time.monotonic()
+                    continue
                 self.report_progress(f"已发送删除点击：x={click_pos.x}, y={click_pos.y}；等待确认删除弹窗验证。")
                 return self._finish_resource_delete(confirm_template_name, manager_header_template,
                                                     threshold, confirm_timeout, guard, manager_handle)
@@ -537,7 +548,7 @@ class Workflow:
 
     def confirm_resource_delete(
         self,
-        template_name: str = "wegame_confirmdelete.png",
+        template_name: str = "wegame_resource_delete_confirm.png",
         threshold: float = 0.78,
         timeout: float = 10.0,
         before_click: Callable[[], None] | None = None,
@@ -592,7 +603,7 @@ class Workflow:
         self.clicker.click(click_position, window_handle)
         return position
 
-    def close_resource_manager(self, template_name="wegame_assests_manage.png", threshold=0.78,
+    def close_resource_manager(self, template_name="wegame_resource_manager_header.png", threshold=0.78,
                                timeout=10.0, window_handle=None):
         template_path = TEMPLATE_DIR / template_name
         if not template_path.exists():

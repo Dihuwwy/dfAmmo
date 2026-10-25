@@ -42,7 +42,7 @@ def run(arguments: list[str]) -> int:
         assert templates, "Missing external templates"
         for template in templates:
             assert cv2.imdecode(np.fromfile(template, dtype=np.uint8), cv2.IMREAD_COLOR) is not None, template.name
-        ElementLocator().delete_confirmation_offset(TEMPLATE_DIR / "wegame_confirmdelete.png")
+        ElementLocator().delete_confirmation_offset(TEMPLATE_DIR / "wegame_resource_delete_confirm.png")
         with tempfile.TemporaryDirectory(prefix="dfammo-smoke-") as tmp:
             config_path = Path(tmp) / "config.json"
             config = AppConfig.load_from_file(config_path)

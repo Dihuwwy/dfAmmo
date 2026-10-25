@@ -16,6 +16,21 @@ DEFAULT_PAK_NAMES = (
     "pak-0-2-pakchunk90-WindowsClient.pak",
     "pak-0-2-pakchunk90optional-WindowsClient.pak",
 )
+TEMPLATE_RENAMES = {
+    "wegame_assets_manage.png": "wegame_resource_manager_menu.png",
+    "wegame_assests_manage.png": "wegame_resource_manager_header.png",
+    "wegame_confirmdelete.png": "wegame_resource_delete_confirm.png",
+    "wegame_delete_map.png": "wegame_changgong_map_card.png",
+    "wegame_az3_map.png": "wegame_az3_map_card.png",
+    "df_changgong_choose.png": "df_changgong_map_option.png",
+    "df_az3_choose.png": "df_az3_map_option.png",
+    "df_map_choose_selected.png": "df_changgong_map_selected.png",
+    "df_az3_selected.png": "df_az3_map_selected.png",
+    "df_changgong_choose_2.png": "df_changgong_download_option.png",
+    "df_az3_choose_2.png": "df_az3_map_option.png",
+    "df_redownload_panel.png": "df_changgong_download_panel.png",
+    "df_az3_redownload_panel.png": "df_az3_download_panel.png",
+}
 
 
 @dataclass(frozen=True)
@@ -46,12 +61,13 @@ class AppConfig:
     pak_file_names: tuple[str, ...] = DEFAULT_PAK_NAMES
     operation_mode: str = "semi_auto"
     map_id: str = "changgong"
+    check_fill_teammates: bool = True
     wegame_more_template: str = "wegame_more.png"
-    wegame_assets_manage_template: str = "wegame_assets_manage.png"
-    wegame_delete_map_template: str = "wegame_delete_map.png"
+    wegame_assets_manage_template: str = "wegame_resource_manager_menu.png"
+    wegame_delete_map_template: str = "wegame_changgong_map_card.png"
     wegame_bin_template: str = "wegame_bin.png"
-    wegame_manager_header_template: str = "wegame_assests_manage.png"
-    wegame_confirm_delete_template: str = "wegame_confirmdelete.png"
+    wegame_manager_header_template: str = "wegame_resource_manager_header.png"
+    wegame_confirm_delete_template: str = "wegame_resource_delete_confirm.png"
     confirm_delete_timeout_seconds: int = 10
     wegame_ready_timeout_seconds: int = 60
     delete_map_timeout_seconds: int = 30
@@ -59,9 +75,8 @@ class AppConfig:
     game_confirm_template: str = "df_confirm.png"
     reconnect_notice_threshold: float = 0.90
     reconnect_notice_timeout_seconds: int = 120
-    redownload_map_choice_template: str = "df_changgong_choose_2.png"
-    redownload_map_panel_template: str = "df_redownload_panel.png"
-    redownload_map_button_template: str = "df_redownload_button.png"
+    redownload_map_choice_template: str = "df_changgong_download_option.png"
+    redownload_map_panel_template: str = "df_changgong_download_panel.png"
     warehouse_notice_template: str = "df_warehouse_notice.png"
     warehouse_notice_threshold: float = 0.90
 
@@ -80,11 +95,11 @@ class AppConfig:
         if self.map_id != "az3":
             return name
         return {
-            "df_changgong_choose.png": "df_az3_choose.png",
-            "df_map_choose_selected.png": "df_az3_selected.png",
-            self.wegame_delete_map_template: "wegame_az3_map.png",
-            self.redownload_map_choice_template: "df_az3_choose_2.png",
-            self.redownload_map_panel_template: "df_az3_redownload_panel.png",
+            "df_changgong_map_option.png": "df_az3_map_option.png",
+            "df_changgong_map_selected.png": "df_az3_map_selected.png",
+            self.wegame_delete_map_template: "wegame_az3_map_card.png",
+            self.redownload_map_choice_template: "df_az3_map_option.png",
+            self.redownload_map_panel_template: "df_az3_download_panel.png",
         }.get(name, name)
 
     def save_to_file(self, path: Path | None = None, *, overwrite: bool = True) -> None:
@@ -100,6 +115,9 @@ class AppConfig:
             data = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
                 return cls()
+            for key, value in data.items():
+                if key.endswith("_template") and isinstance(value, str):
+                    data[key] = TEMPLATE_RENAMES.get(value, value)
             return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
         except FileNotFoundError:
             config = cls()

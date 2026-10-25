@@ -393,6 +393,15 @@ class ActionsMixin:
             self.write_log(f"保存目标地图失败：{exc}")
         self.write_log(f"目标地图：{self.config.map_name}。请确认对应模板已采集、Pak 文件名正确。")
 
+    def _on_fill_teammates_changed(self, checked: bool) -> None:
+        self.config = replace(self.config, check_fill_teammates=checked)
+        self.workflow.game_navigator.check_fill_teammates = checked
+        self.workflow.game_navigator._fill_teammates_verified = self.workflow.game_navigator._fill_teammates_clicked = False
+        try:
+            self.config.save_to_file()
+        except OSError as exc:
+            self.write_log(f"保存补齐队友设置失败：{exc}")
+
     def _choose_game_dir(self) -> None:
         initial_dir = self.game_dir_input.text().strip() or str(Path.home())
         selected_dir = QFileDialog.getExistingDirectory(
@@ -749,7 +758,7 @@ class ActionsMixin:
         try:
             yield lambda: self.workflow.redownload_stage_four_map(
                 self.config.map_template(self.config.redownload_map_choice_template), self.config.map_template(self.config.redownload_map_panel_template),
-                self.config.redownload_map_button_template, self.config.template_match_threshold,
+                self.config.template_match_threshold,
                 self.config.navigation_step_timeout_seconds)
         except ControlInterrupted:
             raise

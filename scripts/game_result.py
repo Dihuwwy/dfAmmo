@@ -135,10 +135,10 @@ def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, thres
     return True
 
 
-def request_map_redownload(workflow, directory, choice_name, panel_name, download_name, threshold, timeout):
+def request_map_redownload(workflow, directory, choice_name, panel_name, threshold, timeout):
     """Request the map in-game, then leave verification to the game's own loader."""
-    choice, panel, download = [directory / name for name in (choice_name, panel_name, download_name)]
-    for path in (choice, panel, download):
+    choice, panel = [directory / name for name in (choice_name, panel_name)]
+    for path in (choice, panel):
         if not path.is_file():
             raise FileNotFoundError(f"缺少第四阶段地图恢复模板：{path.name}")
     steps = [([directory / "df_map_choose.png", directory / workflow.game_navigator.selected_map_template], "打开地图选择"),
@@ -153,25 +153,22 @@ def request_map_redownload(workflow, directory, choice_name, panel_name, downloa
         workflow.progress.run(f"map_{index}", lambda: choose(paths, label, following))
         workflow.control.wait(0.5)
     workflow.progress.run("download", lambda: _click_map_download(
-        workflow, panel, download, threshold, timeout))
+        workflow, panel, threshold, timeout))
     workflow.control.wait(0.5)
     workflow.progress.keys("return_lobby", workflow.keyboard, ((win32con.VK_ESCAPE, 2),))
     workflow.report_progress("第四阶段：已按两次 ESC 返回大厅，地图恢复请求已发送；由游戏自行校验文件。")
 
 
-def _click_map_download(workflow, panel, download, threshold, timeout):
+def _click_map_download(workflow, panel, threshold, timeout):
     window, position, _ = _wait_for_game_ui(workflow, [panel], threshold, timeout)
     left, top = position.x - position.width // 2, position.y - position.height // 2
-    # The panel anchor excludes the download row (615px of the original 702px).
-    region = BoundWindow(0, left=max(window.left, left), top=top + position.height,
-                         right=min(window.right, left + position.width),
-                         bottom=min(window.bottom, top + round(position.height * 702 / 615)))
-    result = workflow.locator.match_by_image(download, region, threshold)
-    if not result.matched:
-        raise RuntimeError(f"下载按钮未在地图面板底部匹配：最高相似度={result.position.confidence:.3f}。未发送下载点击。")
+    # The download icon is 41px below the 528px-wide upper panel, at x=190.
+    download = replace(position, x=left + round(position.width * 190 / 528),
+                       y=top + position.height + round(position.width * 41 / 528),
+                       width=0, height=0)
     workflow.control.check()
-    workflow.clicker.click(replace(result.position, width=0, height=0), window.handle)
-    workflow.report_progress(f"第四阶段：已点击地图下载按钮：x={result.position.x}, y={result.position.y}")
+    workflow.clicker.click(download, window.handle)
+    workflow.report_progress(f"第四阶段：已点击地图下载图标：x={download.x}, y={download.y}")
 
 
 def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, timeout):

@@ -51,7 +51,7 @@ NAVIGATION_STEPS = (
         delay_after=2.5,
     ),
     NavigationStep("open_map", "打开地图选择", "click", "df_map_choose.png", delay_after=1.2),
-    NavigationStep("select_map", "选择长弓溪谷", "click", "df_changgong_choose.png", delay_after=1.2),
+    NavigationStep("select_map", "选择长弓溪谷", "click", "df_changgong_map_option.png", delay_after=1.2),
     NavigationStep("start_action", "开始行动", "click", "df_start_manoeuver.png", delay_after=1.5),
     NavigationStep("confirm_loadout", "确认配装", "click", "df_confirm_loadout.png", delay_after=1.0),
     NavigationStep("still_continue", "确认继续", "click", "df_still_continue.png", delay_after=1.0),
@@ -111,13 +111,17 @@ class GameNavigator:
         self.best_confidence = 0.0
         self.auto_align = True
         self.steps = NAVIGATION_STEPS
-        self.selected_map_template = "df_map_choose_selected.png"
+        self.selected_map_template = "df_changgong_map_selected.png"
+        self.check_fill_teammates = False
+        self._fill_teammates_verified = False
+        self._fill_teammates_clicked = False
 
     def configure_map(self, config) -> None:
         self.steps = tuple(replace(step, template_name=config.map_template(step.template_name),
                                   name=f"选择{config.map_name}" if step.key == "select_map" else step.name)
                            for step in NAVIGATION_STEPS)
-        self.selected_map_template = config.map_template("df_map_choose_selected.png")
+        self.selected_map_template = config.map_template("df_changgong_map_selected.png")
+        self.check_fill_teammates = config.check_fill_teammates
 
     @property
     def current_step(self) -> NavigationStep | None:
@@ -131,6 +135,7 @@ class GameNavigator:
         if self.process_id != process_id:
             self.progress.completed.clear()
         self.auto_align = auto_align
+        self._fill_teammates_verified = self._fill_teammates_clicked = False
         self.process_id = process_id
         self.bound_window = None
         self.step_index = max(0, min(initial_step, len(self.steps) - 1))
@@ -154,6 +159,7 @@ class GameNavigator:
         step_index = max(0, min(step_index, len(self.steps) - 1))
         self.step_index = step_index
         self.auto_align = False
+        self._fill_teammates_verified = self._fill_teammates_clicked = False
         self.deadline = time.monotonic() + self.step_timeout_seconds
         self.next_action_at = 0.0
         self.finished = False
@@ -443,6 +449,31 @@ class GameNavigator:
             if (self.bound_window.right - self.bound_window.left, self.bound_window.bottom - self.bound_window.top) != (recognized_window.right - recognized_window.left, recognized_window.bottom - recognized_window.top):
                 return None
             position = replace(position, x=position.x + self.bound_window.left - recognized_window.left, y=position.y + self.bound_window.top - recognized_window.top)
+        fill_note = ""
+        if self.check_fill_teammates and step.key in ("start_action", "depart"):
+            source = self.locator.grab_window_bgr(self.bound_window)
+            fill = self.locator.find_fill_teammates(
+                source, self.bound_window, self.template_dir / "df_fill_teammates_checked.png")
+            if fill is not None:
+                checkbox, checked = fill
+                if checked:
+                    self._fill_teammates_verified = True
+                    self._fill_teammates_clicked = False
+                    fill_note = "；补齐队友已勾选"
+                elif not self._fill_teammates_clicked:
+                    self._fill_teammates_verified = False
+                    self.clicker.click(checkbox, self.bound_window.handle)
+                    self._fill_teammates_clicked = True
+                    self.next_action_at = time.monotonic() + 0.4
+                    return NavigationEvent(NavigationStatus.RUNNING, "已点击补齐队友，等待确认勾选状态。")
+                else:
+                    if time.monotonic() >= self.deadline:
+                        return self._fail("补齐队友点击后仍未确认勾选，请手动检查后继续。")
+                    return None
+            elif self._fill_teammates_clicked or (step.key == "depart" and not self._fill_teammates_verified):
+                if time.monotonic() >= self.deadline:
+                    return self._fail("未识别到补齐队友选项，未点击出发；可手动检查或关闭此项检查。")
+                return None
         if step.action == "click" and position is not None:
             self.clicker.click(position, self.bound_window.handle)
         elif step.action == "press_sequence" and step.key_sequence:
@@ -458,7 +489,7 @@ class GameNavigator:
         matched_confidence = self.last_confidence
         self.last_confidence = 0.0
         self.best_confidence = 0.0
-        extra_note = ""
+        extra_note = fill_note
         if completed_key == "select_mode" and matched_cand_name == "df_change_mode.png":
             extra_note = "（通过模式切换菜单匹配）"
         return NavigationEvent(

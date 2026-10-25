@@ -60,6 +60,23 @@ class ElementLocator:
         return self.match_in_source(source, template_path,
                                     BoundWindow(0, right=width, bottom=height), threshold)
 
+    def match_resource_card(self, template_path: Path, threshold: float) -> MatchResult:
+        source = self.grab_window_bgr()
+        height, width = source.shape[:2]
+        result = self.match_in_source(source, template_path, BoundWindow(0, right=width, bottom=height), threshold)
+        if not result.matched:
+            return result
+        template = self.get_template(template_path)
+        position = result.position
+        left = position.x - position.width // 2
+        bottom = position.y - position.height // 2 + position.height
+        tail = template.shape[0] // 3
+        body_width = position.width * 3 // 4
+        # Exclude the hover-only trash icon while checking the card's lower edge.
+        footer = source[bottom - tail:bottom, left:left + body_width]
+        confidence = float(cv2.matchTemplate(footer, template[-tail:, :body_width], cv2.TM_CCOEFF_NORMED)[0, 0])
+        return MatchResult(position, confidence >= threshold)
+
 
     def grab_window_bgr(self, bound_window: BoundWindow | None = None) -> np.ndarray:
         self.control.check()
@@ -123,6 +140,27 @@ class ElementLocator:
     ) -> MatchResult:
         source = self.grab_window_bgr(bound_window)
         return self.match_in_source(source, template_path, bound_window, threshold)
+
+    def find_fill_teammates(self, source, bound_window, template_path):
+        """Locate the label by its edges, then inspect only the checkbox itself."""
+        template = cv2.cvtColor(self.get_template(template_path), cv2.COLOR_BGR2GRAY)
+        # The supplied 135x45 checked control has its label after x=36.
+        label = cv2.Canny(template[:, 36:], 60, 120)
+        top = source.shape[0] // 2
+        gray = cv2.cvtColor(source[top:], cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray, 60, 120)
+        mask = cv2.dilate(label, np.ones((3, 3), dtype=np.uint8))
+        scores = cv2.matchTemplate(edges, label, cv2.TM_CCORR_NORMED, mask=mask)
+        scores = np.nan_to_num(scores, nan=-1.0, posinf=-1.0, neginf=-1.0)
+        _, confidence, _, (x, y) = cv2.minMaxLoc(scores)
+        x -= 36
+        if confidence < 0.82 or x < 0:
+            return None
+        reference = template[10:35, 8:33]
+        checkbox = gray[y + 10:y + 35, x + 8:x + 33]
+        checked = float(cv2.matchTemplate(checkbox, reference, cv2.TM_CCOEFF_NORMED)[0, 0]) >= 0.85
+        return ElementPosition(bound_window.left + x + 20,
+                               bound_window.top + top + y + 22, confidence), checked
 
     def delete_confirmation_offset(self, template_path: str | Path) -> tuple[float, float]:
         """Locate the orange confirm button inside the complete dialog template."""

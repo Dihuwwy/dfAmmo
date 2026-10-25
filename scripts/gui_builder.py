@@ -5,6 +5,7 @@ from typing import Any
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QBoxLayout,
+    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -289,6 +290,11 @@ class BuilderMixin:
         map_row.addWidget(map_label)
         map_row.addWidget(self.map_selector)
         map_row.addStretch(1)
+        self.fill_teammates_checkbox = QCheckBox("检查补齐队友")
+        self.fill_teammates_checkbox.setChecked(self.config.check_fill_teammates)
+        self.fill_teammates_checkbox.setToolTip("行动前检查补齐队友，未勾选时自动开启")
+        self.fill_teammates_checkbox.toggled.connect(self._on_fill_teammates_changed)
+        map_row.addWidget(self.fill_teammates_checkbox)
         layout.addLayout(map_row)
         layout.addStretch(1)
         return panel
