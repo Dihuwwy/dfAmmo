@@ -15,6 +15,11 @@ QFrame[md3_card="true"], QWidget[md3_card="true"], QGroupBox {
     background-color: #FFFFFF; border: 1px solid #E0E2EC; border-radius: 16px;
 }
 QLabel { background-color: transparent; }
+QMenu { background-color: #FFFFFF; color: #44474E; border: 1px solid #C4C6D0; padding: 4px; }
+QMenu::item { background-color: transparent; padding: 6px 20px; }
+QMenu::item:selected { background-color: #D3E3FD; color: #0B57D0; }
+QMenu::item:disabled { color: #A9ABB4; }
+QMenu::separator { background-color: #E0E2EC; height: 1px; margin: 4px 8px; }
 QLabel#sectionTitle, QLabel#connStatusLabel, QLabel[class="stepTitle"] { font-size: 14px; font-weight: bold; }
 QLabel#connDetail, QLabel[class="stepSubtitle"], QLabel#fieldLabel { color: #64748B; }
 QPushButton {

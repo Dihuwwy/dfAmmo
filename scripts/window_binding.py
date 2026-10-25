@@ -130,7 +130,7 @@ class WindowBinder:
                 except Exception:
                     pass
 
-        return self.bind_by_handle(bound_window.handle)
+        return self.resolve(bound_window)
 
     def resolve(self, bound_window: BoundWindow) -> BoundWindow:
         """Refresh a binding after a window was destroyed or its handle reused."""

@@ -144,19 +144,24 @@ class Clicker:
         WeGame opens the resource manager and confirmation dialogs as separate
         windows, so an exact handle comparison would reject legitimate targets.
         """
-        foreground = win32gui.GetForegroundWindow()
-        if not foreground:
-            return False
-        target_root = win32gui.GetAncestor(window_handle, win32con.GA_ROOT) or window_handle
-        foreground_root = win32gui.GetAncestor(foreground, win32con.GA_ROOT) or foreground
-        if foreground in (window_handle, target_root) or foreground_root == target_root:
-            return True
-        try:
-            target_pid = win32process.GetWindowThreadProcessId(target_root)[1]
-            foreground_pid = win32process.GetWindowThreadProcessId(foreground_root)[1]
-        except win32gui.error:
-            return False
-        return bool(target_pid) and target_pid == foreground_pid
+        for attempt in range(2):
+            foreground = win32gui.GetForegroundWindow()
+            if not foreground:
+                return False
+            try:
+                target_root = win32gui.GetAncestor(window_handle, win32con.GA_ROOT) or window_handle
+                foreground_root = win32gui.GetAncestor(foreground, win32con.GA_ROOT) or foreground
+                if foreground in (window_handle, target_root) or foreground_root == target_root:
+                    return True
+                target_pid = win32process.GetWindowThreadProcessId(target_root)[1]
+                foreground_pid = win32process.GetWindowThreadProcessId(foreground_root)[1]
+                return bool(target_pid) and target_pid == foreground_pid
+            except win32gui.error as exc:
+                if exc.winerror != 1400 or attempt:
+                    return False
+                # A closing dialog can disappear between the two Win32 calls.
+                self.control.wait(0.1)
+        return False
 
     @staticmethod
     def _window_label(handle: int) -> str:
