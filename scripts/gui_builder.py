@@ -5,7 +5,6 @@ from typing import Any
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtWidgets import (
     QBoxLayout,
-    QCheckBox,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -23,7 +22,7 @@ from PySide6.QtWidgets import (
 from scripts.bind_button import BindButton
 from scripts.flow_layout import FlowLayout
 from scripts.styles import MAIN_WINDOW_STYLE
-from scripts.md3_widgets import CompactComboBox, Timeline, apply_md_shadow, set_md_icon
+from scripts.md3_widgets import CompactComboBox, FilledCheckBox, Timeline, apply_md_shadow, set_md_icon
 
 
 class BuilderMixin:
@@ -114,7 +113,7 @@ class BuilderMixin:
 
         self.left_column = QWidget()
         left_layout = QVBoxLayout(self.left_column)
-        left_layout.setContentsMargins(0, 0, 6, 0)
+        left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(8)
 
         self.debug_panel = self._build_stepper_card()
@@ -290,7 +289,7 @@ class BuilderMixin:
         map_row.addWidget(map_label)
         map_row.addWidget(self.map_selector)
         map_row.addStretch(1)
-        self.fill_teammates_checkbox = QCheckBox("检查补齐队友")
+        self.fill_teammates_checkbox = FilledCheckBox("检查补齐队友")
         self.fill_teammates_checkbox.setChecked(self.config.check_fill_teammates)
         self.fill_teammates_checkbox.setToolTip("行动前检查补齐队友，未勾选时自动开启")
         self.fill_teammates_checkbox.toggled.connect(self._on_fill_teammates_changed)

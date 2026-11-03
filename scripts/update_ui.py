@@ -8,13 +8,13 @@ import threading
 
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
-from scripts.md3_widgets import CompactComboBox
+from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
+from scripts.md3_widgets import CompactComboBox, FilledCheckBox
 
 from scripts.config import APP_ICON_PATH, PROJECT_ROOT
 from scripts.update_service import REPO_URL, Release, UpdateCancelled, UpdateService
 from scripts.version import current_version
-from scripts.styles import COLOR_TEXT_DISABLED, COLOR_SURFACE_SECONDARY, COLOR_BORDER_SUBTLE
+from scripts.styles import COLOR_TEXT_DISABLED, COLOR_SURFACE_SECONDARY
 
 
 class UpdateWorker(QObject):
@@ -90,7 +90,7 @@ class UpdateMixin:
             dialog.setWindowIcon(QIcon(str(APP_ICON_PATH)))
             dialog.setMinimumWidth(420)
             dialog.setStyleSheet(f"QPushButton#secondaryButton:disabled {{ color: {COLOR_TEXT_DISABLED}; "
-                                f"background-color: {COLOR_SURFACE_SECONDARY}; border-color: {COLOR_BORDER_SUBTLE}; }}")
+                                f"background-color: {COLOR_SURFACE_SECONDARY}; }}")
             layout = QVBoxLayout(dialog)
             layout.setContentsMargins(22, 20, 22, 20)
             layout.setSpacing(14)
@@ -120,9 +120,9 @@ class UpdateMixin:
             channel_row.addWidget(self.update_channel_combo)
             channel_row.addStretch(1)
             layout.addLayout(channel_row)
-            self.startup_check_box = QCheckBox("启动时检查更新")
+            self.startup_check_box = FilledCheckBox("启动时检查更新")
             self.startup_check_box.setChecked(self.config.check_updates_on_startup)
-            self.auto_update_box = QCheckBox("自动安装更新（任务空闲时）")
+            self.auto_update_box = FilledCheckBox("自动安装更新（任务空闲时）")
             self.auto_update_box.setChecked(self.config.auto_update)
             self.startup_check_box.toggled.connect(lambda checked: self._save_update_setting("check_updates_on_startup", checked))
             self.auto_update_box.toggled.connect(lambda checked: self._save_update_setting("auto_update", checked))
