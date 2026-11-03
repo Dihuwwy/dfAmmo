@@ -7,7 +7,6 @@ from pathlib import Path
 import win32con
 
 from scripts.game_navigation import step_by_key
-from scripts.task_control import ControlInterrupted
 from scripts.window_binding import BoundWindow
 
 
@@ -17,6 +16,16 @@ def notice_confirmation_region(notice, window):
     return BoundWindow(0, left=left, top=top,
                        right=min(window.right, left + notice.width),
                        bottom=min(window.bottom, top + notice.height * 5))
+
+
+def _active_game_window(workflow):
+    """Return the game window, bringing it back if a long wait cost it the foreground."""
+    process = workflow.find_game_process()
+    window = workflow.window_binder.bind_by_process_id(process.process_id) if process else None
+    if window is not None and not workflow.clicker.foreground_belongs_to(window.handle):
+        window = workflow.window_binder.activate(window)
+        workflow.control.wait(0.15)
+    return window
 
 
 def wait_for_reconnect_notice(workflow, template_path: Path, confirm_path: Path,
@@ -30,28 +39,20 @@ def wait_for_reconnect_notice(workflow, template_path: Path, confirm_path: Path,
     active_handle = None
     while time.monotonic() < deadline:
         workflow.control.check()
-        process = workflow.find_game_process()
-        window = workflow.window_binder.bind_by_process_id(process.process_id) if process else None
-        if window is not None:
-            try:
+        try:
+            window = _active_game_window(workflow)
+            if window is not None:
                 if window.handle != active_handle:
-                    window = workflow.window_binder.activate(window)
                     active_handle = window.handle
                     workflow.report_progress(f"第四阶段已绑定游戏窗口：handle={window.handle}")
                 result = workflow.locator.match_by_image(template_path, window, threshold)
+                best_confidence = max(best_confidence, result.position.confidence)
                 confirmation = None
                 if result.matched:
                     region = notice_confirmation_region(result.position, window)
                     if region.right > region.left and region.bottom > region.top:
                         confirmation = workflow.locator.match_by_image(confirm_path, region, threshold)
-            except ControlInterrupted:
-                raise
-            except (OSError, RuntimeError) as exc:
-                active_handle = None
-                workflow.report_progress(f"第四阶段等待游戏窗口就绪：{exc}")
-            else:
-                best_confidence = max(best_confidence, result.position.confidence)
-                if result.matched and confirmation is not None and confirmation.matched:
+                if confirmation is not None and confirmation.matched:
                     workflow.control.check()
                     workflow.clicker.click(replace(confirmation.position, width=0, height=0), window.handle)
                     workflow.report_progress(
@@ -60,6 +61,9 @@ def wait_for_reconnect_notice(workflow, template_path: Path, confirm_path: Path,
                         f"已点击确认：x={confirmation.position.x}, y={confirmation.position.y}"
                     )
                     return True
+        except (OSError, RuntimeError) as exc:
+            active_handle = None
+            workflow.report_progress(f"第四阶段等待游戏窗口就绪：{exc}")
         workflow.control.wait(min(0.7, max(0, deadline - time.monotonic())))
     workflow.report_progress(
         f"第四阶段识别或确认按钮等待超时（{timeout:g}秒），结果未确认，未据此判定死亡；"
@@ -74,16 +78,11 @@ def _wait_for_game_ui(workflow, template_paths, threshold, timeout):
     if not paths:
         raise FileNotFoundError("缺少第四阶段界面模板：" + ", ".join(p.name for p in template_paths))
     deadline = time.monotonic() + timeout
-    active_handle = None
     best_confidence = 0.0
     while time.monotonic() < deadline:
         workflow.control.check()
-        process = workflow.find_game_process()
-        window = workflow.window_binder.bind_by_process_id(process.process_id) if process else None
+        window = _active_game_window(workflow)
         if window is not None:
-            if window.handle != active_handle:
-                window = workflow.window_binder.activate(window)
-                active_handle = window.handle
             source = workflow.locator.grab_window_bgr(window)
             for path in paths:
                 result = workflow.locator.match_in_source(source, path, window, threshold)
@@ -118,11 +117,9 @@ def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, thres
     if not progress.run("second_notice", lambda: wait_for_reconnect_notice(
             workflow, template_path, confirm_path, threshold, step_timeout)):
         return False
-    process = workflow.find_game_process()
-    window = workflow.window_binder.bind_by_process_id(process.process_id) if process else None
+    window = _active_game_window(workflow)
     if window is None:
         raise RuntimeError("第四阶段游戏窗口已退出，未发送空格或 Tab。")
-    window = workflow.window_binder.activate(window)
     workflow.control.wait(0.5)
     progress.keys("lobby", workflow.keyboard, lobby_step.key_sequence, window.handle)
     workflow.report_progress("第四阶段：已按两次空格跳过活动并按一次 Tab，等待大厅画面。")
@@ -155,11 +152,9 @@ def request_map_redownload(workflow, directory, choice_name, panel_name, thresho
     workflow.progress.run("download", lambda: _click_map_download(
         workflow, panel, threshold, timeout))
     workflow.control.wait(0.5)
-    process = workflow.find_game_process()
-    window = workflow.window_binder.bind_by_process_id(process.process_id) if process else None
+    window = _active_game_window(workflow)
     if window is None:
         raise RuntimeError("第四阶段游戏窗口已退出，未发送 ESC。")
-    window = workflow.window_binder.activate(window)
     workflow.progress.keys("return_lobby", workflow.keyboard, ((win32con.VK_ESCAPE, 2),), window.handle)
     workflow.report_progress("第四阶段：已按两次 ESC 返回大厅，地图恢复请求已发送；由游戏自行校验文件。")
 
@@ -197,8 +192,7 @@ def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, 
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         workflow.control.check()
-        process = workflow.find_game_process()
-        window = workflow.window_binder.bind_by_process_id(process.process_id) if process else None
+        window = _active_game_window(workflow)
         if window is not None:
             source = workflow.locator.grab_window_bgr(window)
             notice = workflow.locator.match_in_source(source, notice_path, window, threshold)

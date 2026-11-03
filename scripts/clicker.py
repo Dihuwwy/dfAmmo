@@ -129,7 +129,7 @@ class Clicker:
         """Refuse to click when the intended window is not the active one."""
         if not win32gui.IsWindow(window_handle):
             raise RuntimeError(f"点击目标窗口句柄无效：handle={window_handle}。未发送点击。")
-        if self._foreground_belongs_to(window_handle):
+        if self.foreground_belongs_to(window_handle):
             return
         foreground = win32gui.GetForegroundWindow()
         raise RuntimeError(
@@ -138,7 +138,7 @@ class Clicker:
             f"当前前台={self._window_label(foreground)}。请重新绑定或让目标窗口回到前台。"
         )
 
-    def _foreground_belongs_to(self, window_handle: int) -> bool:
+    def foreground_belongs_to(self, window_handle: int) -> bool:
         """Accept the target, its root owner, or another window of the same client.
 
         WeGame opens the resource manager and confirmation dialogs as separate
