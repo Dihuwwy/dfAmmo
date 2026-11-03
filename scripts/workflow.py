@@ -106,6 +106,18 @@ class Workflow:
             f"最佳坐标=({result.position.x}, {result.position.y})。"
         )
 
+    def _bring_to_front(self, bound_window: BoundWindow, timeout: float = 5.0) -> BoundWindow:
+        """Activate until the window holds the foreground; a closing child window can take it back."""
+        deadline = time.monotonic() + timeout
+        window = self.window_binder.activate(bound_window)
+        self.control.wait(0.25)
+        while not self.clicker.foreground_belongs_to(window.handle) and time.monotonic() < deadline:
+            # An input event lifts Windows' foreground lock for the next attempt.
+            self.clicker.press(win32con.VK_MENU)
+            window = self.window_binder.activate(window)
+            self.control.wait(0.25)
+        return window
+
     def click_start_button(
         self,
         bound_window: BoundWindow,
@@ -113,10 +125,10 @@ class Workflow:
         threshold: float = 0.78,
     ) -> tuple[ElementPosition, Path]:
         self.control.check()
-        current_window = self.window_binder.activate(bound_window)
-        self.control.wait(0.25)
+        current_window = self._bring_to_front(bound_window)
         self.close_battle_report(current_window)
         position, template_path = self.find_start_button(current_window, template_names, threshold)
+        current_window = self._bring_to_front(current_window)
         self.clicker.click(position, current_window.handle)
         return position, template_path
 

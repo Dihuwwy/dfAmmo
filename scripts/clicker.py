@@ -3,6 +3,7 @@ from __future__ import annotations
 import ctypes
 import random
 
+import psutil
 import win32api
 import win32con
 import win32gui
@@ -169,9 +170,10 @@ class Clicker:
             return "<无前台窗口>"
         try:
             title = win32gui.GetWindowText(handle)
-        except win32gui.error:
-            title = ""
-        return f"“{title}” (handle={handle})" if title else f"<无标题> (handle={handle})"
+            process = psutil.Process(win32process.GetWindowThreadProcessId(handle)[1]).name()
+        except (win32gui.error, psutil.Error):
+            title, process = "", "未知进程"
+        return f"“{title or '<无标题>'}” (handle={handle}, 进程={process})"
 
     def move(self, position: ElementPosition) -> None:
         """Move without clicking so hover-only controls can appear."""
