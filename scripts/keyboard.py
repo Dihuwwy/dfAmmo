@@ -11,8 +11,9 @@ class KeyboardController:
         self.control = control or TaskControl()
         self.input = Clicker(self.control)
 
-    def press(self, virtual_key: int, repeat: int = 1, interval: float = 0.12) -> None:
-        self.input.press(virtual_key, repeat=repeat, interval=interval)
+    def press(self, virtual_key: int, repeat: int = 1, interval: float = 0.12,
+              window_handle: int | None = None) -> None:
+        self.input.press(virtual_key, repeat=repeat, interval=interval, window_handle=window_handle)
 
     def press_sequence(
         self,

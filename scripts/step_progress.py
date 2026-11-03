@@ -27,8 +27,8 @@ class StepProgress:
             self.completed[name] = result
         return self.completed[name]
 
-    def keys(self, name, keyboard, sequence):
+    def keys(self, name, keyboard, sequence, window_handle):
         for index, (key, repeat) in enumerate(sequence):
             for number in range(repeat):
-                self.run((name, index, number), lambda: keyboard.press(key))
+                self.run((name, index, number), lambda: keyboard.press(key, window_handle=window_handle))
                 self.control.wait(0.25)

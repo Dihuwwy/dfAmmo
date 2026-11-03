@@ -179,10 +179,13 @@ class Clicker:
         with physical_coordinates():
             self._move_to_point(position.x, position.y)
 
-    def press(self, virtual_key: int, repeat: int = 1, interval: float = 0.12) -> None:
+    def press(self, virtual_key: int, repeat: int = 1, interval: float = 0.12,
+              window_handle: int | None = None) -> None:
         """Send key presses through the same SendInput path as mouse clicks."""
         for index in range(repeat):
             self.control.check()
+            if window_handle is not None:
+                self._require_foreground(window_handle)
             self._send_inputs((self._keyboard_input(virtual_key, 0),), 0, 0)
             try:
                 self.control.wait(0.045)

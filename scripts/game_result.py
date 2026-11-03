@@ -122,9 +122,9 @@ def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, thres
     window = workflow.window_binder.bind_by_process_id(process.process_id) if process else None
     if window is None:
         raise RuntimeError("第四阶段游戏窗口已退出，未发送空格或 Tab。")
-    workflow.window_binder.activate(window)
+    window = workflow.window_binder.activate(window)
     workflow.control.wait(0.5)
-    progress.keys("lobby", workflow.keyboard, lobby_step.key_sequence)
+    progress.keys("lobby", workflow.keyboard, lobby_step.key_sequence, window.handle)
     workflow.report_progress("第四阶段：已按两次空格跳过活动并按一次 Tab，等待大厅画面。")
     workflow.control.wait(lobby_step.delay_after)
     _, position, name = _wait_for_game_ui(
@@ -155,7 +155,12 @@ def request_map_redownload(workflow, directory, choice_name, panel_name, thresho
     workflow.progress.run("download", lambda: _click_map_download(
         workflow, panel, threshold, timeout))
     workflow.control.wait(0.5)
-    workflow.progress.keys("return_lobby", workflow.keyboard, ((win32con.VK_ESCAPE, 2),))
+    process = workflow.find_game_process()
+    window = workflow.window_binder.bind_by_process_id(process.process_id) if process else None
+    if window is None:
+        raise RuntimeError("第四阶段游戏窗口已退出，未发送 ESC。")
+    window = workflow.window_binder.activate(window)
+    workflow.progress.keys("return_lobby", workflow.keyboard, ((win32con.VK_ESCAPE, 2),), window.handle)
     workflow.report_progress("第四阶段：已按两次 ESC 返回大厅，地图恢复请求已发送；由游戏自行校验文件。")
 
 
@@ -186,8 +191,8 @@ def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, 
         threshold, timeout)
     if name != notice_path.name:
         workflow.control.check()
-        workflow.window_binder.activate(window)
-        workflow.progress.run("warehouse_enter", lambda: workflow.keyboard.press(ord("E")))
+        window = workflow.window_binder.activate(window)
+        workflow.progress.run("warehouse_enter", lambda: workflow.keyboard.press(ord("E"), window_handle=window.handle))
         workflow.report_progress("第四阶段：已在大厅按 E，等待仓库提示...")
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:

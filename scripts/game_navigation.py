@@ -477,7 +477,7 @@ class GameNavigator:
         if step.action == "click" and position is not None:
             self.clicker.click(position, self.bound_window.handle)
         elif step.action == "press_sequence" and step.key_sequence:
-            self.progress.keys("lobby", self.keyboard, step.key_sequence)
+            self.progress.keys("lobby", self.keyboard, step.key_sequence, self.bound_window.handle)
         elif step.action == "detect":
             return self._complete()
 
