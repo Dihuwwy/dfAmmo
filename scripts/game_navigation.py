@@ -220,12 +220,10 @@ class GameNavigator:
                 self.bound_window = self.window_binder.bind_by_process_id(self.process_id)
                 if self.bound_window is None:
                     return None
-            self.bound_window = self.window_binder.bind_by_handle(self.bound_window.handle)
             try:
+                self.bound_window = self.window_binder.bind_by_handle(self.bound_window.handle)
                 source = self.locator.grab_window_bgr(self.bound_window)
-            except ControlInterrupted:
-                raise
-            except OSError:
+            except (OSError, win32gui.error):
                 return None
 
         # 1. Check for forbidden items / popup alert template if exists
@@ -348,7 +346,12 @@ class GameNavigator:
         if now < self.next_action_at:
             return None
 
-        self.bound_window = self.window_binder.bind_by_handle(self.bound_window.handle)
+        try:
+            self.bound_window = self.window_binder.bind_by_handle(self.bound_window.handle)
+        except win32gui.error:
+            # The window closed after the validity check; the next tick rebinds it.
+            self.bound_window = None
+            return None
         if self.step_index >= len(self.steps):
             return self._complete()
 
@@ -370,7 +373,10 @@ class GameNavigator:
             matched_result = None
             best_cand_confidence = 0.0
 
-            source = self.locator.grab_window_bgr(self.bound_window)
+            try:
+                source = self.locator.grab_window_bgr(self.bound_window)
+            except OSError as exc:
+                return self._wait_or_fail(f"步骤“{step.name}”截图失败：{exc}")
             if step.key == "open_map":
                 # The selected-map template includes the loadout/departure controls.
                 selected_path = self.template_dir / self.selected_map_template
@@ -440,9 +446,9 @@ class GameNavigator:
                 except ControlInterrupted:
                     raise
                 except Exception as inner_exc:
-                    return self._fail(f"激活游戏窗口失败：{inner_exc}")
+                    return self._wait_or_fail(f"激活游戏窗口失败：{inner_exc}")
             else:
-                return self._fail(f"激活游戏窗口失败：{exc}")
+                return self._wait_or_fail(f"激活游戏窗口失败：{exc}")
 
         self.control.check()
         if position is not None and self.bound_window != recognized_window:
@@ -451,7 +457,10 @@ class GameNavigator:
             position = replace(position, x=position.x + self.bound_window.left - recognized_window.left, y=position.y + self.bound_window.top - recognized_window.top)
         fill_note = ""
         if self.check_fill_teammates and step.key in ("start_action", "depart"):
-            source = self.locator.grab_window_bgr(self.bound_window)
+            try:
+                source = self.locator.grab_window_bgr(self.bound_window)
+            except OSError as exc:
+                return self._wait_or_fail(f"步骤“{step.name}”截图失败：{exc}")
             fill = self.locator.find_fill_teammates(
                 source, self.bound_window, self.template_dir / "df_fill_teammates_checked.png")
             if fill is not None:
@@ -462,7 +471,10 @@ class GameNavigator:
                     fill_note = "；补齐队友已勾选"
                 elif not self._fill_teammates_clicked:
                     self._fill_teammates_verified = False
-                    self.clicker.click(checkbox, self.bound_window.handle)
+                    try:
+                        self.clicker.click(checkbox, self.bound_window.handle)
+                    except (RuntimeError, win32gui.error) as exc:
+                        return self._wait_or_fail(f"点击补齐队友失败：{exc}")
                     self._fill_teammates_clicked = True
                     self.next_action_at = time.monotonic() + 0.4
                     return NavigationEvent(NavigationStatus.RUNNING, "已点击补齐队友，等待确认勾选状态。")
@@ -474,11 +486,14 @@ class GameNavigator:
                 if time.monotonic() >= self.deadline:
                     return self._fail("未识别到补齐队友选项，未点击出发；可手动检查或关闭此项检查。")
                 return None
-        if step.action == "click" and position is not None:
-            self.clicker.click(position, self.bound_window.handle)
-        elif step.action == "press_sequence" and step.key_sequence:
-            self.progress.keys("lobby", self.keyboard, step.key_sequence, self.bound_window.handle)
-        elif step.action == "detect":
+        try:
+            if step.action == "click" and position is not None:
+                self.clicker.click(position, self.bound_window.handle)
+            elif step.action == "press_sequence" and step.key_sequence:
+                self.progress.keys("lobby", self.keyboard, step.key_sequence, self.bound_window.handle)
+        except (RuntimeError, win32gui.error) as exc:
+            return self._wait_or_fail(f"步骤“{step.name}”发送操作失败：{exc}")
+        if step.action == "detect":
             return self._complete()
 
 
@@ -507,6 +522,10 @@ class GameNavigator:
             "已识别到选人界面，自动导航已停止。"
             f"相似度={self.last_confidence:.3f}",
         )
+
+    def _wait_or_fail(self, message: str) -> NavigationEvent | None:
+        """Keep polling through a transient error until the step times out."""
+        return self._fail(message) if time.monotonic() >= self.deadline else None
 
     def _fail(self, message: str) -> NavigationEvent:
         self.finished = True

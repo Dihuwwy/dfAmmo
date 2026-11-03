@@ -5,9 +5,13 @@ from dataclasses import replace
 from pathlib import Path
 
 import win32con
+import win32gui
 
 from scripts.game_navigation import step_by_key
 from scripts.window_binding import BoundWindow
+
+# Windows closing mid-call, a refused foreground, or a screen that cannot be captured.
+TRANSIENT_ERRORS = (OSError, RuntimeError, win32gui.error)
 
 
 def notice_confirmation_region(notice, window):
@@ -26,6 +30,21 @@ def _active_game_window(workflow):
         window = workflow.window_binder.activate(window)
         workflow.control.wait(0.15)
     return window
+
+
+def _wait_for_game_window(workflow, timeout, action):
+    deadline = time.monotonic() + timeout
+    last_error = ""
+    while time.monotonic() < deadline:
+        workflow.control.check()
+        try:
+            window = _active_game_window(workflow)
+            if window is not None:
+                return window
+        except TRANSIENT_ERRORS as exc:
+            last_error = str(exc)
+        workflow.control.wait(min(0.7, max(0, deadline - time.monotonic())))
+    raise RuntimeError(f"第四阶段未能取得游戏窗口，未发送{action}。{last_error}")
 
 
 def wait_for_reconnect_notice(workflow, template_path: Path, confirm_path: Path,
@@ -61,7 +80,7 @@ def wait_for_reconnect_notice(workflow, template_path: Path, confirm_path: Path,
                         f"已点击确认：x={confirmation.position.x}, y={confirmation.position.y}"
                     )
                     return True
-        except (OSError, RuntimeError) as exc:
+        except TRANSIENT_ERRORS as exc:
             active_handle = None
             workflow.report_progress(f"第四阶段等待游戏窗口就绪：{exc}")
         workflow.control.wait(min(0.7, max(0, deadline - time.monotonic())))
@@ -79,20 +98,24 @@ def _wait_for_game_ui(workflow, template_paths, threshold, timeout):
         raise FileNotFoundError("缺少第四阶段界面模板：" + ", ".join(p.name for p in template_paths))
     deadline = time.monotonic() + timeout
     best_confidence = 0.0
+    last_error = ""
     while time.monotonic() < deadline:
         workflow.control.check()
-        window = _active_game_window(workflow)
-        if window is not None:
-            source = workflow.locator.grab_window_bgr(window)
-            for path in paths:
-                result = workflow.locator.match_in_source(source, path, window, threshold)
-                best_confidence = max(best_confidence, result.position.confidence)
-                if result.matched:
-                    return window, result.position, path.name
+        try:
+            window = _active_game_window(workflow)
+            if window is not None:
+                source = workflow.locator.grab_window_bgr(window)
+                for path in paths:
+                    result = workflow.locator.match_in_source(source, path, window, threshold)
+                    best_confidence = max(best_confidence, result.position.confidence)
+                    if result.matched:
+                        return window, result.position, path.name
+        except TRANSIENT_ERRORS as exc:
+            last_error = str(exc)
         workflow.control.wait(min(0.7, max(0, deadline - time.monotonic())))
     raise TimeoutError(
         f"第四阶段等待界面超时（{timeout:g}秒，{', '.join(p.name for p in paths)}）；"
-        f"最高相似度={best_confidence:.3f}。未继续后续操作。"
+        f"最高相似度={best_confidence:.3f}。未继续后续操作。{last_error}"
     )
 
 
@@ -117,9 +140,7 @@ def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, thres
     if not progress.run("second_notice", lambda: wait_for_reconnect_notice(
             workflow, template_path, confirm_path, threshold, step_timeout)):
         return False
-    window = _active_game_window(workflow)
-    if window is None:
-        raise RuntimeError("第四阶段游戏窗口已退出，未发送空格或 Tab。")
+    window = _wait_for_game_window(workflow, step_timeout, "空格或 Tab")
     workflow.control.wait(0.5)
     progress.keys("lobby", workflow.keyboard, lobby_step.key_sequence, window.handle)
     workflow.report_progress("第四阶段：已按两次空格跳过活动并按一次 Tab，等待大厅画面。")
@@ -152,9 +173,7 @@ def request_map_redownload(workflow, directory, choice_name, panel_name, thresho
     workflow.progress.run("download", lambda: _click_map_download(
         workflow, panel, threshold, timeout))
     workflow.control.wait(0.5)
-    window = _active_game_window(workflow)
-    if window is None:
-        raise RuntimeError("第四阶段游戏窗口已退出，未发送 ESC。")
+    window = _wait_for_game_window(workflow, timeout, "ESC")
     workflow.progress.keys("return_lobby", workflow.keyboard, ((win32con.VK_ESCAPE, 2),), window.handle)
     workflow.report_progress("第四阶段：已按两次 ESC 返回大厅，地图恢复请求已发送；由游戏自行校验文件。")
 
@@ -190,25 +209,29 @@ def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, 
         workflow.progress.run("warehouse_enter", lambda: workflow.keyboard.press(ord("E"), window_handle=window.handle))
         workflow.report_progress("第四阶段：已在大厅按 E，等待仓库提示...")
     deadline = time.monotonic() + timeout
+    last_error = ""
     while time.monotonic() < deadline:
         workflow.control.check()
-        window = _active_game_window(workflow)
-        if window is not None:
-            source = workflow.locator.grab_window_bgr(window)
-            notice = workflow.locator.match_in_source(source, notice_path, window, threshold)
-            if notice.matched:
-                region = notice_confirmation_region(notice.position, window)
-                if region.right > region.left and region.bottom > region.top:
-                    cropped = source[region.top - window.top:region.bottom - window.top,
-                                     region.left - window.left:region.right - window.left]
-                    confirmation = workflow.locator.match_in_source(cropped, confirm_path, region, threshold)
-                    if confirmation.matched:
-                        workflow.control.check()
-                        workflow.progress.run("warehouse_confirm", lambda: workflow.clicker.click(
-                            replace(confirmation.position, width=0, height=0), window.handle))
-                        workflow.report_progress(
-                            f"已识别仓库提示并点击确认：x={confirmation.position.x}, "
-                            f"y={confirmation.position.y}, confidence={confirmation.position.confidence:.3f}")
-                        return
+        try:
+            window = _active_game_window(workflow)
+            if window is not None:
+                source = workflow.locator.grab_window_bgr(window)
+                notice = workflow.locator.match_in_source(source, notice_path, window, threshold)
+                if notice.matched:
+                    region = notice_confirmation_region(notice.position, window)
+                    if region.right > region.left and region.bottom > region.top:
+                        cropped = source[region.top - window.top:region.bottom - window.top,
+                                         region.left - window.left:region.right - window.left]
+                        confirmation = workflow.locator.match_in_source(cropped, confirm_path, region, threshold)
+                        if confirmation.matched:
+                            workflow.control.check()
+                            workflow.progress.run("warehouse_confirm", lambda: workflow.clicker.click(
+                                replace(confirmation.position, width=0, height=0), window.handle))
+                            workflow.report_progress(
+                                f"已识别仓库提示并点击确认：x={confirmation.position.x}, "
+                                f"y={confirmation.position.y}, confidence={confirmation.position.confidence:.3f}")
+                            return
+        except TRANSIENT_ERRORS as exc:
+            last_error = str(exc)
         workflow.control.wait(min(0.7, max(0, deadline - time.monotonic())))
-    raise TimeoutError(f"等待仓库提示及其确认按钮超时（{timeout:g}秒），未点击其他位置。")
+    raise TimeoutError(f"等待仓库提示及其确认按钮超时（{timeout:g}秒），未点击其他位置。{last_error}")
