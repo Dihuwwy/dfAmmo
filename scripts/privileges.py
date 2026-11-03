@@ -49,6 +49,8 @@ def relaunch_as_admin() -> bool:
         str(executable),
         parameters,
         str(Path.cwd()),
-        win32con.SW_HIDE,
+        # The first ShowWindow of the new process inherits this value, so
+        # SW_HIDE would leave the main window invisible.
+        win32con.SW_SHOWNORMAL,
     )
     return bool(result and int(result) > 32)
