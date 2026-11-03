@@ -41,6 +41,10 @@ QPushButton[md3_type="danger_outlined"] { background-color: #FDECEC; color: #DC2
 QPushButton[md3_type="danger_outlined"]:hover { background-color: #FBD5D5; }
 QPushButton[md3_type="danger_outlined"]:pressed { background-color: #F8BFBF; }
 QPushButton[md3_type="danger_outlined"]:disabled { background-color: #F1F0F4; color: #A9ABB4; }
+QPushButton#pauseButton, QPushButton#captureButton { background-color: #FFFFFF; }
+QPushButton#pauseButton:hover, QPushButton#captureButton:hover { background-color: #E1E9F8; }
+QPushButton#pauseButton:pressed, QPushButton#captureButton:pressed { background-color: #D3DCEE; }
+QPushButton#pauseButton:disabled, QPushButton#stopButton:disabled { background-color: #E2E7F0; color: #868B98; }
 QPushButton[md3_type="step_pill"] {
     background-color: #F1F5F9; color: #334155;
     border-radius: 15px; padding: 6px 13px; font-weight: 500;

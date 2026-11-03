@@ -324,7 +324,7 @@ class BuilderMixin:
         self.stop_button.clicked.connect(self.emergency_stop)
 
         self.capture_button = QPushButton("采集模板")
-        self.capture_button.setObjectName("secondaryButton")
+        self.capture_button.setObjectName("captureButton")
         self.capture_button.clicked.connect(self.start_template_capture)
 
         self.workflow_status_badge = QLabel("● 待命就绪")
