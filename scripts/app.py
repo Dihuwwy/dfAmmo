@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 
 from PySide6.QtWidgets import QApplication
@@ -20,6 +21,8 @@ class App:
 
     def run(self) -> int:
         self.logger.info("Application started.")
+        # The default DirectWrite engine draws text with coloured subpixel fringes.
+        os.environ.setdefault("QT_QPA_PLATFORM", "windows:fontengine=freetype")
         self.qt_app = QApplication.instance() or QApplication(sys.argv)
         self.qt_app.setWindowIcon(QIcon(str(APP_ICON_PATH)))
         self.window = MainWindow()
