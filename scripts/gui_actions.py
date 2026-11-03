@@ -485,6 +485,8 @@ class ActionsMixin:
         self.workflow.progress.enter("launch")
         self._continue_after_navigation = self.is_continuous_mode
         self.workflow.control.paused.clear()
+        if not (yield from self._require_pak_targets()):
+            return
         game_process = (yield lambda: self.workflow.find_game_process())
         if game_process is not None:
             self.write_log(
@@ -528,6 +530,19 @@ class ActionsMixin:
         self._set_badge(self.workflow_status_badge, "等待游戏启动...", "running")
         self.game_process_timer.start()
         yield from self._check_game_process_tasks()
+
+    def _require_pak_targets(self):
+        """Check Pak targets up front: navigation ends by terminating the game."""
+        try:
+            yield lambda: self.workflow.require_pak_targets(
+                self.config.game_install_dir, self.config.active_pak_names)
+        except ControlInterrupted:
+            raise
+        except (OSError, RuntimeError) as exc:
+            self.set_step_state("nav_game", "failed", str(exc))
+            self.write_log(str(exc))
+            return False
+        return True
 
     @background_action
     def check_game_process(self):
@@ -639,14 +654,17 @@ class ActionsMixin:
         try:
             messages = yield lambda: self.workflow.rename_pak_files(
                 self.config.game_install_dir, self.config.active_pak_names)
+            for message in messages:
+                self.write_log(message)
+            yield lambda: self.workflow.require_paks_disabled(
+                self.config.game_install_dir, self.config.active_pak_names, blocked_action="后续流程")
         except ControlInterrupted:
             raise
-        except OSError as exc:
+        except (OSError, RuntimeError) as exc:
             self.set_step_state("rename_pak", "failed", str(exc))
             self.write_log(f"屏蔽 Pak 失败：{exc}")
+            self._sync_pak_button_state()
             return
-        for message in messages:
-            self.write_log(message)
         self._sync_pak_button_state()
         self.set_step_state("rename_pak", "success")
         if self.is_continuous_mode and self.bound_window is not None:
@@ -862,6 +880,8 @@ class ActionsMixin:
     def _dbg_takeover_navigation(self):
         """Resume game navigation and auto-align with the current game screen."""
         self.workflow.control.paused.clear()
+        if not (yield from self._require_pak_targets()):
+            return
         game_process = (yield lambda: self.workflow.find_game_process())
         if game_process is None:
             self.write_log("调试：未检测到三角洲行动游戏进程，请先启动游戏再使用此功能。")
@@ -887,6 +907,8 @@ class ActionsMixin:
     def _on_step_pill_clicked(self, step_index: int):
         """Directly jump to and execute the selected navigation step."""
         self.workflow.control.paused.clear()
+        if not (yield from self._require_pak_targets()):
+            return
         game_process = (yield lambda: self.workflow.find_game_process())
         if game_process is None:
             self.write_log("未检测到三角洲行动游戏进程，请先启动游戏再点击步骤跳转。")
@@ -968,7 +990,11 @@ class ActionsMixin:
             action = "restored" if target == "restore" else "disabled"
             operation = self.workflow.restore_pak_files if target == "restore" else self.workflow.rename_pak_files
             results = yield lambda: operation(self.config.game_install_dir, self.config.active_pak_names)
+            for msg in results:
+                self.write_log(f"  └─ {msg}")
             if action == "disabled":
+                yield lambda: self.workflow.require_paks_disabled(
+                    self.config.game_install_dir, self.config.active_pak_names, blocked_action="后续流程")
                 self.set_step_state("rename_pak", "success")
                 self.write_log("调试：【已屏蔽 Pak】已重命名为 .disabled 状态（再点一次恢复正常）。")
                 if self.is_continuous_mode:
@@ -987,9 +1013,6 @@ class ActionsMixin:
                     self.write_log("连续模式：已恢复 Pak（未屏蔽），停止后续 WeGame 删包流程。")
 
             self._sync_pak_button_state()
-
-            for msg in results:
-                self.write_log(f"  └─ {msg}")
         except ControlInterrupted:
             raise
         except Exception as exc:

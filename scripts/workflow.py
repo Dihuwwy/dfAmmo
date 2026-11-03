@@ -237,7 +237,7 @@ class Workflow:
 
     def _rename_paks(self, game_install_dir, pak_names, restore):
         pak_dir = self.get_paks_dir(game_install_dir)
-        if restore and not pak_dir.is_dir():
+        if not game_install_dir or not pak_dir.is_dir():
             raise FileNotFoundError(f"Paks 目录不存在：{pak_dir}")
         results = []
         for name in pak_names:
@@ -281,12 +281,24 @@ class Workflow:
             return "restored", self.restore_pak_files(game_install_dir, pak_names)
         return "disabled", self.rename_pak_files(game_install_dir, pak_names)
 
-    def require_paks_disabled(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> None:
+    def require_pak_targets(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> None:
+        """Refuse a flow that would end the game before its Pak step can work."""
+        self.control.check()
+        pak_dir = self.get_paks_dir(game_install_dir)
+        if not game_install_dir or not pak_names or not pak_dir.is_dir():
+            raise RuntimeError(f"启动检查失败：请先配置有效的游戏安装目录，Paks 目录不存在：{pak_dir}")
+        missing = [name for name in pak_names
+                   if not (pak_dir / name).is_file() and not (pak_dir / f"{name}.disabled").is_file()]
+        if missing:
+            raise RuntimeError(f"启动检查失败：Paks 目录缺少目标文件：{', '.join(missing)}")
+
+    def require_paks_disabled(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES,
+                              blocked_action: str = "WeGame 删地图") -> None:
         """Never send a WeGame deletion click while any original Pak remains exposed."""
         self.control.check()
         pak_dir = self.get_paks_dir(game_install_dir)
         if not game_install_dir or not pak_names or not pak_dir.is_dir():
-            raise RuntimeError("已阻止 WeGame 删地图：安装目录或 Pak 文件列表无效，无法确认屏蔽状态。")
+            raise RuntimeError(f"已阻止{blocked_action}：安装目录或 Pak 文件列表无效，无法确认屏蔽状态。")
         unsafe = []
         for name in pak_names:
             normal, disabled = pak_dir / name, pak_dir / f"{name}.disabled"
@@ -295,7 +307,7 @@ class Workflow:
             elif not disabled.is_file():
                 unsafe.append(f"{name}.disabled 不存在或不是文件")
         if unsafe:
-            raise RuntimeError("已阻止 WeGame 删地图：目标 Pak 未全部屏蔽；" + "；".join(unsafe))
+            raise RuntimeError(f"已阻止{blocked_action}：目标 Pak 未全部屏蔽；" + "；".join(unsafe))
 
 
     def wait_for_wegame_ready(
