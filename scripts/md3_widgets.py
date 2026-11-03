@@ -19,7 +19,11 @@ def apply_md_shadow(widget):
 
 
 def set_md_icon(button, name, color, fallback):
-    icon = qta.icon(f"mdi6.{name}", color=color) if qta else button.style().standardIcon(fallback)
+    # A None fallback leaves the button text-only when no matching system icon exists.
+    if qta:
+        icon = qta.icon(f"mdi6.{name}", color=color)
+    else:
+        icon = QIcon() if fallback is None else button.style().standardIcon(fallback)
     if not qta and name == "play":
         pixmap = icon.pixmap(button.iconSize() * button.devicePixelRatioF())
         pixmap.setDevicePixelRatio(button.devicePixelRatioF())

@@ -189,21 +189,15 @@ class ActionsMixin:
             return
 
         self.bound_window = bound_window
-        info_text = (
-            f"{bound_window.title or '<无标题>'} | "
-            f"{bound_window.process_name or '<未知进程>'} | "
-            f"pid={bound_window.process_id or '-'} | "
-            f"handle={bound_window.handle}"
-        )
-        self.conn_dot.setProperty("connected", "true")
-        self._repaint(self.conn_dot)
-
         self.conn_badge.setText("已连接")
-        self.conn_badge.setProperty("connected", "true")
         self.conn_badge.setProperty("status", "connected")
         self._repaint(self.conn_badge)
 
-        self.conn_detail_label.setText(info_text)
+        self.conn_detail_label.setText(
+            f"{bound_window.title or '<无标题>'}\n"
+            f"{bound_window.process_name or '<未知进程>'} · PID {bound_window.process_id or '-'}"
+        )
+        self.conn_detail_label.setToolTip(f"窗口句柄：{bound_window.handle}")
         self.bind_button.default_text = "重新拖拽绑定"
         self.bind_button.setText("重新拖拽绑定")
 
@@ -224,15 +218,12 @@ class ActionsMixin:
         self._set_running_controls(False)
         self.bound_window = None
 
-        self.conn_dot.setProperty("connected", "false")
-        self._repaint(self.conn_dot)
-
         self.conn_badge.setText("未连接")
-        self.conn_badge.setProperty("connected", "false")
         self.conn_badge.setProperty("status", "disconnected")
         self._repaint(self.conn_badge)
 
         self.conn_detail_label.setText("未绑定窗口")
+        self.conn_detail_label.setToolTip("")
         self.bind_button.default_text = "拖拽至 WeGame 窗口绑定"
         self.bind_button.setText("拖拽至 WeGame 窗口绑定")
 

@@ -141,13 +141,13 @@ class BuilderMixin:
             (self.start_card_mail_button, "play", "#FFFFFF", QStyle.SP_MediaPlay),
             (self.pause_resume_button, "fast-forward-outline", "#44474E", QStyle.SP_MediaSkipForward),
             (self.stop_button, "stop-circle-outline", "#DC2626", QStyle.SP_MediaStop),
-            (self.bind_button, "crosshairs-gps", "#0B57D0", QStyle.SP_TitleBarShadeButton),
+            (self.bind_button, "crosshairs-gps", "#0B57D0", None),
             (self.about_button, "information-outline", "#64748B", QStyle.SP_FileDialogInfoView),
-            (self.capture_button, "camera-iris", "#44474E", QStyle.SP_DesktopIcon),
+            (self.capture_button, "camera-iris", "#44474E", None),
             (self.dbg_nav_start_btn, "compass-outline", "#0B57D0", QStyle.SP_ArrowForward),
-            (self.reset_status_btn, "refresh", "#44474E", QStyle.SP_BrowserReload),
-            (self.copy_log_btn, "content-copy", "#44474E", QStyle.SP_FileIcon),
-            (self.clear_log_btn, "trash-can-outline", "#44474E", QStyle.SP_TrashIcon),
+            (self.reset_status_btn, "refresh", "#44474E", None),
+            (self.copy_log_btn, "content-copy", "#44474E", None),
+            (self.clear_log_btn, "trash-can-outline", "#44474E", None),
         )
         for button, name, color, fallback in icons:
             set_md_icon(button, name, color, fallback)
@@ -159,51 +159,45 @@ class BuilderMixin:
         panel = QFrame()
         panel.setObjectName("connectionBar")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 8, 14, 8)
+        layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(10)
 
-        info_box = QVBoxLayout()
-        info_box.setSpacing(2)
-
-        title_row = QHBoxLayout()
-        title_row.setSpacing(6)
-
-        self.conn_dot = QLabel("●")
-        self.conn_dot.setObjectName("connDot")
-        self.conn_dot.setProperty("connected", "false")
-
-        conn_title = QLabel("WeGame 客户端")
-        conn_title.setObjectName("connStatusLabel")
-
+        title = QLabel("WeGame 客户端")
+        title.setObjectName("sectionTitle")
         self.conn_badge = QLabel("未连接")
         self.conn_badge.setObjectName("connBadge")
-        self.conn_badge.setProperty("connected", "false")
         self.conn_badge.setProperty("status", "disconnected")
-
+        self.conn_badge.setFixedHeight(24)
+        title_row = QHBoxLayout()
+        title_row.addWidget(title)
         title_row.addStretch(1)
-        title_row.addWidget(self.conn_dot)
-        title_row.addWidget(conn_title)
         title_row.addWidget(self.conn_badge)
-        title_row.addStretch(1)
 
         self.conn_detail_label = QLabel("未绑定窗口")
         self.conn_detail_label.setObjectName("connDetail")
         self.conn_detail_label.setWordWrap(True)
-        self.conn_detail_label.setAlignment(Qt.AlignCenter)
-        self.conn_detail_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
-
-        info_box.addLayout(title_row)
-        info_box.addWidget(self.conn_detail_label)
+        self.conn_detail_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.conn_detail_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Expanding)
+        self.conn_detail_label.setMinimumHeight(34)
 
         self.bind_button = BindButton()
         self.bind_button.setProperty("md3_type", "dashed")
         self.bind_button.released_at.connect(self.bind_window_at)
 
-        layout.addStretch(1)
-        layout.addLayout(info_box)
-        layout.addSpacing(8)
+        layout.addLayout(title_row)
+        layout.addWidget(self.conn_detail_label, 1)
         layout.addWidget(self.bind_button)
-        layout.addStretch(1)
+        return panel
+
+    def _build_settings_card(self) -> QFrame:
+        panel = QFrame()
+        panel.setObjectName("settingsCard")
+        layout = QVBoxLayout(panel)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
+
+        title = QLabel("设置")
+        title.setObjectName("sectionTitle")
         self.about_button = QPushButton()
         self.about_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MessageBoxInformation))
         self.about_button.setFixedSize(24, 24)
@@ -212,17 +206,6 @@ class BuilderMixin:
         self.about_button.setObjectName("aboutButton")
         self.about_button.setStyleSheet("padding: 0;")
         self.about_button.clicked.connect(self.show_about)
-        return panel
-
-    def _build_settings_card(self) -> QFrame:
-        panel = QFrame()
-        panel.setObjectName("settingsCard")
-        layout = QVBoxLayout(panel)
-        layout.setContentsMargins(14, 10, 14, 10)
-        layout.setSpacing(8)
-
-        title = QLabel("设置")
-        title.setObjectName("sectionTitle")
         settings_header = QHBoxLayout()
         settings_header.addWidget(title)
         settings_header.addStretch(1)
@@ -258,7 +241,7 @@ class BuilderMixin:
             button.setCheckable(True)
             button.setAutoExclusive(True)
             button.setProperty("md3_type", "segment")
-            button.setFixedSize(88, 32)
+            button.setFixedSize(88, 28)
         segmented = QFrame()
         segmented.setProperty("md3_type", "segmented_container")
         segments = QHBoxLayout(segmented)
@@ -279,9 +262,13 @@ class BuilderMixin:
         layout.addLayout(dir_row)
         layout.addLayout(mode_row)
         map_row = QHBoxLayout()
+        map_row.setSpacing(8)
         map_label = QLabel("目标地图：")
+        map_label.setObjectName("fieldLabel")
         map_label.setFixedWidth(92)
         self.map_selector = CompactComboBox()
+        # Matches the mode selector above it: 88 * 2 buttons, 2 spacing, 3 * 2 margins.
+        self.map_selector.setFixedWidth(184)
         self.map_selector.addItem("长弓溪谷", "changgong")
         self.map_selector.addItem("AZ3", "az3")
         self.map_selector.setCurrentIndex(self.map_selector.findData(self.config.map_id))
@@ -295,7 +282,6 @@ class BuilderMixin:
         self.fill_teammates_checkbox.toggled.connect(self._on_fill_teammates_changed)
         map_row.addWidget(self.fill_teammates_checkbox)
         layout.addLayout(map_row)
-        layout.addStretch(1)
         return panel
 
     def _build_action_bar(self) -> QWidget:
@@ -353,7 +339,7 @@ class BuilderMixin:
         panel.setObjectName("stepperCard")
         panel.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         outer = QVBoxLayout(panel)
-        outer.setContentsMargins(14, 12, 14, 12)
+        outer.setContentsMargins(16, 14, 16, 14)
         outer.setSpacing(10)
 
         # Header
@@ -532,7 +518,7 @@ class BuilderMixin:
         panel = QFrame()
         panel.setObjectName("logPanel")
         layout = QVBoxLayout(panel)
-        layout.setContentsMargins(12, 10, 12, 10)
+        layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(8)
 
         header = QHBoxLayout()
