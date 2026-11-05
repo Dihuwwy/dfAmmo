@@ -246,6 +246,7 @@ dfAmmo/
 
 - **OpenAI Codex**
 - **Google Antigravity**
+- **Anthropic Claude Code**
 
 以上名称用于说明开发工具，不表示其提供方参与维护、认可项目或为项目背书。AI 辅助生成的内容仍需维护者审阅与验证。
 
