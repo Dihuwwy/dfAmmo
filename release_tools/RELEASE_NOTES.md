@@ -29,4 +29,4 @@ Windows x64 正式版，修复删除地图后无法重新启动游戏的问题�
 ### 开源与致谢
 
 原创代码采用 GPL-3.0-only，源码可通过下方的 Source code 下载，ZIP 中的 `SOURCE.md` 也提供对应源码入口；第三方素材及依赖保持各自权利和许可。
-AI 辅助开发工具：OpenAI Codex、Google Antigravity。
+AI 辅助开发工具：OpenAI Codex、Google Antigravity、Anthropic Claude Code。
