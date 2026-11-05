@@ -142,10 +142,18 @@ class ElementLocator:
         return self.match_in_source(source, template_path, bound_window, threshold)
 
     def find_fill_teammates(self, source, bound_window, template_path):
-        """Locate the label by its edges, then inspect only the checkbox itself."""
+        """Find the label from its text strokes, then read the box from its own pixels.
+
+        The ranked-mode toggle uses the same box, so only the text identifies this
+        control. Neither step compares against the lobby background around it.
+        """
         template = cv2.cvtColor(self.get_template(template_path), cv2.COLOR_BGR2GRAY)
-        # The supplied 135x45 checked control has its label after x=36.
-        label = cv2.Canny(template[:, 36:], 60, 120)
+        # The supplied 135x45 control has a 25x25 box at (8, 10) and its label after x=36.
+        strokes = cv2.dilate(cv2.inRange(template[:, 36:], 85, 255), np.ones((3, 3), dtype=np.uint8))
+        label = cv2.bitwise_and(cv2.Canny(template[:, 36:], 60, 120), strokes)
+        rows, columns = np.nonzero(label)
+        offset_x, offset_y = 36 + int(columns.min()), int(rows.min())
+        label = label[rows.min():rows.max() + 1, columns.min():columns.max() + 1]
         top = source.shape[0] // 2
         gray = cv2.cvtColor(source[top:], cv2.COLOR_BGR2GRAY)
         edges = cv2.Canny(gray, 60, 120)
@@ -153,14 +161,20 @@ class ElementLocator:
         scores = cv2.matchTemplate(edges, label, cv2.TM_CCORR_NORMED, mask=mask)
         scores = np.nan_to_num(scores, nan=-1.0, posinf=-1.0, neginf=-1.0)
         _, confidence, _, (x, y) = cv2.minMaxLoc(scores)
-        x -= 36
-        if confidence < 0.82 or x < 0:
+        x, y = x - offset_x, y - offset_y
+        if confidence < 0.88 or x + 8 < 0 or y + 10 < 0:
             return None
-        reference = template[10:35, 8:33]
-        checkbox = gray[y + 10:y + 35, x + 8:x + 33]
-        checked = float(cv2.matchTemplate(checkbox, reference, cv2.TM_CCOEFF_NORMED)[0, 0]) >= 0.85
+        box = gray[y + 10:y + 35, x + 8:x + 33].astype(float)
+        if box.shape != (25, 25):
+            return None
+        # Each layer is compared with the dark ring inside the box, not with the lobby.
+        ring = np.median(np.concatenate((box[2, 5:20], box[22, 5:20], box[5:20, 2], box[5:20, 22])))
+        border = np.median(np.concatenate((box[0, 5:20], box[24, 5:20], box[5:20, 0], box[5:20, 24])))
+        if border - ring < 25:
+            return None
+        checked = box[8:17, 8:17].mean() - ring >= 60
         return ElementPosition(bound_window.left + x + 20,
-                               bound_window.top + top + y + 22, confidence), checked
+                               bound_window.top + top + y + 22, confidence), bool(checked)
 
     def delete_confirmation_offset(self, template_path: str | Path) -> tuple[float, float]:
         """Locate the orange confirm button inside the complete dialog template."""
