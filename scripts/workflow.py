@@ -212,18 +212,18 @@ class Workflow:
         """Return the Delta Force Paks directory path for given game install directory."""
         return Path(game_install_dir) / "DeltaForce" / "PackContent" / "Paks"
 
-    def rename_pak_files(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> list[str]:
-        return self._rename_paks(game_install_dir, pak_names, restore=False)
+    def rename_pak_files(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES, extra_files=()) -> list[str]:
+        return (self._rename_paks(game_install_dir, pak_names, restore=False)
+                + self._rename_extra_files(game_install_dir, extra_files, restore=False))
 
+    def restore_pak_files(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES, extra_files=()) -> list[str]:
+        return (self._rename_paks(game_install_dir, pak_names, restore=True)
+                + self._rename_extra_files(game_install_dir, extra_files, restore=True))
 
-
-    def restore_pak_files(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> list[str]:
-        return self._rename_paks(game_install_dir, pak_names, restore=True)
-
-    def restore_stage_four_paks(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> list[str]:
+    def restore_stage_four_paks(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES, extra_files=()) -> list[str]:
         if not game_install_dir or not pak_names:
             raise ValueError("请先配置游戏安装目录及 Pak 文件列表。")
-        messages = self.restore_pak_files(game_install_dir, pak_names)
+        messages = self.restore_pak_files(game_install_dir, pak_names, extra_files)
         for message in messages:
             self.report_progress(message)
         pak_dir = self.get_paks_dir(game_install_dir)
@@ -276,6 +276,19 @@ class Workflow:
             source.rename(target)
             action = "恢复正常" if restore else "重命名"
             results.append(f"已{action}：{source.name} -> {target.name}")
+        return results
+
+    def _rename_extra_files(self, game_install_dir, extra_files, restore):
+        """Rename whichever optional map files exist; a missing one is not an error."""
+        results = []
+        for relative_path in extra_files:
+            self.control.check()
+            normal = Path(game_install_dir) / relative_path
+            disabled = normal.with_name(f"{normal.name}.disabled")
+            source, target = (disabled, normal) if restore else (normal, disabled)
+            if source.is_file():
+                source.replace(target)
+                results.append(f"已{'恢复' if restore else '屏蔽'}地图附属文件：{normal.name}")
         return results
 
 

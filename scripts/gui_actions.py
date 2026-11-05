@@ -644,7 +644,7 @@ class ActionsMixin:
         self.set_step_state("rename_pak", "running")
         try:
             messages = yield lambda: self.workflow.rename_pak_files(
-                self.config.game_install_dir, self.config.active_pak_names)
+                self.config.game_install_dir, self.config.active_pak_names, self.config.active_extra_files)
             for message in messages:
                 self.write_log(message)
             yield lambda: self.workflow.require_paks_disabled(
@@ -721,7 +721,7 @@ class ActionsMixin:
             self.set_step_state("restore_pak", "running")
             try:
                 yield lambda: self.workflow.restore_stage_four_paks(
-                    self.config.game_install_dir, self.config.active_pak_names)
+                    self.config.game_install_dir, self.config.active_pak_names, self.config.active_extra_files)
             except ControlInterrupted:
                 raise
             except Exception as exc:
@@ -980,7 +980,8 @@ class ActionsMixin:
                 self.config.game_install_dir, self.config.active_pak_names) == "disabled" else "disable")
             action = "restored" if target == "restore" else "disabled"
             operation = self.workflow.restore_pak_files if target == "restore" else self.workflow.rename_pak_files
-            results = yield lambda: operation(self.config.game_install_dir, self.config.active_pak_names)
+            results = yield lambda: operation(self.config.game_install_dir, self.config.active_pak_names,
+                                              self.config.active_extra_files)
             for msg in results:
                 self.write_log(f"  └─ {msg}")
             if action == "disabled":

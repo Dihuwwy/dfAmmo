@@ -16,6 +16,18 @@ DEFAULT_PAK_NAMES = (
     "pak-0-2-pakchunk90-WindowsClient.pak",
     "pak-0-2-pakchunk90optional-WindowsClient.pak",
 )
+# Deleting a map also removes its cutscenes, and the game then downloads them
+# again. Unlike Paks these are optional: any that exist are disabled alongside.
+CHANGGONG_EXTRA_FILES = tuple(
+    f"DeltaForce/Content/Movies_HD/SeamlessEntry/{name}.bin"
+    for name in (
+        "Forrest_Intro",
+        "Forrest_Outro",
+        "SOL_Common_Wildfire_5k",
+        "SOL_Forest_Intro_Wildfire_5k",
+        "SOL_Forest_Outro_Wildfire_5k",
+    )
+)
 TEMPLATE_RENAMES = {
     "wegame_assets_manage.png": "wegame_resource_manager_menu.png",
     "wegame_assests_manage.png": "wegame_resource_manager_header.png",
@@ -90,6 +102,10 @@ class AppConfig:
             return ("pak-0-2-pakchunk219-WindowsClient.pak",
                     "pak-0-2-pakchunk219optional-WindowsClient.pak")
         return tuple(self.pak_file_names)
+
+    @property
+    def active_extra_files(self) -> tuple[str, ...]:
+        return () if self.map_id == "az3" else CHANGGONG_EXTRA_FILES
 
     def map_template(self, name: str) -> str:
         if self.map_id != "az3":
