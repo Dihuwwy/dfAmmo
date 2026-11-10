@@ -7,14 +7,10 @@ import sys
 import threading
 
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication, QDialog, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
-from scripts.md3_widgets import CompactComboBox, FilledCheckBox
 
-from scripts.config import APP_ICON_PATH, PROJECT_ROOT
+from scripts.config import PROJECT_ROOT
 from scripts.update_service import REPO_URL, Release, UpdateCancelled, UpdateService
 from scripts.version import current_version
-from scripts.styles import COLOR_TEXT_DISABLED, COLOR_SURFACE_SECONDARY
 
 
 class UpdateWorker(QObject):
@@ -48,6 +44,9 @@ class UpdateWorker(QObject):
 
 
 class UpdateMixin:
+    _update_setting_keys = {"update_channel": "updateChannel", "check_updates_on_startup": "checkOnStartup",
+                            "auto_update": "autoUpdate"}
+
     def _init_updates(self):
         self.app_version = current_version()
         self.update_worker = UpdateWorker(self)
@@ -56,7 +55,6 @@ class UpdateMixin:
         self.update_worker.finished.connect(self._update_finished, Qt.ConnectionType.QueuedConnection)
         self.update_worker.progress.connect(self.write_log, Qt.ConnectionType.QueuedConnection)
         self.available_release: Release | None = None
-        self.about_dialog = None
         self._update_plan: Path | None = None
         self._update_installing = False
         self._auto_update_pending = False
@@ -66,6 +64,15 @@ class UpdateMixin:
         self._auto_update_timer = QTimer(self)
         self._auto_update_timer.setInterval(3000)
         self._auto_update_timer.timeout.connect(self._try_auto_update)
+        self._set_ui(
+            appVersion=self.app_version,
+            runtime="EXE 便携版" if getattr(sys, "frozen", False) else "源码版",
+            repoUrl=REPO_URL,
+            updateChannel=self.config.update_channel,
+            checkOnStartup=self.config.check_updates_on_startup,
+            autoUpdate=self.config.auto_update,
+        )
+        self._sync_update_buttons()
 
     def startup_updates(self):
         result_path = PROJECT_ROOT / ".updates" / "result.json"
@@ -77,76 +84,16 @@ class UpdateMixin:
                 self.write_log(message)
                 if not result.get("ok"):
                     self.config = replace(self.config, auto_update=False)
+                    self._set_ui(autoUpdate=False)
                 result_path.unlink()
             except (OSError, ValueError, KeyError) as exc:
                 self.write_log(f"读取更新结果失败：{exc}")
         if self.config.check_updates_on_startup:
             QTimer.singleShot(1200, self.check_updates)
 
-    def show_about(self):
-        if self.about_dialog is None:
-            dialog = QDialog(self)
-            dialog.setWindowTitle("关于 dfAmmo")
-            dialog.setWindowIcon(QIcon(str(APP_ICON_PATH)))
-            dialog.setMinimumWidth(420)
-            dialog.setStyleSheet(f"QPushButton#secondaryButton:disabled {{ color: {COLOR_TEXT_DISABLED}; "
-                                f"background-color: {COLOR_SURFACE_SECONDARY}; }}")
-            layout = QVBoxLayout(dialog)
-            layout.setContentsMargins(22, 20, 22, 20)
-            layout.setSpacing(14)
-            heading = QHBoxLayout()
-            icon = QLabel()
-            icon.setPixmap(QIcon(str(APP_ICON_PATH)).pixmap(48, 48))
-            icon.setFixedSize(48, 48)
-            title = QLabel("dfAmmo")
-            title.setStyleSheet("font-size: 24px; font-weight: 600;")
-            heading.addWidget(icon)
-            heading.addWidget(title)
-            heading.addStretch()
-            layout.addLayout(heading)
-            runtime = "EXE 便携版" if getattr(sys, "frozen", False) else "源码版"
-            layout.addWidget(QLabel(f"版本 {self.app_version}  ·  {runtime}"))
-            repo = QLabel(f'<a href="{REPO_URL}">GitHub 项目主页</a>')
-            repo.setOpenExternalLinks(True)
-            layout.addWidget(repo)
-            channel_row = QHBoxLayout()
-            channel_row.addWidget(QLabel("更新渠道"))
-            self.update_channel_combo = CompactComboBox()
-            self.update_channel_combo.addItem("正式版", "stable")
-            self.update_channel_combo.addItem("测试版", "beta")
-            self.update_channel_combo.setCurrentIndex(self.update_channel_combo.findData(self.config.update_channel))
-            self.update_channel_combo.currentIndexChanged.connect(
-                lambda: self._save_update_setting("update_channel", self.update_channel_combo.currentData()))
-            channel_row.addWidget(self.update_channel_combo)
-            channel_row.addStretch(1)
-            layout.addLayout(channel_row)
-            self.startup_check_box = FilledCheckBox("启动时检查更新")
-            self.startup_check_box.setChecked(self.config.check_updates_on_startup)
-            self.auto_update_box = FilledCheckBox("自动安装更新（任务空闲时）")
-            self.auto_update_box.setChecked(self.config.auto_update)
-            self.startup_check_box.toggled.connect(lambda checked: self._save_update_setting("check_updates_on_startup", checked))
-            self.auto_update_box.toggled.connect(lambda checked: self._save_update_setting("auto_update", checked))
-            layout.addWidget(self.startup_check_box)
-            layout.addWidget(self.auto_update_box)
-            buttons = QHBoxLayout()
-            self.check_update_button = QPushButton("检查更新")
-            self.install_update_button = QPushButton("更新并重启")
-            self.cancel_update_button = QPushButton("取消更新")
-            self.check_update_button.clicked.connect(self.check_updates)
-            self.install_update_button.clicked.connect(self.install_update)
-            self.cancel_update_button.clicked.connect(self.cancel_update)
-            for button in (self.check_update_button, self.install_update_button, self.cancel_update_button):
-                button.setObjectName("secondaryButton")
-                buttons.addWidget(button)
-            layout.addLayout(buttons)
-            self.about_dialog = dialog
-        self._sync_update_buttons()
-        self.about_dialog.show()
-        self.about_dialog.raise_()
-        self.about_dialog.activateWindow()
-
     def _save_update_setting(self, field, checked):
         self.config = replace(self.config, **{field: checked})
+        self._set_ui(**{self._update_setting_keys[field]: checked})
         try:
             self.config.save_to_file()
         except OSError as exc:
@@ -163,6 +110,7 @@ class UpdateMixin:
             elif not checked:
                 self._auto_update_pending = False
                 self._auto_update_timer.stop()
+            self._sync_update_buttons()
 
     def _automation_active(self):
         return (self.task_runner.busy or self.navigation_timer.isActive() or self.game_process_timer.isActive()
@@ -170,13 +118,13 @@ class UpdateMixin:
                 or (self.capture_overlay is not None and self.capture_overlay.isVisible()))
 
     def _sync_update_buttons(self):
-        if self.about_dialog is None:
-            return
+        busy = self.update_worker.busy
         pending = self._update_plan is not None
-        self.update_channel_combo.setEnabled(not self.update_worker.busy and not pending)
-        self.check_update_button.setEnabled(not self.update_worker.busy and not pending)
-        self.install_update_button.setEnabled(self.available_release is not None and not self.update_worker.busy and not pending)
-        self.cancel_update_button.setEnabled(self.update_worker.busy or pending or self._auto_update_pending)
+        self._set_ui(
+            canCheckUpdate=not busy and not pending,
+            canInstallUpdate=self.available_release is not None and not busy and not pending,
+            canCancelUpdate=busy or pending or self._auto_update_pending,
+        )
 
     def check_updates(self):
         if self.update_worker.busy or self._update_plan is not None or self.update_worker.closed:
@@ -205,9 +153,7 @@ class UpdateMixin:
         self._sync_update_buttons()
 
     def _lock_update_controls(self, locked):
-        self.feature_panel.setEnabled(not locked)
-        self.debug_panel.setEnabled(not locked)
-        self.bind_button.setEnabled(not locked)
+        self._set_ui(controlsLocked=locked)
 
     def _update_finished(self, kind, result):
         if self.update_worker.closed:
@@ -236,8 +182,7 @@ class UpdateMixin:
             self._update_installing = True
             self.write_log("更新助手已启动，正在退出程序以安装更新。")
             self._flush_log_buffer()
-            self.close()
-            QApplication.instance().quit()
+            self.windowClosing()
             return
         self._sync_update_buttons()
 

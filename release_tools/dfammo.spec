@@ -5,7 +5,8 @@ a = Analysis(
     [str(root / "main.py")],
     pathex=[str(root)],
     binaries=[],
-    datas=[],
+    # The Qt Quick interface is loaded from files next to scripts/gui.py.
+    datas=[(str(root / "scripts" / "qml"), "scripts/qml")],
     hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],

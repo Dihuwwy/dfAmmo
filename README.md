@@ -196,9 +196,10 @@ dfAmmo/
 ├── assets/templates/        # 视觉识别模板
 └── scripts/
     ├── app.py               # Qt 应用初始化
-    ├── gui.py               # 主窗口与事件调度
-    ├── gui_builder.py       # 界面布局
+    ├── gui.py               # 界面控制器：状态发布与 QML 调用入口
     ├── gui_actions.py       # 操作入口与阶段衔接
+    ├── qml/Main.qml         # Qt Quick 主界面
+    ├── qml/DfUi/            # 界面组件与配色
     ├── workflow.py          # 工作流服务与文件操作
     ├── game_navigation.py   # 游戏导航状态机
     ├── game_result.py       # 提示处理、大厅与仓库收尾
@@ -212,12 +213,13 @@ dfAmmo/
     ├── template_capture.py  # 框选采集
     ├── screenshot.py        # 截图保存
     ├── config.py            # 配置读写
-    ├── update_ui.py         # 关于窗口与后台更新控制
+    ├── update_ui.py         # 后台更新控制
     ├── update_service.py    # 版本检查、下载校验与源码获取
     ├── update_apply.py      # 退出后的安装、回滚与重启
-    ├── version.py           # 当前版本读取
-    └── styles.py            # 界面样式
+    └── version.py           # 当前版本读取
 ```
+
+界面使用 Qt Quick（QML）绘制，由 PySide6 自带，无需额外依赖。`gui.py` 把状态发布给 QML，QML 只负责显示并调用 `gui.py` 的入口；工作流代码不直接操作界面元素。
 
 ## 故障排查
 

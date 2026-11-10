@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import os
 import sys
 
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
 
 from scripts.config import APP_ICON_PATH
-from scripts.gui import MainWindow
+from scripts.gui import MainController
 from scripts.logger import get_logger
 
 
@@ -17,15 +16,17 @@ class App:
     def __init__(self) -> None:
         self.logger = get_logger(__name__)
         self.qt_app: QApplication | None = None
-        self.window: MainWindow | None = None
+        self.controller: MainController | None = None
 
     def run(self) -> int:
         self.logger.info("Application started.")
-        # The default DirectWrite engine draws text with coloured subpixel fringes.
-        os.environ.setdefault("QT_QPA_PLATFORM", "windows:fontengine=freetype")
+        # QApplication rather than QGuiApplication: the capture overlay and
+        # the folder dialog are still widgets.
         self.qt_app = QApplication.instance() or QApplication(sys.argv)
+        # The window is hidden while a template is captured; quitting is explicit.
+        self.qt_app.setQuitOnLastWindowClosed(False)
         self.qt_app.setWindowIcon(QIcon(str(APP_ICON_PATH)))
-        self.window = MainWindow()
-        self.window.show()
-        self.window.startup_updates()
+        self.controller = MainController()
+        self.controller.show()
+        self.controller.startup_updates()
         return self.qt_app.exec()

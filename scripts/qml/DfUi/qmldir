@@ -1,0 +1,10 @@
+module DfUi
+singleton Theme 1.0 Theme.qml
+Card 1.0 Card.qml
+Glyph 1.0 Glyph.qml
+Tip 1.0 Tip.qml
+AppButton 1.0 AppButton.qml
+StepPill 1.0 StepPill.qml
+Segmented 1.0 Segmented.qml
+Check 1.0 Check.qml
+Field 1.0 Field.qml
