@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 root = Path(SPECPATH).parent
 a = Analysis(
@@ -14,6 +15,25 @@ a = Analysis(
               "IPython", "tkinter", "pytest", "PyQt5", "PyQt6", "PySide2"],
     noarchive=False,
 )
+# PyInstaller collects every Qt Quick module. The interface uses the Basic
+# controls on Direct3D only, so drop the other styles, unused QML modules,
+# the QML debugger and the software OpenGL renderer.
+unused = re.compile(
+    r"PySide6/(?:"
+    r"opengl32sw\.dll"
+    r"|Qt6QuickControls2(?:Imagine|Material|Universal|Fusion|FluentWinUI3|Windows)\w*\.dll"
+    r"|Qt6(?:QuickDialogs2\w*|QuickParticles|QuickTimeline\w*|QuickVectorImage\w*|QuickTest|Test|Sql"
+    r"|QmlLocalStorage|QmlXmlListModel|QuickShapesDesignHelpers|Labs\w+)\.dll"
+    r"|qml/QtQuick/Controls/(?:FluentWinUI3|Windows|Material|Fusion|Universal|Imagine|designer)/"
+    r"|qml/QtQuick/(?:VirtualKeyboard|NativeStyle|Dialogs|Particles|Timeline|VectorImage|LocalStorage|tooling)/"
+    r"|qml/(?:Qt/labs|QtTest)/"
+    r"|plugins/qmltooling/"
+    r")",
+    re.IGNORECASE,
+)
+a.binaries = [entry for entry in a.binaries if not unused.search(entry[0].replace("\\", "/"))]
+a.datas = [entry for entry in a.datas if not unused.search(entry[0].replace("\\", "/"))]
+
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, [],
