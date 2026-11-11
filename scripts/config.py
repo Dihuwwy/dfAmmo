@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import shutil
 import sys
 from dataclasses import dataclass, asdict
 from pathlib import Path
@@ -120,9 +122,15 @@ class AppConfig:
 
     def save_to_file(self, path: Path | None = None, *, overwrite: bool = True) -> None:
         path = path or CONFIG_FILE
-        data = asdict(self)
-        with path.open("w" if overwrite else "x", encoding="utf-8") as stream:
-            json.dump(data, stream, ensure_ascii=False, indent=2)
+        text = json.dumps(asdict(self), ensure_ascii=False, indent=2)
+        if not overwrite:
+            with path.open("x", encoding="utf-8") as stream:
+                stream.write(text)
+            return
+        # Write beside the target, then swap: a crash mid-save cannot truncate the settings.
+        temporary = path.with_name(path.name + ".tmp")
+        temporary.write_text(text, encoding="utf-8")
+        os.replace(temporary, path)
 
     @classmethod
     def load_from_file(cls, path: Path | None = None) -> AppConfig:
@@ -145,5 +153,13 @@ class AppConfig:
             except OSError as exc:
                 logging.getLogger(__name__).warning("无法创建默认配置 %s，使用内存默认配置：%s", path, exc)
             return config
-        except (json.JSONDecodeError, OSError, TypeError, UnicodeDecodeError):
+        except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as exc:
+            # Keep the unreadable file: the next save would overwrite it with defaults.
+            try:
+                shutil.copy2(path, path.with_name(path.stem + ".corrupt.json"))
+            except OSError:
+                pass
+            logging.getLogger(__name__).warning("配置文件无法解析，已使用默认配置并备份原文件：%s", exc)
+            return cls()
+        except OSError:
             return cls()
