@@ -282,6 +282,10 @@ class GameNavigator:
     def _align_to_step(self, index: int, confidence: float) -> NavigationEvent:
         old_index = self.step_index
         self.step_index = index
+        if index < old_index:
+            # Earlier inputs must be sent again, not skipped as already done.
+            for key in [key for key in self.progress.completed if isinstance(key, tuple) and key[0] == "lobby"]:
+                del self.progress.completed[key]
         # Repeated recognition of one screen must not extend its timeout forever.
         if old_index != index:
             self.deadline = time.monotonic() + self.step_timeout_seconds
@@ -328,10 +332,12 @@ class GameNavigator:
                 return None
 
             self.deadline = now + self.step_timeout_seconds
-            # Takeovers align from the remembered step; explicit jumps retain their target.
+            # A takeover trusts the screen over the remembered step: while stopped, the game
+            # may have moved either way (a cancelled match returns to the lobby). Explicit
+            # jumps retain their target.
             resync_msg = ""
             if self.auto_align:
-                resync_event = self.resync_state(allow_backtrack=False)
+                resync_event = self.resync_state()
                 if resync_event is not None:
                     if resync_event.status in (NavigationStatus.COMPLETE, NavigationStatus.PAUSED):
                         return resync_event
@@ -425,6 +431,8 @@ class GameNavigator:
                     return self._fail(
                         f"步骤“{step.name}”匹配超时，"
                         f"最高相似度={self.best_confidence:.3f}。"
+                        + ("当前画面既不是选人界面，也不是可识别的大厅步骤；若已进入对局，请手动处理后重新开始。"
+                           if step.action == "detect" else "")
                     )
                 return None
             position = matched_result.position
