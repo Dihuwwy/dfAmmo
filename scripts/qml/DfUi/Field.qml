@@ -16,6 +16,10 @@ TextField {
     selectionColor: "#BCD3FB"
     selectedTextColor: Theme.text
     selectByMouse: true
+    ContextMenu.menu: TextMenu {
+        target: control
+        editable: true
+    }
 
     background: Rectangle {
         radius: Theme.radius

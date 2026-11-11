@@ -685,6 +685,7 @@ ApplicationWindow {
                                 selectionColor: "#3B5B9A"
                                 selectedTextColor: "#FFFFFF"
                                 font: ui.logFont
+                                ContextMenu.menu: TextMenu { target: logText }
                                 background: null
                             }
                         }
