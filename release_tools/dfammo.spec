@@ -28,7 +28,13 @@ unused = re.compile(
     r"|qml/QtQuick/(?:VirtualKeyboard|NativeStyle|Dialogs|Particles|Timeline|VectorImage|LocalStorage|tooling)/"
     r"|qml/(?:Qt/labs|QtTest)/"
     r"|plugins/qmltooling/"
-    r")",
+    # Interface text is written in Chinese already; only ICO and the built-in PNG are loaded.
+    r"|translations/"
+    r"|plugins/imageformats/q(?!ico)\w+\.dll"
+    r")"
+    # OpenCV loads FFmpeg only for video; Pillow is used for screen grabs and PNG alone.
+    r"|cv2/opencv_videoio_ffmpeg\w*\.dll"
+    r"|PIL/_(?:avif|webp|imagingcms|imagingtk)\.",
     re.IGNORECASE,
 )
 a.binaries = [entry for entry in a.binaries if not unused.search(entry[0].replace("\\", "/"))]
