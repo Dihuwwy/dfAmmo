@@ -278,14 +278,13 @@ class Workflow:
                     results.append(f"已存在同名重命名文件：{target.name}")
                     continue
                 results.append(f"检测到同名正常文件 {name}，正在覆盖恢复...")
-                try:
-                    self.control.check()
-                    target.unlink()
-                except OSError as exc:
-                    results.append(f"删除同名文件失败：{exc}")
-                    continue
             self.control.check()
-            source.rename(target)
+            try:
+                # replace() swaps in one step; on failure both files stay as they were.
+                source.replace(target)
+            except OSError as exc:
+                results.append(f"{'恢复' if restore else '重命名'}失败：{name}：{exc}")
+                continue
             action = "恢复正常" if restore else "重命名"
             results.append(f"已{action}：{source.name} -> {target.name}")
         return results
@@ -312,11 +311,6 @@ class Workflow:
             return "disabled"
         return "normal" if any((pak_dir / name).exists() for name in pak_names) else "missing"
 
-
-    def toggle_pak_files(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> tuple[str, list[str]]:
-        if self.get_pak_status(game_install_dir, pak_names) == "disabled":
-            return "restored", self.restore_pak_files(game_install_dir, pak_names)
-        return "disabled", self.rename_pak_files(game_install_dir, pak_names)
 
     def require_pak_targets(self, game_install_dir: str, pak_names=DEFAULT_PAK_NAMES) -> None:
         """Refuse a flow that would end the game before its Pak step can work."""
@@ -378,6 +372,9 @@ class Workflow:
                 )
                 return position, template_path
             except ControlInterrupted:
+                raise
+            except FileNotFoundError:
+                # A missing template will not appear by waiting.
                 raise
             except Exception as exc:
                 last_error = str(exc)
