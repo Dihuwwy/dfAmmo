@@ -376,6 +376,9 @@ class ActionsMixin:
     # ── Template Capture ─────────────────────────────────────────────────────
 
     def start_template_capture(self, name: str) -> None:
+        if self._automation_active():
+            self.write_log("请先停止当前任务，再采集模板。")
+            return
         self.pending_template_name = name.strip()
         if not self.pending_template_name:
             self.write_log("模板名称不能为空。")
