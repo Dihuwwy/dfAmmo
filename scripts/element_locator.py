@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import weakref
 
 import cv2
 import numpy as np
@@ -37,6 +38,8 @@ class ElementLocator:
     def __init__(self, control: TaskControl | None = None) -> None:
         self.control = control or TaskControl()
         self._template_cache: dict[str, tuple[tuple[int, int], np.ndarray]] = {}
+        self._half_templates: dict[int, tuple[np.ndarray, np.ndarray]] = {}
+        self._half_source: tuple[weakref.ref, np.ndarray] | None = None
 
     def get_template(self, template_path: str | Path) -> np.ndarray:
         self.control.check()
@@ -110,16 +113,10 @@ class ElementLocator:
                 matched=False,
             )
 
-        result = cv2.matchTemplate(source, template, cv2.TM_CCOEFF_NORMED)
+        max_value, max_location = self._best_match(source, template, threshold)
         self.control.check()
-        _, max_value, _, max_location = cv2.minMaxLoc(result)
-
-        window_width = bound_window.right - bound_window.left
-        window_height = bound_window.bottom - bound_window.top
-        scale_x = window_width / source_width
-        scale_y = window_height / source_height
-        center_x = bound_window.left + round((max_location[0] + template_width / 2) * scale_x)
-        center_y = bound_window.top + round((max_location[1] + template_height / 2) * scale_y)
+        center_x = bound_window.left + round(max_location[0] + template_width / 2)
+        center_y = bound_window.top + round(max_location[1] + template_height / 2)
 
         return MatchResult(
             position=ElementPosition(
@@ -131,6 +128,56 @@ class ElementLocator:
             ),
             matched=max_value >= threshold,
         )
+
+    def _best_match(self, source: np.ndarray, template: np.ndarray, threshold: float):
+        """Return (score, top-left) of the best match.
+
+        A full-resolution search of a whole screen takes about 0.2 s per
+        template. Large frames are searched at half size first; the best
+        candidates are then scored at full resolution, so a hit has the same
+        score and position as the exhaustive search. A near miss falls back
+        to the exhaustive search rather than trusting the small image.
+        """
+        source_height, source_width = source.shape[:2]
+        template_height, template_width = template.shape[:2]
+        if source_height * source_width < 1_000_000 or min(template_height, template_width) < 32:
+            return self._full_match(source, template)
+
+        if self._half_source is None or self._half_source[0]() is not source:
+            self._half_source = (weakref.ref(source), cv2.resize(source, None, fx=0.5, fy=0.5,
+                                                                 interpolation=cv2.INTER_AREA))
+        half_source = self._half_source[1]
+        cached = self._half_templates.get(id(template))
+        if cached is None or cached[0] is not template:
+            cached = (template, cv2.resize(template, None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA))
+            self._half_templates[id(template)] = cached
+        half_template = cached[1]
+        coarse = np.nan_to_num(cv2.matchTemplate(half_source, half_template, cv2.TM_CCOEFF_NORMED),
+                               nan=-1.0, posinf=-1.0, neginf=-1.0)
+        coarse_best = float(coarse.max())
+        best_value, best_location = -1.0, (0, 0)
+        margin = 4
+        for _ in range(3):
+            _, value, _, (x, y) = cv2.minMaxLoc(coarse)
+            if value < coarse_best - 0.2:
+                break
+            left, top = max(0, 2 * x - margin), max(0, 2 * y - margin)
+            region = source[top:2 * y + margin + template_height, left:2 * x + margin + template_width]
+            if region.shape[0] >= template_height and region.shape[1] >= template_width:
+                fine_value, (fine_x, fine_y) = self._full_match(region, template)
+                if fine_value > best_value:
+                    best_value, best_location = fine_value, (left + fine_x, top + fine_y)
+            # Suppress this peak before looking for the next candidate.
+            coarse[max(0, y - half_template.shape[0] // 2):y + half_template.shape[0] // 2 + 1,
+                   max(0, x - half_template.shape[1] // 2):x + half_template.shape[1] // 2 + 1] = -1.0
+        if best_value < threshold and coarse_best >= threshold - 0.2:
+            return self._full_match(source, template)
+        return best_value, best_location
+
+    @staticmethod
+    def _full_match(source: np.ndarray, template: np.ndarray):
+        _, value, _, location = cv2.minMaxLoc(cv2.matchTemplate(source, template, cv2.TM_CCOEFF_NORMED))
+        return float(value), location
 
     def match_by_image(
         self,
