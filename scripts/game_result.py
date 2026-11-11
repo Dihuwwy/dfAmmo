@@ -47,6 +47,34 @@ def _wait_for_game_window(workflow, timeout, action):
     raise RuntimeError(f"第四阶段未能取得游戏窗口，未发送{action}。{last_error}")
 
 
+def _screen_shows(workflow, paths, threshold):
+    """Look at the game once: the name of the first template on screen, or None."""
+    try:
+        window = _active_game_window(workflow)
+        if window is None:
+            return None
+        source = workflow.locator.grab_window_bgr(window)
+    except TRANSIENT_ERRORS:
+        return None
+    for path in paths:
+        if path.is_file() and workflow.locator.match_in_source(source, path, window, threshold).matched:
+            return path.name
+    return None
+
+
+def _forget(progress, *names):
+    """Drop checkpoints, including per-key ones, so their inputs are sent again."""
+    for key in list(progress.completed):
+        if key in names or (isinstance(key, tuple) and key[0] in names):
+            del progress.completed[key]
+
+
+def _mark_keys_sent(progress, name, sequence):
+    for index, (_, repeat) in enumerate(sequence):
+        for number in range(repeat):
+            progress.completed[(name, index, number)] = None
+
+
 def wait_for_reconnect_notice(workflow, template_path: Path, confirm_path: Path,
                              threshold: float, timeout: float) -> bool:
     """Recognize the notice, then click its associated confirmation command."""
@@ -122,17 +150,32 @@ def _wait_for_game_ui(workflow, template_paths, threshold, timeout):
 def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, threshold, timeout):
     """One stage-four action: two notices, mode selection, activities and lobby."""
     progress = workflow.progress
-    if not progress.run("first_notice", lambda: wait_for_reconnect_notice(
-            workflow, template_path, confirm_path, threshold, timeout)):
-        return False
     directory = template_path.parent
     step_timeout = workflow.game_navigator.step_timeout_seconds
     mode_step = step_by_key("select_mode")
     lobby_step = step_by_key("enter_lobby")
+    mode_path = directory / mode_step.template_name
+    lobby_paths = [directory / "df_map_choose.png", directory / workflow.game_navigator.selected_map_template,
+                   directory / "df_start_manoeuver.png"]
+    if progress.completed:
+        # Resuming: checkpoints record what was sent, the screen shows what took effect.
+        seen = _screen_shows(workflow, [*lobby_paths, mode_path, template_path], threshold)
+        if seen in {path.name for path in lobby_paths}:
+            progress.completed.update(first_notice=True, mode=None, second_notice=True)
+            _mark_keys_sent(progress, "lobby", lobby_step.key_sequence)
+        elif seen == mode_path.name:
+            progress.completed["first_notice"] = True
+            _forget(progress, "mode", "second_notice", "lobby")
+        elif seen == template_path.name:
+            _forget(progress, "second_notice" if "mode" in progress.completed else "first_notice", "lobby")
+        if seen:
+            workflow.report_progress(f"[对齐] 第四阶段当前画面：{seen}，据此继续。")
+    if not progress.run("first_notice", lambda: wait_for_reconnect_notice(
+            workflow, template_path, confirm_path, threshold, timeout)):
+        return False
     workflow.report_progress("第四阶段：等待烽火模式选择...")
     def choose_mode():
-        window, position, _ = _wait_for_game_ui(
-            workflow, [directory / mode_step.template_name], threshold, step_timeout)
+        window, position, _ = _wait_for_game_ui(workflow, [mode_path], threshold, step_timeout)
         workflow.clicker.click(replace(position, width=0, height=0), window.handle)
     progress.run("mode", choose_mode)
     workflow.report_progress("第四阶段：已点击 df_mode_choose，等待第二次提示并确认...")
@@ -145,10 +188,7 @@ def confirm_notices_and_enter_lobby(workflow, template_path, confirm_path, thres
     progress.keys("lobby", workflow.keyboard, lobby_step.key_sequence, window.handle)
     workflow.report_progress("第四阶段：已按两次空格跳过活动并按一次 Tab，等待大厅画面。")
     workflow.control.wait(lobby_step.delay_after)
-    _, position, name = _wait_for_game_ui(
-        workflow, [directory / "df_map_choose.png", directory / workflow.game_navigator.selected_map_template,
-                   directory / "df_start_manoeuver.png"],
-        threshold, step_timeout)
+    _, position, name = _wait_for_game_ui(workflow, lobby_paths, threshold, step_timeout)
     workflow.report_progress(f"第四阶段已进入烽火大厅：{name}，相似度={position.confidence:.3f}；本步完成。")
     return True
 
@@ -161,6 +201,19 @@ def request_map_redownload(workflow, directory, choice_name, panel_name, thresho
             raise FileNotFoundError(f"缺少第四阶段地图恢复模板：{path.name}")
     steps = [([directory / "df_map_choose.png", directory / workflow.game_navigator.selected_map_template], "打开地图选择"),
              ([choice], "选择待恢复的地图")]
+    progress = workflow.progress
+    if progress.completed:
+        # Resuming: a later screen is handled below; an earlier one means its click must be redone.
+        seen = _screen_shows(workflow, [panel, choice, *steps[0][0]], threshold)
+        if seen in {path.name for path in steps[0][0]}:
+            if "download" in progress.completed:
+                _mark_keys_sent(progress, "return_lobby", ((win32con.VK_ESCAPE, 2),))
+            else:
+                _forget(progress, "map_0", "map_1")
+        elif seen == choice.name and "download" not in progress.completed:
+            _forget(progress, "map_1")
+        if seen:
+            workflow.report_progress(f"[对齐] 第四阶段当前画面：{seen}，据此继续。")
     def choose(paths, label, following):
         window, position, name = _wait_for_game_ui(workflow, following + paths, threshold, timeout)
         if name in {path.name for path in paths}:
@@ -205,6 +258,8 @@ def enter_warehouse_and_confirm(workflow, notice_path, confirm_path, threshold, 
         threshold, timeout)
     if name != notice_path.name:
         workflow.control.check()
+        # Back in the lobby, an earlier E no longer counts.
+        workflow.progress.completed.pop("warehouse_enter", None)
         window = workflow.window_binder.activate(window)
         workflow.progress.run("warehouse_enter", lambda: workflow.keyboard.press(ord("E"), window_handle=window.handle))
         workflow.report_progress("第四阶段：已在大厅按 E，等待仓库提示...")

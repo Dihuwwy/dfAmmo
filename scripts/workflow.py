@@ -118,6 +118,18 @@ class Workflow:
             self.control.wait(0.25)
         return window
 
+    def locate_wegame_step(self, bound_window: BoundWindow, menu_template_name: str,
+                           threshold: float = 0.78) -> str:
+        """Tell which WeGame step the screen is at, for resuming after a stop."""
+        self.control.check()
+        if self.window_binder.bind_by_title("游戏资源包管理") is not None:
+            return "delete_map"
+        self._bring_to_front(bound_window)
+        menu_path = TEMPLATE_DIR / menu_template_name
+        if menu_path.exists() and self.locator.match_on_screen(menu_path, threshold).matched:
+            return "assets_manage"
+        return "click_more"
+
     def click_start_button(
         self,
         bound_window: BoundWindow,

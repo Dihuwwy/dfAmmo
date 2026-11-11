@@ -252,7 +252,7 @@ class ActionsMixin:
         elif step == "toggle_pak":
             yield from self._dbg_rename_pak.__wrapped__(self)
         elif step in self._wegame_step_ids:
-            yield from self._run_wegame_post_process_tasks(start_step=step)
+            yield from self._run_wegame_post_process_tasks(start_step=step, realign=True)
         else:
             yield from self._run_stage_four_tasks(start_step=step)
 
@@ -627,12 +627,15 @@ class ActionsMixin:
             self._offer_continue("wait_wegame")
 
     @background_action
-    def _run_wegame_post_process(self, start_step: str = "wait_wegame"):
+    def _run_wegame_post_process(self, start_step: str = "wait_wegame", realign: bool = False):
         if not self._dbg_require_bound():
             return
         self.workflow.control.paused.clear()
         steps = self._wegame_steps()
         order = list(steps)
+        requested_index = order.index(start_step) if start_step in steps else 0
+        if realign and start_step in ("click_more", "assets_manage", "delete_map"):
+            start_step = yield from self._realign_wegame_step(start_step)
         start_index = order.index(start_step) if start_step in steps else 0
         for step_id in order[start_index:]:
             start_msg, action, success_msg, fail_label, delay = steps[step_id]
@@ -642,7 +645,8 @@ class ActionsMixin:
                 step_id, start_msg, action, success_msg, fail_label)
             if not succeeded:
                 return
-            if self.execution_mode == "step":
+            # Steps redone after stepping back do not count as the single step.
+            if self.execution_mode == "step" and order.index(step_id) >= requested_index:
                 next_index = order.index(step_id) + 1
                 self._offer_continue(order[next_index] if next_index < len(order) else "detect_result")
                 return
@@ -651,6 +655,27 @@ class ActionsMixin:
             yield from self._run_stage_four_tasks()
         else:
             self._offer_continue("detect_result")
+
+    def _realign_wegame_step(self, step: str):
+        """After a stop, continue from the step the WeGame screen is actually at."""
+        progress = self.workflow.progress
+        if step == "delete_map" and "bin" in progress.completed:
+            # The delete click was sent; the deletion logic verifies the rest itself.
+            return step
+        try:
+            located = yield partial(self.workflow.locate_wegame_step, self.bound_window,
+                                    self.config.wegame_assets_manage_template, self.config.template_match_threshold)
+        except ControlInterrupted:
+            raise
+        except Exception as exc:
+            self.write_log(f"未能识别 WeGame 当前画面，按原步骤继续：{exc}")
+            return step
+        if located != step:
+            self.write_log(f"[对齐] WeGame 画面处于【{self._steps[located]['title']}】，从该步骤继续。")
+        elif step != "delete_map":
+            # The click may have been sent without taking effect; the screen says it is still due.
+            progress.completed.pop("action", None)
+        return located
 
     @background_action
     def _run_stage_four(self, start_step: str = "detect_result"):
