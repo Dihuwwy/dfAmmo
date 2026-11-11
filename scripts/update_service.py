@@ -121,8 +121,12 @@ class UpdateService:
         if cache.is_dir() and not is_link(cache):
             for job in cache.glob("job-*"):
                 marker = job / "done"
-                if (job.is_dir() and not is_link(job) and job.resolve().parent == cache.resolve()
-                        and marker.is_file() and time.time() - marker.stat().st_mtime > 60):
+                if not (job.is_dir() and not is_link(job) and job.resolve().parent == cache.resolve()):
+                    continue
+                # Failed or cancelled jobs never get a marker; a day later nothing can still be using them.
+                finished = marker.is_file() and time.time() - marker.stat().st_mtime > 60
+                abandoned = not marker.exists() and time.time() - job.stat().st_mtime > 86400
+                if finished or abandoned:
                     try:
                         shutil.rmtree(job)
                     except OSError:
@@ -150,7 +154,13 @@ class UpdateService:
             return self.check_latest_redirect()
         self.check_cancelled()
         if self.channel == "beta":
-            releases = [item for item in data if not item.get("draft")]
+            def parses(item):
+                try:
+                    return bool(version_tuple(item["tag_name"]))
+                except (KeyError, ValueError):
+                    return False
+            # One tag in another format must not break the whole check.
+            releases = [item for item in data if not item.get("draft") and parses(item)]
             if not releases:
                 return None
             data = max(releases, key=lambda item: version_tuple(item["tag_name"]))

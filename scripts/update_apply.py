@@ -38,9 +38,19 @@ def wait_for_exit(pid: int, cancel_path: Path) -> None:
         kernel.CloseHandle(handle)
 
 
-def replace_file(source: Path, target: Path) -> None:
+def crosses_link(target: Path, root: Path) -> bool:
+    """Whether the path, or a folder between it and the install directory, is a link.
+
+    Folders above the install directory are the user's own choice (a synced
+    or redirected location) and are not checked.
+    """
+    return is_link(target) or any(is_link(parent) for parent in target.parents
+                                  if parent != root and parent.is_relative_to(root))
+
+
+def replace_file(source: Path, target: Path, root: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
-    if is_link(target) or any(is_link(parent) for parent in target.parents):
+    if crosses_link(target, root):
         raise ValueError(f"更新目标不能是符号链接：{target}")
     descriptor, temp_name = tempfile.mkstemp(prefix=".dfammo-", dir=target.parent)
     os.close(descriptor)
@@ -83,7 +93,7 @@ def apply_files(root: Path, payload: Path, backup: Path, portable: bool = True) 
     # Back up every changed file before replacing any of them.
     for name in sorted(changes):
         target = root / safe_relative(name)
-        if is_link(target) or any(is_link(parent) for parent in target.parents):
+        if crosses_link(target, root):
             raise ValueError("更新目标包含符号链接。")
         originals[name] = target.is_file()
         if target.exists() and not target.is_file():
@@ -97,7 +107,7 @@ def apply_files(root: Path, payload: Path, backup: Path, portable: bool = True) 
         for name in sorted(changes):
             target = root / safe_relative(name)
             if name in incoming:
-                replace_file(incoming[name], target)
+                replace_file(incoming[name], target, root)
             else:
                 target.unlink(missing_ok=True)
             touched.append(name)
@@ -105,7 +115,7 @@ def apply_files(root: Path, payload: Path, backup: Path, portable: bool = True) 
         for name in reversed(touched):
             target = root / safe_relative(name)
             if originals[name]:
-                replace_file(backup / safe_relative(name), target)
+                replace_file(backup / safe_relative(name), target, root)
             else:
                 target.unlink(missing_ok=True)
         raise
@@ -124,7 +134,7 @@ def pause_auto_updates(root: Path, job: Path) -> bool:
     try:
         saved = job / "paused-update-config.json"
         saved.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
-        replace_file(saved, config_path)
+        replace_file(saved, config_path, root)
         return True
     except OSError:
         return False
