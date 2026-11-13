@@ -414,6 +414,23 @@ class GameNavigator:
             self.last_confidence = best_cand_confidence
             self.best_confidence = max(self.best_confidence, self.last_confidence)
 
+            if matched_result is None and step.action == "detect":
+                # Matchmaking has no fixed length, so this step never times out. Pressing
+                # depart replaces that button with the matchmaking one; if depart is still
+                # (or again) on screen, the click missed or the match was cancelled.
+                depart_index = self.step_index_of("depart")
+                depart = self.locator.match_in_source(
+                    source, self.template_dir / self.steps[depart_index].template_name,
+                    self.bound_window, max(self.threshold, 0.90))
+                if depart.matched:
+                    self._align_to_step(depart_index, depart.position.confidence)
+                    return NavigationEvent(
+                        NavigationStatus.RUNNING,
+                        "出发按钮仍在画面上（未点中或匹配已取消），重新点击出发。"
+                        f"相似度={depart.position.confidence:.3f}",
+                    )
+                return None
+
             if matched_result is None:
                 step_elapsed = now - (self.deadline - self.step_timeout_seconds)
 
@@ -432,8 +449,6 @@ class GameNavigator:
                     return self._fail(
                         f"步骤“{step.name}”匹配超时，"
                         f"最高相似度={self.best_confidence:.3f}。"
-                        + ("当前画面既不是选人界面，也不是可识别的大厅步骤；若已进入对局，请手动处理后重新开始。"
-                           if step.action == "detect" else "")
                     )
                 return None
             position = matched_result.position

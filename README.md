@@ -122,7 +122,7 @@ uv run --frozen main.py
 | `template_match_threshold` | `0.78`；部分专用识别使用单独阈值 |
 | `game_process_names` | 游戏进程名候选列表 |
 | `game_process_timeout_seconds` | `120`；等待游戏进程的超时时间 |
-| `navigation_step_timeout_seconds` | `60`；导航步骤的超时时间 |
+| `navigation_step_timeout_seconds` | `60`；导航步骤的超时时间；等待选人界面不限时，期间若出发按钮仍在画面上会重新点击 |
 | `pak_file_names` | 需要屏蔽或恢复的 Pak 文件名列表 |
 | `game_confirm_template` | `df_confirm.png`；部分游戏提示共用的绿色确认模板 |
 | `wegame_confirm_delete_template` | `wegame_resource_delete_confirm.png`；完整的 WeGame 删除确认弹窗 |
