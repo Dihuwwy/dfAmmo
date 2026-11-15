@@ -473,7 +473,8 @@ class Workflow:
             raise FileNotFoundError(f"缺少资源管理器顶部模板：{manager_header_template}")
 
         if "bin" not in self.progress.completed:
-            dialog = self.locator.match_on_screen(TEMPLATE_DIR / confirm_template_name, threshold)
+            dialog = self.locator.match_on_screen(TEMPLATE_DIR / confirm_template_name, threshold,
+                                                  exhaustive=True)
             if dialog.matched:
                 self.progress.completed["bin"] = dialog.position
         if "bin" in self.progress.completed:
@@ -561,7 +562,7 @@ class Workflow:
         best_confidence = 0.0
         while time.monotonic() < deadline:
             self.control.check()
-            result = self.locator.match_by_image(template_path, region, threshold)
+            result = self.locator.match_by_image(template_path, region, threshold, exhaustive=True)
             best_confidence = max(best_confidence, result.position.confidence)
             if result.matched:
                 position = result.position
@@ -599,7 +600,7 @@ class Workflow:
         while time.monotonic() < deadline:
             self.control.check()
             # One full-screen match covers dialogs outside the manager's bounds.
-            result = self.locator.match_on_screen(template_path, threshold)
+            result = self.locator.match_on_screen(template_path, threshold, exhaustive=True)
             best_confidence = max(best_confidence, result.position.confidence)
             if result.matched:
                 self.control.check()

@@ -57,16 +57,20 @@ class ElementLocator:
         return cached[1]
 
 
-    def match_on_screen(self, template_path: str | Path, threshold: float = 0.78) -> MatchResult:
+    def match_on_screen(self, template_path: str | Path, threshold: float = 0.78,
+                        *, exhaustive: bool = False) -> MatchResult:
         source = self.grab_window_bgr()
         height, width = source.shape[:2]
         return self.match_in_source(source, template_path,
-                                    BoundWindow(0, right=width, bottom=height), threshold)
+                                    BoundWindow(0, right=width, bottom=height), threshold,
+                                    exhaustive=exhaustive)
 
     def match_resource_card(self, template_path: Path, threshold: float) -> MatchResult:
         source = self.grab_window_bgr()
         height, width = source.shape[:2]
-        result = self.match_in_source(source, template_path, BoundWindow(0, right=width, bottom=height), threshold)
+        result = self.match_in_source(source, template_path,
+                                      BoundWindow(0, right=width, bottom=height), threshold,
+                                      exhaustive=True)
         if not result.matched:
             return result
         template = self.get_template(template_path)
@@ -96,6 +100,8 @@ class ElementLocator:
         template_path: str | Path,
         bound_window: BoundWindow,
         threshold: float = 0.82,
+        *,
+        exhaustive: bool = False,
     ) -> MatchResult:
         template = self.get_template(template_path)
         source_height, source_width = source.shape[:2]
@@ -113,7 +119,10 @@ class ElementLocator:
                 matched=False,
             )
 
-        max_value, max_location = self._best_match(source, template, threshold)
+        if exhaustive:
+            max_value, max_location = self._full_match(source, template)
+        else:
+            max_value, max_location = self._best_match(source, template, threshold)
         self.control.check()
         center_x = bound_window.left + round(max_location[0] + template_width / 2)
         center_y = bound_window.top + round(max_location[1] + template_height / 2)
@@ -130,13 +139,10 @@ class ElementLocator:
         )
 
     def _best_match(self, source: np.ndarray, template: np.ndarray, threshold: float):
-        """Return (score, top-left) of the best match.
+        """Return (score, top-left) using an approximate search on large frames.
 
-        A full-resolution search of a whole screen takes about 0.2 s per
-        template. Large frames are searched at half size first; the best
-        candidates are then scored at full resolution, so a hit has the same
-        score and position as the exhaustive search. A near miss falls back
-        to the exhaustive search rather than trusting the small image.
+        Score the strongest half-size candidates on the original frame.
+        Candidates omitted by the coarse search can still be better matches.
         """
         source_height, source_width = source.shape[:2]
         template_height, template_width = template.shape[:2]
@@ -184,9 +190,12 @@ class ElementLocator:
         template_path: str | Path,
         bound_window: BoundWindow,
         threshold: float = 0.82,
+        *,
+        exhaustive: bool = False,
     ) -> MatchResult:
         source = self.grab_window_bgr(bound_window)
-        return self.match_in_source(source, template_path, bound_window, threshold)
+        return self.match_in_source(source, template_path, bound_window, threshold,
+                                    exhaustive=exhaustive)
 
     def find_fill_teammates(self, source, bound_window, template_path):
         """Find the label from its text strokes, then read the box from its own pixels.

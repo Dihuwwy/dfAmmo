@@ -261,7 +261,8 @@ class GameNavigator:
                 if not tmpl_path.exists():
                     continue
                 res = self.locator.match_in_source(
-                    source, tmpl_path, self.bound_window, max(self.threshold, 0.90)
+                    source, tmpl_path, self.bound_window, max(self.threshold, 0.90),
+                    exhaustive=cand_step.action == "detect",
                 )
                 if res.matched:
                     match_res = res
@@ -405,6 +406,7 @@ class GameNavigator:
                     self.bound_window,
                     # Recognizing operator select ends the game process; do not accept a loose match.
                     max(self.threshold, 0.90) if step.action == "detect" else self.threshold,
+                    exhaustive=step.action == "detect",
                 )
                 if cand_res.position.confidence > best_cand_confidence:
                     best_cand_confidence = cand_res.position.confidence
