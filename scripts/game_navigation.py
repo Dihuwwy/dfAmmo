@@ -362,6 +362,8 @@ class GameNavigator:
             return self._complete()
 
         step = self.steps[self.step_index]
+        if step.action == "detect" and not (self.template_dir / step.template_name).is_file():
+            return self._fail(f"缺少步骤“{step.name}”的模板：{step.template_name}。")
         if step.key == "enter_lobby":
             aligned = self.resync_state(allow_backtrack=False)
             current_key = self.current_step.key if self.current_step else None
