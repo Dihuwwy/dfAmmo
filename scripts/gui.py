@@ -95,6 +95,8 @@ class MainController(ActionsMixin, UpdateMixin, QObject):
         self._init_updates()
         self._load_window()
         self._restore_geometry()
+        if self.config.save_error:
+            self.write_log(self.config.save_error)
         self.write_log("请先绑定 WeGame 主窗口（如游戏已在运行，可直接点击“开始卡邮件”）。")
 
     # ── View Setup ───────────────────────────────────────────────────────────

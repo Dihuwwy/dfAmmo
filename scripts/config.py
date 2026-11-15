@@ -5,7 +5,7 @@ import logging
 import os
 import shutil
 import sys
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from pathlib import Path
 
 
@@ -93,6 +93,7 @@ class AppConfig:
     redownload_map_panel_template: str = "df_changgong_download_panel.png"
     warehouse_notice_template: str = "df_warehouse_notice.png"
     warehouse_notice_threshold: float = 0.90
+    save_error: str = field(default="", repr=False, compare=False, kw_only=True)
 
     @property
     def map_name(self) -> str:
@@ -121,8 +122,12 @@ class AppConfig:
         }.get(name, name)
 
     def save_to_file(self, path: Path | None = None, *, overwrite: bool = True) -> None:
+        if self.save_error:
+            raise OSError(self.save_error)
         path = path or CONFIG_FILE
-        text = json.dumps(asdict(self), ensure_ascii=False, indent=2)
+        data = asdict(self)
+        del data["save_error"]
+        text = json.dumps(data, ensure_ascii=False, indent=2)
         if not overwrite:
             with path.open("x", encoding="utf-8") as stream:
                 stream.write(text)
@@ -135,14 +140,16 @@ class AppConfig:
     @classmethod
     def load_from_file(cls, path: Path | None = None) -> AppConfig:
         path = path or CONFIG_FILE
+        logger = logging.getLogger(__name__)
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(data, dict):
-                return cls()
+                raise ValueError("配置文件顶层必须是 JSON 对象。")
             for key, value in data.items():
                 if key.endswith("_template") and isinstance(value, str):
                     data[key] = TEMPLATE_RENAMES.get(value, value)
-            return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+            return cls(**{k: v for k, v in data.items()
+                          if k in cls.__dataclass_fields__ and k != "save_error"})
         except FileNotFoundError:
             config = cls()
             try:
@@ -151,15 +158,19 @@ class AppConfig:
                 # Another instance may have created user settings while we were loading.
                 return cls.load_from_file(path)
             except OSError as exc:
-                logging.getLogger(__name__).warning("无法创建默认配置 %s，使用内存默认配置：%s", path, exc)
+                logger.warning("无法创建默认配置 %s，使用内存默认配置：%s", path, exc)
             return config
-        except (json.JSONDecodeError, TypeError, UnicodeDecodeError) as exc:
-            # Keep the unreadable file: the next save would overwrite it with defaults.
+        except (ValueError, TypeError) as exc:
+            backup = path.with_name(path.stem + ".corrupt.json")
             try:
-                shutil.copy2(path, path.with_name(path.stem + ".corrupt.json"))
-            except OSError:
-                pass
-            logging.getLogger(__name__).warning("配置文件无法解析，已使用默认配置并备份原文件：%s", exc)
+                shutil.copy2(path, backup)
+            except OSError as backup_error:
+                message = f"配置文件无法解析且备份失败，本次运行已禁止保存设置：{backup_error}"
+                logger.error(message)
+                return cls(save_error=message)
+            logger.warning("配置文件无法解析，将使用默认配置。原文件已备份到 %s：%s", backup, exc)
             return cls()
-        except OSError:
-            return cls()
+        except OSError as exc:
+            message = f"读取配置文件失败，本次运行已禁止保存设置：{exc}"
+            logger.error(message)
+            return cls(save_error=message)
