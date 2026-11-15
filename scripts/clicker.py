@@ -123,6 +123,8 @@ class Clicker:
         with physical_coordinates():
             self._move_to_point(x, y)
             self.control.wait(random.uniform(0.08, 0.15))
+            if window_handle is not None:
+                self._require_foreground(window_handle)
             self._click_with_send_input(x, y)
         return True
 

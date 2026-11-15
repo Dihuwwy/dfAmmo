@@ -111,9 +111,9 @@ class Workflow:
         deadline = time.monotonic() + timeout
         window = self.window_binder.activate(bound_window)
         self.control.wait(0.25)
-        while not self.clicker.foreground_belongs_to(window.handle) and time.monotonic() < deadline:
-            # An input event lifts Windows' foreground lock for the next attempt.
-            self.clicker.press(win32con.VK_MENU)
+        while not self.clicker.foreground_belongs_to(window.handle):
+            if time.monotonic() >= deadline:
+                raise RuntimeError("未能确认 WeGame 窗口在前台，已取消输入。")
             window = self.window_binder.activate(window)
             self.control.wait(0.25)
         return window
@@ -140,7 +140,8 @@ class Workflow:
         current_window = self._bring_to_front(bound_window)
         self.close_battle_report(current_window)
         position, template_path = self.find_start_button(current_window, template_names, threshold)
-        current_window = self._bring_to_front(current_window)
+        if self.window_binder.resolve(current_window) != current_window:
+            raise RuntimeError("定位启动按钮后 WeGame 窗口已变化，已取消点击。")
         self.clicker.click(position, current_window.handle)
         return position, template_path
 
