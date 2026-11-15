@@ -23,6 +23,18 @@ Rectangle {
     radius: Theme.radius
     color: Theme.fill
     opacity: enabled ? 1 : 0.55
+    activeFocusOnTab: true
+    border.width: activeFocus ? 1 : 0
+    border.color: Theme.primary
+
+    Keys.onLeftPressed: root.chooseRelative(-1)
+    Keys.onRightPressed: root.chooseRelative(1)
+
+    function chooseRelative(offset) {
+        const index = Math.min(options.length - 1, Math.max(0, currentIndex + offset))
+        if (index >= 0 && index !== currentIndex)
+            chosen(options[index].value)
+    }
 
     Rectangle {
         visible: root.currentIndex >= 0
@@ -55,7 +67,11 @@ Rectangle {
                 }
                 HoverHandler { id: hover }
                 TapHandler {
-                    onTapped: if (modelData.value !== root.value) root.chosen(modelData.value)
+                    onTapped: {
+                        root.forceActiveFocus(Qt.MouseFocusReason)
+                        if (modelData.value !== root.value)
+                            root.chosen(modelData.value)
+                    }
                 }
             }
         }
