@@ -60,6 +60,7 @@ class MainController(ActionsMixin, UpdateMixin, QObject):
         self._resume_step = None
         self._binding = False
         self._closed = False
+        self._close_pending = False
         self._log_buffer: list[tuple[str, str]] = []
         self._log_lines: list[tuple[str, str]] = []
         self._ui_state: dict = {}
@@ -197,16 +198,33 @@ class MainController(ActionsMixin, UpdateMixin, QObject):
         self.task_runner.shutdown()
         self.workflow.cancel_game_navigation()
 
-    @Slot()
-    def windowClosing(self) -> None:
+    @Slot(result=bool)
+    def windowClosing(self) -> bool:
+        if self.task_runner.busy:
+            if not self._close_pending:
+                self._close_pending = True
+                self.game_process_timer.stop()
+                self.navigation_timer.stop()
+                self.hotkey_timer.stop()
+                self.window.contentItem().setEnabled(False)
+                self.write_log("正在停止当前任务，操作结束后将关闭窗口。")
+                self.task_runner.cancel()
+            return False
+
         if not self._closed:
             QSettings("dfAmmo", "Assistant").setValue("quick/geometry", self.window.geometry())
         self.shutdown()
         QGuiApplication.quit()
+        return True
 
     # ── Worker and Hotkeys ───────────────────────────────────────────────────
 
     def _on_worker_busy_changed(self, busy: bool) -> None:
+        if self._close_pending:
+            if not busy and not self._closed:
+                QTimer.singleShot(0, self.window.close)
+            return
+
         running = self.navigation_timer.isActive() or self.game_process_timer.isActive()
         paused = self.workflow.is_navigation_paused
         self._set_ui(

@@ -18,7 +18,7 @@ ApplicationWindow {
     color: Theme.window
     font.family: ui.uiFont
     font.pixelSize: 13
-    onClosing: backend.windowClosing()
+    onClosing: (event) => { event.accepted = backend.windowClosing() }
 
     function scrollLogToEnd() {
         const flickable = logScroll.contentItem
