@@ -125,6 +125,7 @@ class MainController(ActionsMixin, UpdateMixin, QObject):
             fullAutoLoopCount=self.config.full_auto_loop_count,
             fullAutoClaimMail=self.config.full_auto_claim_mail,
             fullAutoSafeboxSize=self.config.full_auto_safebox_size,
+            fullAutoRoundText=self._format_full_auto_round(),
             mapId=self.config.map_id,
             fillTeammates=self.config.check_fill_teammates,
             executionMode=self._execution_mode,

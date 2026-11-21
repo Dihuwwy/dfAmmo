@@ -5,15 +5,17 @@ import DfUi
 T.Button {
     id: control
 
-    // idle | running | current | success | failed
+    // idle | running | current | success | failed | skipped
     property string stepState: "idle"
     property string tip: ""
 
     readonly property bool active: stepState === "running" || stepState === "current"
+    readonly property bool skipped: stepState === "skipped"
     readonly property color foreground: !enabled ? "#A9ABB4"
         : stepState === "success" ? Theme.success
         : stepState === "failed" ? Theme.danger
-        : active || hovered ? Theme.primary : "#334155"
+        : active || hovered ? Theme.primary
+        : skipped ? "#94A3B8" : "#334155"
 
     implicitHeight: 30
     implicitWidth: implicitContentWidth + leftPadding + rightPadding
@@ -29,7 +31,9 @@ T.Button {
              : control.stepState === "success" ? (control.hovered ? "#C9F7D9" : Theme.successSoft)
              : control.stepState === "failed" ? (control.hovered ? "#FDD0D0" : "#FEE2E2")
              : control.active ? "#C8DCFC"
-             : control.down ? "#C7D2FE" : control.hovered ? "#E0E7FF" : "#F1F5F9"
+             : control.down ? "#C7D2FE"
+             : control.hovered ? (control.skipped ? "#E8EDF5" : "#E0E7FF")
+             : control.skipped ? "#F6F8FB" : "#F1F5F9"
         Behavior on color { ColorAnimation { duration: 160 } }
     }
 
@@ -40,6 +44,14 @@ T.Button {
             visible: control.stepState === "success" || control.stepState === "failed"
             code: control.stepState === "success" ? "" : ""
             font.pixelSize: 11
+            color: control.foreground
+            anchors.verticalCenter: parent.verticalCenter
+        }
+        Rectangle {
+            visible: control.skipped
+            width: 7
+            height: 1.5
+            radius: 1
             color: control.foreground
             anchors.verticalCenter: parent.verticalCenter
         }

@@ -22,17 +22,18 @@ class ActionsMixin:
 
     _wegame_step_ids = ("wait_wegame", "click_more", "assets_manage", "delete_map", "restart_game")
     _stage_four_common_ids = ("detect_result", "restore_pak", "redownload_map")
-    _full_auto_step_ids = (
-        "claim_mail",
-        "select_safebox",
-        "custom_loadout",
-        "wait_map_recovery",
-        "switch_mode_reconnect",
-        "suicide_exit",
-        "loop_stage_one",
-    )
+    _stage_five_step_ids = ("claim_mail", "select_safebox", "custom_loadout")
+    _stage_six_step_ids = ("wait_map_recovery", "switch_mode_reconnect", "suicide_exit", "loop_stage_one")
+    _full_auto_step_ids = (*_stage_five_step_ids, *_stage_six_step_ids)
     _stage_four_step_ids = (*_stage_four_common_ids, "warehouse", *_full_auto_step_ids)
-    _stage_step_ids = (("nav_game",), ("rename_pak", "open_paks"), _wegame_step_ids, _stage_four_step_ids)
+    _stage_step_ids = (
+        ("nav_game",),
+        ("rename_pak", "open_paks"),
+        _wegame_step_ids,
+        (*_stage_four_common_ids, "warehouse"),
+        _stage_five_step_ids,
+        _stage_six_step_ids,
+    )
     _nav_step_labels = ("模式", "进大厅", "选地图", "", "行动", "配装", "继续", "出发", "选人")
 
     # ── View State ───────────────────────────────────────────────────────────
@@ -59,30 +60,47 @@ class ActionsMixin:
             "assets_manage": ("资源包管理", "点击弹出菜单中的“游戏资源包管理”项"),
             "delete_map": (f"删除{map_name}", "在资源管理窗口中删除目标地图资源"),
             "restart_game": ("重新启动游戏", "在 WeGame 中点击启动按钮重新拉起三角洲行动"),
-            "detect_result": ("确认并进大厅", ""),
+            "detect_result": ("确认进大厅", ""),
             "restore_pak": ("恢复 Pak", ""),
-            "redownload_map": ("恢复地图下载", ""),
-            "warehouse": ("进入仓库并确认", ""),
+            "redownload_map": ("恢复地图", ""),
+            "warehouse": ("进入仓库", ""),
             "claim_mail": ("领取邮件", "全自动模式：第 2 轮起在配装前领取邮件中的金胸挂/红包（待实现）"),
             "select_safebox": ("切换安全箱", "全自动模式：在仓库界面将安全箱切换为 4/6/9 格（待实现）"),
             "custom_loadout": ("自定义配装", "全自动模式：穿戴自定义配装（待实现）"),
-            "wait_map_recovery": ("等待地图恢复", "全自动模式：等待目标地图下载或校验完成（待实现）"),
-            "switch_mode_reconnect": ("切换模式重连", "全自动模式：切换游戏模式并重连对局（待实现）"),
-            "suicide_exit": ("游戏内自杀并退出", "全自动模式：进入对局后自杀并退出至大厅（待实现）"),
-            "loop_stage_one": ("循环至第一阶段", "全自动模式：重置本轮状态并进入下一轮第一阶段"),
+            "wait_map_recovery": ("等待恢复", "全自动模式：等待目标地图下载或校验完成（待实现）"),
+            "switch_mode_reconnect": ("切换重连", "全自动模式：切换游戏模式并重连对局（待实现）"),
+            "suicide_exit": ("自杀退出", "全自动模式：进入对局后自杀并退出至大厅（待实现）"),
+            "loop_stage_one": ("循环下轮", "全自动模式：按循环次数重置并进入下一轮第一阶段"),
         }
         self._steps = {step_id: {"title": title, "text": title, "state": "idle", "tooltip": tooltip}
                        for step_id, (title, tooltip) in steps.items()}
         for step_ids in (
             self._wegame_step_ids,
             (*self._stage_four_common_ids, "warehouse"),
-            (*self._stage_four_common_ids, *self._full_auto_step_ids),
+            self._stage_five_step_ids,
+            self._stage_six_step_ids,
         ):
             for number, step_id in enumerate(step_ids, start=1):
                 self._steps[step_id]["text"] = f"{number}.{self._steps[step_id]['title']}"
         self._nav_states = ["idle"] * len(self._nav_step_labels)
         self._stages = ["idle"] * len(self._stage_step_ids)
+        self._sync_full_auto_step_hints(publish=False)
         self._publish_steps()
+
+    def _format_full_auto_round(self) -> str:
+        limit = self.config.full_auto_loop_count
+        return f"第 {self._full_auto_round} / {limit} 轮" if limit > 0 else f"第 {self._full_auto_round} 轮 · 无限"
+
+    def _sync_full_auto_step_hints(self, *, publish: bool = True) -> None:
+        """Dim optional full-auto steps when disabled so active steps stand out."""
+        claim_step = self._steps.get("claim_mail")
+        if claim_step and claim_step["state"] in ("idle", "skipped"):
+            claim_step["state"] = "idle" if self.config.full_auto_claim_mail else "skipped"
+        safebox_step = self._steps.get("select_safebox")
+        if safebox_step and safebox_step["state"] in ("idle", "skipped"):
+            safebox_step["state"] = "skipped" if self.config.full_auto_safebox_size == "default" else "idle"
+        if publish:
+            self._publish_steps()
 
     def _publish_steps(self) -> None:
         navigator_steps = self.workflow.game_navigator.steps
@@ -376,7 +394,7 @@ class ActionsMixin:
         if count == self.config.full_auto_loop_count:
             return
         self.config = replace(self.config, full_auto_loop_count=count)
-        self._set_ui(fullAutoLoopCount=count)
+        self._set_ui(fullAutoLoopCount=count, fullAutoRoundText=self._format_full_auto_round())
         try:
             self.config.save_to_file()
         except OSError as exc:
@@ -390,6 +408,7 @@ class ActionsMixin:
             return
         self.config = replace(self.config, full_auto_claim_mail=enabled)
         self._set_ui(fullAutoClaimMail=enabled)
+        self._sync_full_auto_step_hints()
         try:
             self.config.save_to_file()
         except OSError as exc:
@@ -403,6 +422,7 @@ class ActionsMixin:
             return
         self.config = replace(self.config, full_auto_safebox_size=size)
         self._set_ui(fullAutoSafeboxSize=size)
+        self._sync_full_auto_step_hints()
         try:
             self.config.save_to_file()
         except OSError as exc:
@@ -503,11 +523,10 @@ class ActionsMixin:
         if not resume:
             if not next_round:
                 self._full_auto_round = 1
+            self._set_ui(fullAutoRoundText=self._format_full_auto_round())
             self.reset_all_step_states()
             if self.config.operation_mode != "semi_auto":
-                limit = self.config.full_auto_loop_count
-                total = f"/{limit}" if limit > 0 else "（无限循环）"
-                self.write_log(f"全自动模式：开始第 {self._full_auto_round}{total} 轮流程。")
+                self.write_log(f"全自动模式：开始 {self._format_full_auto_round()} 流程。")
         self.workflow.progress.enter("launch")
         self._continue_after_navigation = self.is_continuous_mode
         self.workflow.control.paused.clear()
@@ -833,37 +852,37 @@ class ActionsMixin:
         wf, cfg = self.workflow, self.config
         return {
             "claim_mail": (
-                "第四阶段第 4 步：领取邮件中的金胸挂/红包...",
+                "阶段五第 1 步：领取邮件中的金胸挂/红包...",
                 partial(wf.claim_full_auto_mail, cfg),
                 "邮件物品领取完成。",
                 "领取邮件",
             ),
             "select_safebox": (
-                f"第四阶段第 5 步：切换为 {cfg.full_auto_safebox_size} 格安全箱...",
+                f"阶段五第 2 步：切换为 {cfg.full_auto_safebox_size} 格安全箱...",
                 partial(wf.select_full_auto_safebox, cfg),
                 "安全箱切换完成。",
                 "切换安全箱",
             ),
             "custom_loadout": (
-                "第四阶段第 6 步：执行自定义配装...",
+                "阶段五第 3 步：执行自定义配装...",
                 partial(wf.apply_full_auto_loadout, cfg),
                 "自定义配装完成。",
                 "自定义配装",
             ),
             "wait_map_recovery": (
-                "第四阶段第 7 步：等待目标地图恢复完成...",
+                "阶段六第 1 步：等待目标地图恢复完成...",
                 partial(wf.wait_full_auto_map_recovery, cfg),
                 "目标地图已恢复完成。",
                 "等待地图恢复",
             ),
             "switch_mode_reconnect": (
-                "第四阶段第 8 步：切换模式并重连对局...",
+                "阶段六第 2 步：切换模式并重连对局...",
                 partial(wf.switch_full_auto_mode_and_reconnect, cfg),
                 "已切换模式并触发重连。",
                 "切换模式重连",
             ),
             "suicide_exit": (
-                "第四阶段第 9 步：进入对局后执行自杀并退出...",
+                "阶段六第 3 步：进入对局后执行自杀并退出...",
                 partial(wf.full_auto_suicide_and_exit, cfg),
                 "已退出对局并返回大厅。",
                 "游戏内自杀并退出",
@@ -886,8 +905,8 @@ class ActionsMixin:
                     self.write_log(f"全自动模式：已完成设定的 {limit} 轮循环，流程结束。")
                     return
                 self._full_auto_round += 1
-                total = f"/{limit}" if limit > 0 else "（无限循环）"
-                self.write_log(f"第四阶段第 10 步：本轮完成，准备进入第 {self._full_auto_round}{total} 轮第一阶段...")
+                self._set_ui(fullAutoRoundText=self._format_full_auto_round())
+                self.write_log(f"阶段六第 4 步：本轮完成，准备进入 {self._format_full_auto_round()} 第一阶段...")
                 self.set_step_state("loop_stage_one", "success")
                 if not self.is_continuous_mode:
                     self._offer_continue("next_round")
@@ -897,15 +916,15 @@ class ActionsMixin:
             if not is_manual_target:
                 if step_id == "claim_mail":
                     if not self.config.full_auto_claim_mail:
-                        self.set_step_state("claim_mail", "success")
+                        self.set_step_state("claim_mail", "skipped")
                         self.write_log("未开启“第 2 轮起领取邮件”，跳过领取邮件步骤。")
                         continue
                     if self._full_auto_round < 2:
-                        self.set_step_state("claim_mail", "success")
+                        self.set_step_state("claim_mail", "skipped")
                         self.write_log("当前为第 1 轮，跳过领取邮件步骤（第 2 轮起自动执行）。")
                         continue
                 elif step_id == "select_safebox" and self.config.full_auto_safebox_size == "default":
-                    self.set_step_state("select_safebox", "success")
+                    self.set_step_state("select_safebox", "skipped")
                     self.write_log("安全箱设为“不切换”，跳过切换安全箱步骤。")
                     continue
             start_msg, action_fn, success_msg, fail_label = actions[step_id]
@@ -953,10 +972,13 @@ class ActionsMixin:
         title = info["title"] if info else step_id
         if info:
             info["state"] = state
-        for stage, step_ids in enumerate(self._stage_step_ids):
-            if step_id in step_ids:
-                self._stages[stage] = state
+        if state != "skipped":
+            for stage, step_ids in enumerate(self._stage_step_ids):
+                if step_id in step_ids:
+                    self._stages[stage] = state
         self._publish_steps()
+        if state == "skipped":
+            return
         prefix = {"running": "正在执行", "success": "步骤完成", "failed": "步骤失败"}
         text = f"{prefix[state]}：{title}" if state in prefix else "待命就绪"
         self._set_status(text, state if state in prefix else "idle",

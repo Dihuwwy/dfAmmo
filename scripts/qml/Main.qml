@@ -342,57 +342,19 @@ ApplicationWindow {
                             onChosen: (value) => backend.setOperationMode(value)
                         }
                         Item { Layout.fillWidth: true }
-                        Check {
+                        AppButton {
                             visible: !window.semiAuto
-                            text: "第 2 轮起领取邮件"
-                            tip: "开启后从第 2 轮起在配装前领取邮件中的金胸挂、红包等物品"
-                            checked: ui.fullAutoClaimMail
-                            onToggled: {
-                                backend.setFullAutoClaimMail(checked)
-                                checked = Qt.binding(() => ui.fullAutoClaimMail)
+                            kind: "soft"
+                            glyph: ""
+                            text: {
+                                const parts = [ui.fullAutoLoopCount === 0 ? "无限循环" : ui.fullAutoLoopCount + "轮"]
+                                parts.push(ui.fullAutoSafeboxSize === "default" ? "默认箱" : ui.fullAutoSafeboxSize + "格箱")
+                                if (ui.fullAutoClaimMail)
+                                    parts.push("领邮件")
+                                return parts.join(" · ")
                             }
-                        }
-                    }
-
-                    RowLayout {
-                        visible: !window.semiAuto
-                        Layout.fillWidth: true
-                        Layout.fillHeight: false
-                        enabled: !ui.controlsLocked
-                        spacing: 8
-
-                        FieldLabel { text: "安全箱规格" }
-                        Segmented {
-                            options: [
-                                { label: "不切换", value: "default" },
-                                { label: "4格", value: "4" },
-                                { label: "6格", value: "6" },
-                                { label: "9格", value: "9" }
-                            ]
-                            value: ui.fullAutoSafeboxSize
-                            tip: "大退重进后安全箱会重置为 2 格，可在此指定自动切回的规格"
-                            onChosen: (value) => backend.setFullAutoSafeboxSize(value)
-                        }
-                        Item { Layout.fillWidth: true }
-                        Text {
-                            text: "循环次数"
-                            color: Theme.textMuted
-                        }
-                        Field {
-                            Layout.preferredWidth: 64
-                            horizontalAlignment: Text.AlignHCenter
-                            text: String(ui.fullAutoLoopCount)
-                            validator: IntValidator { bottom: 0; top: 999 }
-                            onEditingFinished: {
-                                const parsed = parseInt(text, 10)
-                                backend.setFullAutoLoopCount(isNaN(parsed) ? 0 : parsed)
-                                text = Qt.binding(() => String(ui.fullAutoLoopCount))
-                            }
-                        }
-                        Text {
-                            text: "0 = 无限"
-                            color: Theme.textMuted
-                            font.pixelSize: 12
+                            tip: "配置全自动循环次数、安全箱规格与邮件领取"
+                            onClicked: fullAutoSheet.open()
                         }
                     }
 
@@ -567,6 +529,22 @@ ApplicationWindow {
                             spacing: 8
 
                             SectionTitle { text: "执行流程" }
+                            Rectangle {
+                                visible: !window.semiAuto
+                                implicitHeight: 24
+                                implicitWidth: roundBadgeText.implicitWidth + 16
+                                radius: 12
+                                color: Theme.primarySoft
+
+                                Text {
+                                    id: roundBadgeText
+                                    anchors.centerIn: parent
+                                    text: ui.fullAutoRoundText
+                                    color: Theme.primary
+                                    font.pixelSize: 12
+                                    font.weight: Font.DemiBold
+                                }
+                            }
                             Item { Layout.fillWidth: true }
                             Segmented {
                                 segmentWidth: 54
@@ -647,7 +625,7 @@ ApplicationWindow {
                         }
 
                         Stage {
-                            last: true
+                            last: window.semiAuto
                             title: "阶段四"
                             subtitle: "重返大厅与恢复地图"
                             stageState: ui.stages[3]
@@ -664,11 +642,39 @@ ApplicationWindow {
                                     onActivated: backend.runStep(modelData)
                                 }
                             }
+                        }
+
+                        Stage {
+                            visible: !window.semiAuto
+                            title: "阶段五"
+                            subtitle: "战备整备"
+                            stageState: ui.stages[4]
+
                             Repeater {
-                                model: ["claim_mail", "select_safebox", "custom_loadout", "wait_map_recovery", "switch_mode_reconnect", "suicide_exit", "loop_stage_one"]
+                                model: ["claim_mail", "select_safebox", "custom_loadout"]
 
                                 Step {
-                                    visible: !window.semiAuto
+                                    arrow: index > 0
+                                    label: ui.steps[modelData].text
+                                    stepState: ui.steps[modelData].state
+                                    tip: ui.steps[modelData].tooltip
+                                    onActivated: backend.runStep(modelData)
+                                }
+                            }
+                        }
+
+                        Stage {
+                            visible: !window.semiAuto
+                            last: true
+                            title: "阶段六"
+                            subtitle: "重连与循环"
+                            stageState: ui.stages[5]
+
+                            Repeater {
+                                model: ["wait_map_recovery", "switch_mode_reconnect", "suicide_exit", "loop_stage_one"]
+
+                                Step {
+                                    arrow: index > 0
                                     label: ui.steps[modelData].text
                                     stepState: ui.steps[modelData].state
                                     tip: ui.steps[modelData].tooltip
@@ -919,6 +925,140 @@ ApplicationWindow {
                     text: "取消更新"
                     enabled: ui.canCancelUpdate
                     onClicked: backend.cancelUpdate()
+                }
+            }
+        }
+    }
+
+    // ── Full-auto settings ───────────────────────────────────────────────
+    Sheet {
+        id: fullAutoSheet
+        width: 460
+
+        contentItem: ColumnLayout {
+            spacing: 14
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: false
+
+                SectionTitle { text: "全自动设置" }
+                Item { Layout.fillWidth: true }
+                AppButton {
+                    kind: "ghost"
+                    glyph: ""
+                    implicitWidth: 28
+                    implicitHeight: 28
+                    onClicked: fullAutoSheet.close()
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                Text {
+                    text: "循环次数（0 表示无限循环）"
+                    color: Theme.textSecondary
+                    font.weight: Font.Medium
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: false
+                    spacing: 8
+
+                    Field {
+                        id: loopCountField
+                        Layout.preferredWidth: 76
+                        horizontalAlignment: Text.AlignHCenter
+                        text: String(ui.fullAutoLoopCount)
+                        validator: IntValidator { bottom: 0; top: 999 }
+                        onEditingFinished: {
+                            const parsed = parseInt(text, 10)
+                            backend.setFullAutoLoopCount(isNaN(parsed) ? 0 : parsed)
+                            text = Qt.binding(() => String(ui.fullAutoLoopCount))
+                        }
+                    }
+                    Repeater {
+                        model: [
+                            { label: "1轮", value: 1 },
+                            { label: "3轮", value: 3 },
+                            { label: "5轮", value: 5 },
+                            { label: "无限", value: 0 }
+                        ]
+
+                        AppButton {
+                            kind: ui.fullAutoLoopCount === modelData.value ? "soft" : "surface"
+                            text: modelData.label
+                            implicitHeight: 30
+                            onClicked: backend.setFullAutoLoopCount(modelData.value)
+                        }
+                    }
+                    Item { Layout.fillWidth: true }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 6
+
+                Text {
+                    text: "目标安全箱规格"
+                    color: Theme.textSecondary
+                    font.weight: Font.Medium
+                }
+                Segmented {
+                    segmentWidth: 74
+                    options: [
+                        { label: "不切换", value: "default" },
+                        { label: "4格", value: "4" },
+                        { label: "6格", value: "6" },
+                        { label: "9格", value: "9" }
+                    ]
+                    value: ui.fullAutoSafeboxSize
+                    onChosen: (value) => backend.setFullAutoSafeboxSize(value)
+                }
+                Text {
+                    Layout.fillWidth: true
+                    text: "大退删地图重进后安全箱会重置为 2 格，设置后会在阶段五自动切回目标规格。"
+                    color: Theme.textMuted
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth: true
+                spacing: 4
+
+                Check {
+                    text: "第 2 轮起在配装前领取邮件"
+                    checked: ui.fullAutoClaimMail
+                    onToggled: {
+                        backend.setFullAutoClaimMail(checked)
+                        checked = Qt.binding(() => ui.fullAutoClaimMail)
+                    }
+                }
+                Text {
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 26
+                    text: "用于领回上一轮卡进邮件的金胸挂、红包等无法在交易行购买的物品。"
+                    color: Theme.textMuted
+                    font.pixelSize: 12
+                    wrapMode: Text.Wrap
+                }
+            }
+
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.fillHeight: false
+                Layout.topMargin: 4
+
+                Item { Layout.fillWidth: true }
+                AppButton {
+                    kind: "primary"
+                    text: "完成"
+                    onClicked: fullAutoSheet.close()
                 }
             }
         }
