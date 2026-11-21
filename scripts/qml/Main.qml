@@ -613,13 +613,14 @@ ApplicationWindow {
                                 }
                             }
                             Repeater {
-                                model: ["自定义配装", "等待地图恢复", "切换模式重连", "游戏内自杀并退出", "循环至第一阶段"]
+                                model: ["custom_loadout", "wait_map_recovery", "switch_mode_reconnect", "suicide_exit", "loop_stage_one"]
 
                                 Step {
                                     visible: !window.semiAuto
-                                    placeholder: true
-                                    label: (index + 4) + "." + modelData
-                                    tip: "全自动模式占位，尚未实现"
+                                    label: ui.steps[modelData].text
+                                    stepState: ui.steps[modelData].state
+                                    tip: ui.steps[modelData].tooltip
+                                    onActivated: backend.runStep(modelData)
                                 }
                             }
                         }

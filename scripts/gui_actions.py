@@ -21,7 +21,15 @@ class ActionsMixin:
     """Action handlers and workflows; view state is published through `_set_ui`."""
 
     _wegame_step_ids = ("wait_wegame", "click_more", "assets_manage", "delete_map", "restart_game")
-    _stage_four_step_ids = ("detect_result", "restore_pak", "redownload_map", "warehouse")
+    _stage_four_common_ids = ("detect_result", "restore_pak", "redownload_map")
+    _full_auto_step_ids = (
+        "custom_loadout",
+        "wait_map_recovery",
+        "switch_mode_reconnect",
+        "suicide_exit",
+        "loop_stage_one",
+    )
+    _stage_four_step_ids = (*_stage_four_common_ids, "warehouse", *_full_auto_step_ids)
     _stage_step_ids = (("nav_game",), ("rename_pak", "open_paks"), _wegame_step_ids, _stage_four_step_ids)
     _nav_step_labels = ("模式", "进大厅", "选地图", "", "行动", "配装", "继续", "出发", "选人")
 
@@ -53,10 +61,19 @@ class ActionsMixin:
             "restore_pak": ("恢复 Pak", ""),
             "redownload_map": ("恢复地图下载", ""),
             "warehouse": ("进入仓库并确认", ""),
+            "custom_loadout": ("自定义配装", "全自动模式：穿戴自定义配装（待实现）"),
+            "wait_map_recovery": ("等待地图恢复", "全自动模式：等待目标地图下载或校验完成（待实现）"),
+            "switch_mode_reconnect": ("切换模式重连", "全自动模式：切换游戏模式并重连对局（待实现）"),
+            "suicide_exit": ("游戏内自杀并退出", "全自动模式：进入对局后自杀并退出至大厅（待实现）"),
+            "loop_stage_one": ("循环至第一阶段", "全自动模式：重置本轮状态并进入下一轮第一阶段"),
         }
         self._steps = {step_id: {"title": title, "text": title, "state": "idle", "tooltip": tooltip}
                        for step_id, (title, tooltip) in steps.items()}
-        for step_ids in (self._wegame_step_ids, self._stage_four_step_ids):
+        for step_ids in (
+            self._wegame_step_ids,
+            (*self._stage_four_common_ids, "warehouse"),
+            (*self._stage_four_common_ids, *self._full_auto_step_ids),
+        ):
             for number, step_id in enumerate(step_ids, start=1):
                 self._steps[step_id]["text"] = f"{number}.{self._steps[step_id]['title']}"
         self._nav_states = ["idle"] * len(self._nav_step_labels)
@@ -243,6 +260,8 @@ class ActionsMixin:
         self.write_log(f"继续执行步骤：{step}；已完成的小操作会跳过。")
         if step == "launch":
             yield from self.start_card_mail.__wrapped__(self, resume=True)
+        elif step == "next_round":
+            yield from self.start_card_mail.__wrapped__(self, resume=False)
         elif step == "nav_game":
             yield from self._dbg_takeover_navigation.__wrapped__(self)
         elif step == "exit_game":
@@ -684,7 +703,10 @@ class ActionsMixin:
     def _run_stage_four(self, start_step: str = "detect_result"):
         self.workflow.control.paused.clear()
         if start_step == "warehouse" and self.config.operation_mode != "semi_auto":
-            self.write_log("全自动模式不进入仓库；后续操作尚未实现，未执行或循环。")
+            self.write_log("全自动模式不进入半自动仓库步骤。")
+            return
+        if start_step in self._full_auto_step_ids and self.config.operation_mode == "semi_auto":
+            self.write_log("半自动模式不执行全自动后续步骤。")
             return
         if start_step == "detect_result":
             self.set_step_state("detect_result", "running")
@@ -725,16 +747,17 @@ class ActionsMixin:
             if self.execution_mode == "step":
                 self._offer_continue("redownload_map")
                 return
-        if start_step != "warehouse":
+        if start_step in self._stage_four_common_ids:
             downloaded = yield from self._run_stage_four_redownload_tasks()
             if not downloaded:
                 return
-            if self.config.operation_mode == "semi_auto" and self.execution_mode == "step":
-                self._offer_continue("warehouse")
+            if self.execution_mode == "step":
+                next_step = "warehouse" if self.config.operation_mode == "semi_auto" else self._full_auto_step_ids[0]
+                self._offer_continue(next_step)
                 return
         if self.config.operation_mode != "semi_auto":
-            self.write_log("第四阶段公共步骤完成；全自动后续按钮仅占位，未进仓库，未执行后续操作或循环。")
-            self._set_status("全自动后续待实现", "idle")
+            full_auto_start = start_step if start_step in self._full_auto_step_ids else self._full_auto_step_ids[0]
+            yield from self._run_full_auto_tasks(start_step=full_auto_start)
             return
         self.set_step_state("warehouse", "running")
         self.write_log("第四阶段第 4 步：进入仓库并确认提示...")
@@ -751,6 +774,68 @@ class ActionsMixin:
         self.set_step_state("warehouse", "success")
         self._set_status("半自动已完成", "success")
         self.write_log("半自动流程已结束，不再执行后续步骤或循环。请手动穿戴装备，等待地图恢复后切换全面战场并重连。")
+
+    def _full_auto_steps(self):
+        """Action definitions for full-auto steps after redownload_map."""
+        wf, cfg = self.workflow, self.config
+        return {
+            "custom_loadout": (
+                "第四阶段第 4 步：执行自定义配装...",
+                partial(wf.apply_full_auto_loadout, cfg),
+                "自定义配装完成。",
+                "自定义配装",
+            ),
+            "wait_map_recovery": (
+                "第四阶段第 5 步：等待目标地图恢复完成...",
+                partial(wf.wait_full_auto_map_recovery, cfg),
+                "目标地图已恢复完成。",
+                "等待地图恢复",
+            ),
+            "switch_mode_reconnect": (
+                "第四阶段第 6 步：切换模式并重连对局...",
+                partial(wf.switch_full_auto_mode_and_reconnect, cfg),
+                "已切换模式并触发重连。",
+                "切换模式重连",
+            ),
+            "suicide_exit": (
+                "第四阶段第 7 步：进入对局后执行自杀并退出...",
+                partial(wf.full_auto_suicide_and_exit, cfg),
+                "已退出对局并返回大厅。",
+                "游戏内自杀并退出",
+            ),
+        }
+
+    def _run_full_auto_tasks(self, start_step: str = "custom_loadout"):
+        actions = self._full_auto_steps()
+        step_ids = self._full_auto_step_ids
+        start_index = step_ids.index(start_step)
+        for index in range(start_index, len(step_ids)):
+            step_id = step_ids[index]
+            if step_id == "loop_stage_one":
+                self.set_step_state("loop_stage_one", "running")
+                self.write_log("第四阶段第 8 步：本轮全自动流程完成，准备循环至第一阶段...")
+                self.set_step_state("loop_stage_one", "success")
+                if not self.is_continuous_mode:
+                    self._offer_continue("next_round")
+                    return
+                yield from self.start_card_mail.__wrapped__(self, resume=False)
+                return
+            start_msg, action_fn, success_msg, fail_label = actions[step_id]
+            self.set_step_state(step_id, "running")
+            self.write_log(start_msg)
+            try:
+                yield partial(self.workflow.progress.run, "action", action_fn)
+            except ControlInterrupted:
+                raise
+            except Exception as exc:
+                self.set_step_state(step_id, "failed", str(exc))
+                self.write_log(f"全自动【{fail_label}】失败：{exc}")
+                return
+            self.set_step_state(step_id, "success")
+            self.write_log(success_msg)
+            if self.execution_mode == "step" and index + 1 < len(step_ids):
+                self._offer_continue(step_ids[index + 1])
+                return
 
     def _run_stage_four_redownload_tasks(self):
         self.set_step_state("redownload_map", "running")

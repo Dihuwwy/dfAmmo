@@ -17,6 +17,12 @@ from scripts.config import TEMPLATE_DIR, DEFAULT_PAK_NAMES
 from scripts.element_locator import ElementLocator, ElementPosition, MatchResult
 from scripts.game_process import GameProcess, GameProcessFinder
 from scripts.game_navigation import GameNavigator, NavigationEvent
+from scripts.full_auto import (
+    apply_custom_loadout,
+    suicide_and_exit_match,
+    switch_mode_and_reconnect,
+    wait_for_map_recovery,
+)
 from scripts.game_result import confirm_notices_and_enter_lobby, request_map_redownload, enter_warehouse_and_confirm
 from scripts.keyboard import KeyboardController
 from scripts.screenshot import ScreenshotService
@@ -257,6 +263,18 @@ class Workflow:
                                    threshold: float, timeout: float) -> None:
         enter_warehouse_and_confirm(self, TEMPLATE_DIR / notice_name, TEMPLATE_DIR / confirm_name,
                                     threshold, timeout)
+
+    def apply_full_auto_loadout(self, config) -> None:
+        apply_custom_loadout(self, config)
+
+    def wait_full_auto_map_recovery(self, config) -> None:
+        wait_for_map_recovery(self, config)
+
+    def switch_full_auto_mode_and_reconnect(self, config) -> None:
+        switch_mode_and_reconnect(self, config)
+
+    def full_auto_suicide_and_exit(self, config) -> None:
+        suicide_and_exit_match(self, config)
 
     def _rename_map_files(self, game_install_dir, pak_names, extra_files, restore):
         pak_dir = self.get_paks_dir(game_install_dir)
