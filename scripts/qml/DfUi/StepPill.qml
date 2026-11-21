@@ -8,6 +8,7 @@ T.Button {
     // idle | running | current | success | failed | skipped
     property string stepState: "idle"
     property string tip: ""
+    property bool compact: false
 
     readonly property bool active: stepState === "running" || stepState === "current"
     readonly property bool skipped: stepState === "skipped"
@@ -19,8 +20,8 @@ T.Button {
 
     implicitHeight: 30
     implicitWidth: implicitContentWidth + leftPadding + rightPadding
-    leftPadding: 12
-    rightPadding: 12
+    leftPadding: compact ? 9 : 12
+    rightPadding: compact ? 9 : 12
     hoverEnabled: true
     font.pixelSize: 13
     font.weight: active ? Font.DemiBold : Font.Medium

@@ -45,6 +45,7 @@ ApplicationWindow {
         property string stageState: "idle"
         property bool first: false
         property bool last: false
+        property bool compact: false
         default property alias content: flow.data
 
         Layout.fillWidth: true
@@ -90,7 +91,7 @@ ApplicationWindow {
             Flow {
                 id: flow
                 width: parent.width
-                spacing: 6
+                spacing: stage.compact ? 4 : 6
             }
         }
     }
@@ -103,9 +104,10 @@ ApplicationWindow {
         property string stepState: "idle"
         property string tip
         property bool placeholder: false
+        property bool compact: false
         signal activated()
 
-        spacing: 6
+        spacing: compact ? 4 : 6
 
         Text {
             visible: step.arrow
@@ -118,6 +120,7 @@ ApplicationWindow {
             text: step.label
             stepState: step.stepState
             tip: step.tip
+            compact: step.compact
             enabled: !step.placeholder
             onClicked: step.activated()
         }
@@ -571,6 +574,7 @@ ApplicationWindow {
 
                         Stage {
                             first: true
+                            compact: true
                             title: "阶段一"
                             subtitle: "游戏内自动导航"
                             stageState: ui.stages[0]
@@ -580,6 +584,7 @@ ApplicationWindow {
 
                                 Step {
                                     arrow: index > 0
+                                    compact: true
                                     label: ui.navPills[index].text
                                     stepState: ui.navPills[index].state
                                     tip: ui.navPills[index].tooltip

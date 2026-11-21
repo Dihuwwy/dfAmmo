@@ -34,7 +34,7 @@ class ActionsMixin:
         _stage_five_step_ids,
         _stage_six_step_ids,
     )
-    _nav_step_labels = ("模式", "进大厅", "选地图", "", "行动", "配装", "继续", "出发", "选人")
+    _nav_step_labels = ("模式", "大厅", "地图", "", "行动", "配装", "继续", "出发", "选人")
 
     # ── View State ───────────────────────────────────────────────────────────
 
@@ -104,10 +104,11 @@ class ActionsMixin:
 
     def _publish_steps(self) -> None:
         navigator_steps = self.workflow.game_navigator.steps
+        short_map = "AZ3" if self.config.map_id == "az3" else "长弓"
         self._set_ui(
             steps={step_id: {"text": info["text"], "state": info["state"], "tooltip": info["tooltip"]}
                    for step_id, info in self._steps.items()},
-            navPills=[{"text": f"{index + 1}.{label or '选' + self.config.map_name}", "state": state,
+            navPills=[{"text": f"{index + 1}.{label or short_map}", "state": state,
                        "tooltip": f"跳转至第 {index + 1} 步执行：【{navigator_steps[index].name}】"}
                       for index, (label, state) in enumerate(zip(self._nav_step_labels, self._nav_states))],
             stages=list(self._stages),
