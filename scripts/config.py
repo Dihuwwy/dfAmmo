@@ -74,6 +74,9 @@ class AppConfig:
     game_install_dir: str = ""
     pak_file_names: tuple[str, ...] = DEFAULT_PAK_NAMES
     operation_mode: str = "semi_auto"
+    full_auto_loop_count: int = 1
+    full_auto_claim_mail: bool = False
+    full_auto_safebox_size: str = "default"
     map_id: str = "changgong"
     check_fill_teammates: bool = True
     wegame_more_template: str = "wegame_more.png"

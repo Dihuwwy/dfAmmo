@@ -58,6 +58,7 @@ class MainController(ActionsMixin, UpdateMixin, QObject):
         self._navigation_mode = "continuous"
         self._continue_after_navigation = True
         self._resume_step = None
+        self._full_auto_round = 1
         self._binding = False
         self._closed = False
         self._close_pending = False
@@ -121,6 +122,9 @@ class MainController(ActionsMixin, UpdateMixin, QObject):
             connTooltip="",
             gameDir=self.config.game_install_dir,
             operationMode=self.config.operation_mode,
+            fullAutoLoopCount=self.config.full_auto_loop_count,
+            fullAutoClaimMail=self.config.full_auto_claim_mail,
+            fullAutoSafeboxSize=self.config.full_auto_safebox_size,
             mapId=self.config.map_id,
             fillTeammates=self.config.check_fill_teammates,
             executionMode=self._execution_mode,
@@ -313,6 +317,18 @@ class MainController(ActionsMixin, UpdateMixin, QObject):
     @Slot(str)
     def setOperationMode(self, mode: str) -> None:
         self.set_operation_mode(mode)
+
+    @Slot(int)
+    def setFullAutoLoopCount(self, count: int) -> None:
+        self.set_full_auto_loop_count(count)
+
+    @Slot(bool)
+    def setFullAutoClaimMail(self, enabled: bool) -> None:
+        self.set_full_auto_claim_mail(enabled)
+
+    @Slot(str)
+    def setFullAutoSafeboxSize(self, size: str) -> None:
+        self.set_full_auto_safebox_size(size)
 
     @Slot(str)
     def setMapId(self, map_id: str) -> None:

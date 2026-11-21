@@ -342,6 +342,58 @@ ApplicationWindow {
                             onChosen: (value) => backend.setOperationMode(value)
                         }
                         Item { Layout.fillWidth: true }
+                        Check {
+                            visible: !window.semiAuto
+                            text: "第 2 轮起领取邮件"
+                            tip: "开启后从第 2 轮起在配装前领取邮件中的金胸挂、红包等物品"
+                            checked: ui.fullAutoClaimMail
+                            onToggled: {
+                                backend.setFullAutoClaimMail(checked)
+                                checked = Qt.binding(() => ui.fullAutoClaimMail)
+                            }
+                        }
+                    }
+
+                    RowLayout {
+                        visible: !window.semiAuto
+                        Layout.fillWidth: true
+                        Layout.fillHeight: false
+                        enabled: !ui.controlsLocked
+                        spacing: 8
+
+                        FieldLabel { text: "安全箱规格" }
+                        Segmented {
+                            options: [
+                                { label: "不切换", value: "default" },
+                                { label: "4格", value: "4" },
+                                { label: "6格", value: "6" },
+                                { label: "9格", value: "9" }
+                            ]
+                            value: ui.fullAutoSafeboxSize
+                            tip: "大退重进后安全箱会重置为 2 格，可在此指定自动切回的规格"
+                            onChosen: (value) => backend.setFullAutoSafeboxSize(value)
+                        }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: "循环次数"
+                            color: Theme.textMuted
+                        }
+                        Field {
+                            Layout.preferredWidth: 64
+                            horizontalAlignment: Text.AlignHCenter
+                            text: String(ui.fullAutoLoopCount)
+                            validator: IntValidator { bottom: 0; top: 999 }
+                            onEditingFinished: {
+                                const parsed = parseInt(text, 10)
+                                backend.setFullAutoLoopCount(isNaN(parsed) ? 0 : parsed)
+                                text = Qt.binding(() => String(ui.fullAutoLoopCount))
+                            }
+                        }
+                        Text {
+                            text: "0 = 无限"
+                            color: Theme.textMuted
+                            font.pixelSize: 12
+                        }
                     }
 
                     RowLayout {
@@ -613,7 +665,7 @@ ApplicationWindow {
                                 }
                             }
                             Repeater {
-                                model: ["custom_loadout", "wait_map_recovery", "switch_mode_reconnect", "suicide_exit", "loop_stage_one"]
+                                model: ["claim_mail", "select_safebox", "custom_loadout", "wait_map_recovery", "switch_mode_reconnect", "suicide_exit", "loop_stage_one"]
 
                                 Step {
                                     visible: !window.semiAuto

@@ -19,6 +19,8 @@ from scripts.game_process import GameProcess, GameProcessFinder
 from scripts.game_navigation import GameNavigator, NavigationEvent
 from scripts.full_auto import (
     apply_custom_loadout,
+    claim_mail_items,
+    select_safebox,
     suicide_and_exit_match,
     switch_mode_and_reconnect,
     wait_for_map_recovery,
@@ -263,6 +265,12 @@ class Workflow:
                                    threshold: float, timeout: float) -> None:
         enter_warehouse_and_confirm(self, TEMPLATE_DIR / notice_name, TEMPLATE_DIR / confirm_name,
                                     threshold, timeout)
+
+    def claim_full_auto_mail(self, config) -> None:
+        claim_mail_items(self, config)
+
+    def select_full_auto_safebox(self, config) -> None:
+        select_safebox(self, config)
 
     def apply_full_auto_loadout(self, config) -> None:
         apply_custom_loadout(self, config)

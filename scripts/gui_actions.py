@@ -23,6 +23,8 @@ class ActionsMixin:
     _wegame_step_ids = ("wait_wegame", "click_more", "assets_manage", "delete_map", "restart_game")
     _stage_four_common_ids = ("detect_result", "restore_pak", "redownload_map")
     _full_auto_step_ids = (
+        "claim_mail",
+        "select_safebox",
         "custom_loadout",
         "wait_map_recovery",
         "switch_mode_reconnect",
@@ -61,6 +63,8 @@ class ActionsMixin:
             "restore_pak": ("恢复 Pak", ""),
             "redownload_map": ("恢复地图下载", ""),
             "warehouse": ("进入仓库并确认", ""),
+            "claim_mail": ("领取邮件", "全自动模式：第 2 轮起在配装前领取邮件中的金胸挂/红包（待实现）"),
+            "select_safebox": ("切换安全箱", "全自动模式：在仓库界面将安全箱切换为 4/6/9 格（待实现）"),
             "custom_loadout": ("自定义配装", "全自动模式：穿戴自定义配装（待实现）"),
             "wait_map_recovery": ("等待地图恢复", "全自动模式：等待目标地图下载或校验完成（待实现）"),
             "switch_mode_reconnect": ("切换模式重连", "全自动模式：切换游戏模式并重连对局（待实现）"),
@@ -157,7 +161,7 @@ class ActionsMixin:
         elif step_id in self._wegame_step_ids:
             self._run_wegame_post_process(start_step=step_id)
         elif step_id in self._stage_four_step_ids:
-            self._run_stage_four(start_step=step_id)
+            self._run_stage_four(start_step=step_id, manual_start=True)
 
     # ── Log Management ───────────────────────────────────────────────────────
 
@@ -261,7 +265,7 @@ class ActionsMixin:
         if step == "launch":
             yield from self.start_card_mail.__wrapped__(self, resume=True)
         elif step == "next_round":
-            yield from self.start_card_mail.__wrapped__(self, resume=False)
+            yield from self.start_card_mail.__wrapped__(self, resume=False, next_round=True)
         elif step == "nav_game":
             yield from self._dbg_takeover_navigation.__wrapped__(self)
         elif step == "exit_game":
@@ -367,6 +371,46 @@ class ActionsMixin:
             mode_name = "半自动模式" if new_mode == "semi_auto" else "全自动模式"
             self.write_log(f"已切换运行模式为：{mode_name}")
 
+    def set_full_auto_loop_count(self, count: int) -> None:
+        count = max(0, min(999, int(count)))
+        if count == self.config.full_auto_loop_count:
+            return
+        self.config = replace(self.config, full_auto_loop_count=count)
+        self._set_ui(fullAutoLoopCount=count)
+        try:
+            self.config.save_to_file()
+        except OSError as exc:
+            self.write_log(f"保存循环次数失败：{exc}")
+        else:
+            label = "无限循环" if count == 0 else f"{count} 轮"
+            self.write_log(f"全自动循环次数已设为：{label}")
+
+    def set_full_auto_claim_mail(self, enabled: bool) -> None:
+        if enabled == self.config.full_auto_claim_mail:
+            return
+        self.config = replace(self.config, full_auto_claim_mail=enabled)
+        self._set_ui(fullAutoClaimMail=enabled)
+        try:
+            self.config.save_to_file()
+        except OSError as exc:
+            self.write_log(f"保存领取邮件设置失败：{exc}")
+        else:
+            state = "开启（第 2 轮起自动领取）" if enabled else "关闭"
+            self.write_log(f"配装前领取邮件：{state}")
+
+    def set_full_auto_safebox_size(self, size: str) -> None:
+        if size not in ("default", "4", "6", "9") or size == self.config.full_auto_safebox_size:
+            return
+        self.config = replace(self.config, full_auto_safebox_size=size)
+        self._set_ui(fullAutoSafeboxSize=size)
+        try:
+            self.config.save_to_file()
+        except OSError as exc:
+            self.write_log(f"保存安全箱设置失败：{exc}")
+        else:
+            label = "不切换（默认2格）" if size == "default" else f"{size} 格安全箱"
+            self.write_log(f"目标安全箱已设为：{label}")
+
     def set_map(self, map_id: str) -> None:
         if map_id == self.config.map_id or not self._ui_state["mapEnabled"]:
             return
@@ -455,9 +499,15 @@ class ActionsMixin:
     # ── Core Workflow Actions ────────────────────────────────────────────────
 
     @background_action
-    def start_card_mail(self, resume=False):
+    def start_card_mail(self, resume=False, *, next_round=False):
         if not resume:
+            if not next_round:
+                self._full_auto_round = 1
             self.reset_all_step_states()
+            if self.config.operation_mode != "semi_auto":
+                limit = self.config.full_auto_loop_count
+                total = f"/{limit}" if limit > 0 else "（无限循环）"
+                self.write_log(f"全自动模式：开始第 {self._full_auto_round}{total} 轮流程。")
         self.workflow.progress.enter("launch")
         self._continue_after_navigation = self.is_continuous_mode
         self.workflow.control.paused.clear()
@@ -700,7 +750,7 @@ class ActionsMixin:
         return located
 
     @background_action
-    def _run_stage_four(self, start_step: str = "detect_result"):
+    def _run_stage_four(self, start_step: str = "detect_result", *, manual_start: bool = False):
         self.workflow.control.paused.clear()
         if start_step == "warehouse" and self.config.operation_mode != "semi_auto":
             self.write_log("全自动模式不进入半自动仓库步骤。")
@@ -757,7 +807,10 @@ class ActionsMixin:
                 return
         if self.config.operation_mode != "semi_auto":
             full_auto_start = start_step if start_step in self._full_auto_step_ids else self._full_auto_step_ids[0]
-            yield from self._run_full_auto_tasks(start_step=full_auto_start)
+            yield from self._run_full_auto_tasks(
+                start_step=full_auto_start,
+                manual_start=manual_start and start_step in self._full_auto_step_ids,
+            )
             return
         self.set_step_state("warehouse", "running")
         self.write_log("第四阶段第 4 步：进入仓库并确认提示...")
@@ -779,47 +832,82 @@ class ActionsMixin:
         """Action definitions for full-auto steps after redownload_map."""
         wf, cfg = self.workflow, self.config
         return {
+            "claim_mail": (
+                "第四阶段第 4 步：领取邮件中的金胸挂/红包...",
+                partial(wf.claim_full_auto_mail, cfg),
+                "邮件物品领取完成。",
+                "领取邮件",
+            ),
+            "select_safebox": (
+                f"第四阶段第 5 步：切换为 {cfg.full_auto_safebox_size} 格安全箱...",
+                partial(wf.select_full_auto_safebox, cfg),
+                "安全箱切换完成。",
+                "切换安全箱",
+            ),
             "custom_loadout": (
-                "第四阶段第 4 步：执行自定义配装...",
+                "第四阶段第 6 步：执行自定义配装...",
                 partial(wf.apply_full_auto_loadout, cfg),
                 "自定义配装完成。",
                 "自定义配装",
             ),
             "wait_map_recovery": (
-                "第四阶段第 5 步：等待目标地图恢复完成...",
+                "第四阶段第 7 步：等待目标地图恢复完成...",
                 partial(wf.wait_full_auto_map_recovery, cfg),
                 "目标地图已恢复完成。",
                 "等待地图恢复",
             ),
             "switch_mode_reconnect": (
-                "第四阶段第 6 步：切换模式并重连对局...",
+                "第四阶段第 8 步：切换模式并重连对局...",
                 partial(wf.switch_full_auto_mode_and_reconnect, cfg),
                 "已切换模式并触发重连。",
                 "切换模式重连",
             ),
             "suicide_exit": (
-                "第四阶段第 7 步：进入对局后执行自杀并退出...",
+                "第四阶段第 9 步：进入对局后执行自杀并退出...",
                 partial(wf.full_auto_suicide_and_exit, cfg),
                 "已退出对局并返回大厅。",
                 "游戏内自杀并退出",
             ),
         }
 
-    def _run_full_auto_tasks(self, start_step: str = "custom_loadout"):
+    def _run_full_auto_tasks(self, start_step: str = "claim_mail", *, manual_start: bool = False):
         actions = self._full_auto_steps()
         step_ids = self._full_auto_step_ids
         start_index = step_ids.index(start_step)
         for index in range(start_index, len(step_ids)):
             step_id = step_ids[index]
+            is_manual_target = manual_start and index == start_index
             if step_id == "loop_stage_one":
                 self.set_step_state("loop_stage_one", "running")
-                self.write_log("第四阶段第 8 步：本轮全自动流程完成，准备循环至第一阶段...")
+                limit = self.config.full_auto_loop_count
+                if limit > 0 and self._full_auto_round >= limit:
+                    self.set_step_state("loop_stage_one", "success")
+                    self._set_status("全自动已完成", "success")
+                    self.write_log(f"全自动模式：已完成设定的 {limit} 轮循环，流程结束。")
+                    return
+                self._full_auto_round += 1
+                total = f"/{limit}" if limit > 0 else "（无限循环）"
+                self.write_log(f"第四阶段第 10 步：本轮完成，准备进入第 {self._full_auto_round}{total} 轮第一阶段...")
                 self.set_step_state("loop_stage_one", "success")
                 if not self.is_continuous_mode:
                     self._offer_continue("next_round")
                     return
-                yield from self.start_card_mail.__wrapped__(self, resume=False)
+                yield from self.start_card_mail.__wrapped__(self, resume=False, next_round=True)
                 return
+            if not is_manual_target:
+                if step_id == "claim_mail":
+                    if not self.config.full_auto_claim_mail:
+                        self.set_step_state("claim_mail", "success")
+                        self.write_log("未开启“第 2 轮起领取邮件”，跳过领取邮件步骤。")
+                        continue
+                    if self._full_auto_round < 2:
+                        self.set_step_state("claim_mail", "success")
+                        self.write_log("当前为第 1 轮，跳过领取邮件步骤（第 2 轮起自动执行）。")
+                        continue
+                elif step_id == "select_safebox" and self.config.full_auto_safebox_size == "default":
+                    self.set_step_state("select_safebox", "success")
+                    self.write_log("安全箱设为“不切换”，跳过切换安全箱步骤。")
+                    continue
             start_msg, action_fn, success_msg, fail_label = actions[step_id]
             self.set_step_state(step_id, "running")
             self.write_log(start_msg)
